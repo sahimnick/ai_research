@@ -1,0 +1,48 @@
+# benchmarks/
+
+Runnable measurements of the perception stack, the assembled mind, and the cost
+of both. Every script writes a JSON file and prints as it goes, so a partial run
+is still a usable result. Findings from a full pass are written up in
+[`../EVALUATION.md`](../EVALUATION.md).
+
+## Running
+
+```bash
+pip install numpy
+PYTHONPATH=benchmarks/_shim python3 benchmarks/vision.py    out_vision.json
+PYTHONPATH=benchmarks/_shim python3 benchmarks/streaming.py out_streaming.json
+PYTHONPATH=benchmarks/_shim python3 benchmarks/unified.py   out_unified.json
+PYTHONPATH=benchmarks/_shim python3 benchmarks/efficiency.py out_efficiency.json
+PYTHONPATH=benchmarks/_shim python3 benchmarks/binding_diagnostic.py out_binding.json
+```
+
+### Why `PYTHONPATH=benchmarks/_shim`
+
+`import neurobrain` currently fails on any machine without PyTorch — `backend.py`
+evaluates `@torch.no_grad()` as a class-body decorator at import time while
+`torch is None` (AUDIT.md A1). `_shim/torch.py` is a do-nothing stand-in that
+satisfies that decorator so the pure-NumPy package can be imported.
+
+It is a workaround for a bug, not a dependency. **Once A1 is fixed, drop the
+`PYTHONPATH` and delete `_shim/`.** The shim is never imported by the package
+itself and has no effect on any measurement — the numpy path does not touch torch.
+
+`vision.py`, `streaming.py` and `efficiency.py` download MNIST and
+Fashion-MNIST on first run and cache them; they need network access once.
+
+## What each script measures
+
+| script | question | key control |
+|---|---|---|
+| `vision.py` | Does the wide spiking V1 classify real images, and do *discovered* receptive fields beat designed ones? | designed vs developed filters, on MNIST **and** Fashion-MNIST |
+| `streaming.py` | Do the eye and ear work on unsegmented streams? | saliency-driven looking vs chance; foveation correction on vs off; pre-segmented vs streaming |
+| `binding_diagnostic.py` | Is `StreamingBrain.bind` actually binding vision to sound? | exact-code vs held-out query; visual code replaced by noise and by zeros |
+| `unified.py` | Does the assembled mind perceive, imagine, and consolidate? | imagination chain diversity; imagine → re-perceive round trip; dream before/after |
+| `efficiency.py` | Where do time and memory go, and are the known defects still live? | per-stage ms, V1 and population scaling, direct probes for A2–A5 |
+
+## Reading the controls
+
+A number without its control is not a result. `binding_diagnostic.py` is the
+clearest example: the same mechanism scores **100%** under an exact-code query
+and **6.25%** under a shuffled-label control, and the gap between those two is
+the entire finding.
