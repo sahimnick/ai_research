@@ -3,10 +3,10 @@
 Rendered JPGs from `benchmarks/report_*.py`. Regenerate with:
 
 ```bash
-PYTHONPATH=benchmarks/_shim python3 benchmarks/report_vision.py --dataset mnist   --outdir reports
-PYTHONPATH=benchmarks/_shim python3 benchmarks/report_vision.py --dataset fashion --outdir reports
-PYTHONPATH=benchmarks/_shim python3 benchmarks/report_audio.py                    --outdir reports
-PYTHONPATH=benchmarks/_shim python3 benchmarks/report_binding.py                  --outdir reports
+python3 benchmarks/report_vision.py --dataset mnist   --outdir reports
+python3 benchmarks/report_vision.py --dataset fashion --outdir reports
+python3 benchmarks/report_audio.py                    --outdir reports
+python3 benchmarks/report_binding.py                  --outdir reports
 ```
 
 Colour convention throughout: **green = correct**, **red = wrong**,

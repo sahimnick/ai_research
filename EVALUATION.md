@@ -7,7 +7,8 @@ them — on real data, every number against a control. Reproduce with
 
 **Environment.** Python 3.12, NumPy 2.4.6, no torch, no matplotlib, Linux.
 MNIST and Fashion-MNIST downloaded live. `import neurobrain` required a
-do-nothing torch shim throughout (defect A1) — see `benchmarks/README.md`.
+do-nothing torch shim throughout (defect A1); **A1 has since been fixed** and
+the shim is gone — every measurement here reproduces without it.
 
 **Headline.** The perception front end is real and the core scientific claim
 holds up: receptive fields *discovered* from data beat hand-designed ones on
@@ -142,6 +143,14 @@ recall — O(n) per query, unbounded growth.
 architecture is organised around is bypassed by the one function whose job is to
 join the modalities.
 
+> **Since fixed.** `bind()` now routes through `AssociationArea`'s competitive
+> Hebbian concept cells. Re-measured: the vision ablation spread went from
+> **0% → 36%** (noise in the visual slot now costs 34 points), and a held-out
+> sound recalls a **visual code** at 31–47% against 12.5% chance — a direction
+> the old code could not express. See `reports/binding_02_ablation.jpg` and
+> `benchmarks/binding_diagnostic.py`. The table above is the *pre-fix*
+> measurement, kept because it is what the control caught.
+
 ## 5. The unified mind and its imagination
 
 `build_unified_mind()` — 6.0 s, all metrics on its own 10-concept world.
@@ -258,11 +267,11 @@ Probed directly, all reproduce exactly as AUDIT.md describes:
 
 | # | problem | evidence | cost |
 |---|---|---|---|
-| 1 | **Binding ignores vision entirely** | noise/zeros in the visual slot changes nothing (78.1% either way) | the "unified" claim has no mechanism |
+| 1 | ~~**Binding ignores vision entirely**~~ | **Fixed** — ablation spread 0% → 36%; sound now recalls a visual code | the "unified" claim now has a mechanism |
 | 2 | **Dream/consolidation never runs** | `replays: 0`; episodes stay 0 after perception | no replay ⇒ nothing feeds imagination |
 | 3 | **Imagination is a 10-state counting loop** | chains are `0→1→2→…→9`; temperature inert | "constantly imaginative" is absent |
 | 4 | **Streaming vision collapses on complex data** | Fashion 71.7% → 35.9% through the eye | the flagship path fails on realistic input |
-| 5 | **`import neurobrain` fails without torch** | reproduced; shim required for every run here | blocks CI, blocks users, blocked this evaluation |
+| 5 | ~~**`import neurobrain` fails without torch**~~ | **Fixed** — verified with no torch, with a *broken* torch, and with torch 2.13 present | was blocking CI, users, and this evaluation |
 | 6 | **Ear default threshold costs 25% recall** | 2.5 → 75% recall; 1.5 → 100%, F1 +10 | one constant |
 | 7 | **Fashion class 4 at 0% recall** | designed filters, complete blind spot | hidden inside a 64.8% average |
 | 8 | **Belt is the throughput bottleneck** | 14.2 ms vs 7.5 ms for all of vision | halves the achievable tick rate |

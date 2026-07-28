@@ -50,6 +50,23 @@ except Exception:                                    # pragma: no cover
     _HAVE_TORCH = False
 
 
+def _no_grad(fn):
+    """``torch.no_grad()`` where torch exists, a pass-through where it does not.
+
+    Written as ``@torch.no_grad()`` this is evaluated *at import time*, in the
+    class body, against a ``torch`` that is ``None`` on any machine without it
+    -- which made ``import neurobrain`` raise ``AttributeError`` and took all
+    60 pure-NumPy modules down with it.
+
+    The guarantee it carries is not cosmetic and is not being weakened here:
+    this package never takes a gradient, and when torch *is* installed this is
+    still a real ``no_grad``. The pass-through branch is only ever reached on a
+    machine where no autograd graph can exist in the first place, and
+    :class:`TorchPopulation` refuses to instantiate there anyway.
+    """
+    return torch.no_grad()(fn) if _HAVE_TORCH else fn
+
+
 def available_devices() -> Dict[str, bool]:
     """What this machine can actually run on."""
     if not _HAVE_TORCH:
@@ -109,7 +126,7 @@ class TorchPopulation:
         self.spiked = torch.zeros(self.n, dtype=torch.bool, device=self.device)
         self._gen = torch.Generator(device="cpu").manual_seed(int(seed) + 1)
 
-    @torch.no_grad()
+    @_no_grad
     def step(self, I, dt: float = 1.0):
         """One millisecond. ``I`` may be a numpy array or a torch tensor."""
         if not torch.is_tensor(I):

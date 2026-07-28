@@ -31,7 +31,7 @@ bind vision and hearing into one shared code, and run a closed predict→sense�
 |---|---|
 | Language / runtime | Python ≥3.10 (uses `X \| Y` in annotations), NumPy |
 | Hard dependency | `numpy` only |
-| Optional deps | `matplotlib` (visualizer/dashboard), `torch` (backend) |
+| Optional deps | `matplotlib` (visualizer/dashboard), `torch` (backend) — both genuinely optional; the package imports on numpy alone |
 | Stdlib used | `gzip, pickle, ssl, urllib, http.server, threading, json, os, time, argparse, dataclasses, collections, typing` |
 | Package layout | 11 subpackages + `workspace.py` at the root (see §3.5) |
 | Packaging | **none** — no pyproject/setup.py/requirements/README/LICENSE/tests/CI |
@@ -483,7 +483,7 @@ Severity: **C**=critical (breaks now) · **H**=high (wrong results) · **M**=med
 
 | # | Sev | Location | Defect |
 |---|---|---|---|
-| 1 | C | `backend.py:112` | `@torch.no_grad()` evaluated at import time while `torch=None` → **`import neurobrain` fails without torch** |
+| 1 | ~~C~~ | `core/backend.py` | ~~`@torch.no_grad()` evaluated at import time while `torch=None`~~ **Fixed** — routed through a `_no_grad` helper that stays a real `no_grad` when torch is present |
 | 2 | C | `synapse.py` `random(max_edges=60e6)` | Edge count silently capped; p=0.5 request returned p=0.00025 with no warning |
 | 3 | C | `synapse.py` `random()` | Edges sampled **with replacement**: at p=0.1, 4.5% duplicates, worst pair 3× weight. "Connection probability" is not p |
 | 4 | C | `neuron.py:274` | `np.clip(I,…,out=I)` after a no-op `asarray` **mutates the caller's array** |

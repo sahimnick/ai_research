@@ -9,23 +9,16 @@ is still a usable result. Findings from a full pass are written up in
 
 ```bash
 pip install numpy
-PYTHONPATH=benchmarks/_shim python3 benchmarks/vision.py    out_vision.json
-PYTHONPATH=benchmarks/_shim python3 benchmarks/streaming.py out_streaming.json
-PYTHONPATH=benchmarks/_shim python3 benchmarks/unified.py   out_unified.json
-PYTHONPATH=benchmarks/_shim python3 benchmarks/efficiency.py out_efficiency.json
-PYTHONPATH=benchmarks/_shim python3 benchmarks/binding_diagnostic.py out_binding.json
+python3 benchmarks/vision.py            out_vision.json
+python3 benchmarks/streaming.py         out_streaming.json
+python3 benchmarks/unified.py           out_unified.json
+python3 benchmarks/efficiency.py        out_efficiency.json
+python3 benchmarks/binding_diagnostic.py out_binding.json
 ```
 
-### Why `PYTHONPATH=benchmarks/_shim`
-
-`import neurobrain` currently fails on any machine without PyTorch — `backend.py`
-evaluates `@torch.no_grad()` as a class-body decorator at import time while
-`torch is None` (AUDIT.md A1). `_shim/torch.py` is a do-nothing stand-in that
-satisfies that decorator so the pure-NumPy package can be imported.
-
-It is a workaround for a bug, not a dependency. **Once A1 is fixed, drop the
-`PYTHONPATH` and delete `_shim/`.** The shim is never imported by the package
-itself and has no effect on any measurement — the numpy path does not touch torch.
+numpy is the only requirement. Torch is optional and untouched by these runs.
+(Until AUDIT.md A1 was fixed these all needed a stub-torch shim on `PYTHONPATH`
+just to get `import neurobrain` to succeed; that shim is gone.)
 
 `vision.py`, `streaming.py` and `efficiency.py` download MNIST and
 Fashion-MNIST on first run and cache them; they need network access once.
@@ -51,9 +44,9 @@ These write JPGs into `--outdir` (see [`../reports/`](../reports/)):
 | `report_binding.py` | the bound pairs · **the vision ablation** · concept cells in both senses · sound → visual-code recall |
 
 ```bash
-PYTHONPATH=benchmarks/_shim python3 benchmarks/report_vision.py --dataset mnist --outdir reports
-PYTHONPATH=benchmarks/_shim python3 benchmarks/report_audio.py --outdir reports
-PYTHONPATH=benchmarks/_shim python3 benchmarks/report_binding.py --outdir reports
+python3 benchmarks/report_vision.py --dataset mnist --outdir reports
+python3 benchmarks/report_audio.py --outdir reports
+python3 benchmarks/report_binding.py --outdir reports
 ```
 
 They need `matplotlib` and `pillow` on top of numpy.
