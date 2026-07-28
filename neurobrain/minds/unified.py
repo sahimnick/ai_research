@@ -82,13 +82,50 @@ class UnifiedMind:
         self.attention = concept
 
     # -- one coherent flow across all the faculties --------------------------
-    def perceive(self, image: np.ndarray) -> str:
-        """See a real digit and recognise which self-grown concept it is."""
+    def perceive(self, image: np.ndarray, remember: bool = True) -> str:
+        """See a real digit and recognise which self-grown concept it is.
+
+        Perceiving also **lays down an episode** for tonight's replay, which is
+        what makes :meth:`dream` a mechanism rather than a no-op: the
+        hippocampal buffer was constructed empty and nothing ever wrote to it,
+        so ``sleep()`` returned 0 for the object's whole life. Waking
+        experience is the only thing replay has to consolidate.
+
+        Pass ``remember=False`` for a probe you do not want the day to
+        remember -- scoring a test set, or re-perceiving something the mind
+        just imagined."""
         lab = self.vision.cortex.recognise(
             image.reshape(1, 28, 28).astype(np.float32), 0.0)[0]
-        return str(int(lab))
+        concept = str(int(lab))
+        if remember:
+            self._record_episode(image, concept)
+        return concept
 
-    def comprehend(self, image: np.ndarray) -> Comprehension:
+    def _record_episode(self, image: np.ndarray, concept: str) -> None:
+        """Store one waking moment, weighted by how unexpected it was.
+
+        Surprise is the world model's own ``1 - P(concept | previous)``, so
+        replay is prioritised by prediction error rather than by recency --
+        which is the whole point of prioritised replay. With no previous
+        percept to predict from, the episode is maximally surprising (1.0);
+        the first thing you see today is by definition unexplained."""
+        if self.episodes is None:
+            return
+        surprise = 1.0
+        if self.last_percept is not None:
+            try:
+                surprise = float(
+                    self.space._world().surprise(self.last_percept, concept))
+            except Exception:
+                surprise = 1.0
+        pattern = np.asarray(image, np.float32).reshape(-1)
+        if pattern.size and float(pattern.max()) > 1.5:   # uint8 [0,255] in
+            pattern = pattern / 255.0
+        self.episodes.store(pattern, concept, surprise)
+        self.last_percept = concept
+
+    def comprehend(self, image: np.ndarray,
+                   remember: bool = True) -> Comprehension:
         """Perception with meaning: recognise, then understand -- what it
         predicts, what it relates to, how surprising it is. This (not a bare
         label) is the mind's normal output; attention is always in the loop."""
@@ -98,11 +135,15 @@ class UnifiedMind:
         if self.ws is not None:
             self.ws.broadcast(code, source="vision")
         ws_name = self.name_of(code) if self.ws is not None else None
-        concept = self.perceive(image)
+        # capture the previous percept BEFORE perceiving: perceive() now records
+        # an episode and advances last_percept, so reading it afterwards would
+        # compare this concept against itself and report zero surprise forever.
+        prev = self.last_percept
+        concept = self.perceive(image, remember=remember)
         predicted = self.space.predict_next(concept)
         assoc = [n for n, _ in self.space.reachable(concept, top=3)]
-        surprise = (self.space._world().surprise(self.last_percept, concept)
-                    if self.last_percept is not None else 0.0)
+        surprise = (self.space._world().surprise(prev, concept)
+                    if prev is not None else 0.0)
         self.last_percept = concept
         return Comprehension(concept, predicted, assoc, float(surprise),
                              self.attention, code=code, workspace_name=ws_name)
@@ -292,14 +333,17 @@ def build_unified_mind(n_pallium: int = 4000, verbose: bool = False):
                        episodes=EpisodicBuffer(), ws=ws)
 
     # -- measure the whole pipeline on REAL held-out data --------------------
-    pe = np.mean([mind.perceive(tex[i]) == str(int(teY[i]))
+    # remember=False throughout: measuring the mind is not the mind living.
+    # perceive() now lays down an episode, and scoring a held-out set must not
+    # become the day the mind then replays all night.
+    pe = np.mean([mind.perceive(tex[i], remember=False) == str(int(teY[i]))
                   for i in range(500)])
     mind.perceive_accuracy = float(pe)
 
     # comprehension: concept right AND the world model predicts the next digit
     cok = pnext = 0
     for i in range(500):
-        c = mind.comprehend(tex[i])
+        c = mind.comprehend(tex[i], remember=False)
         cok += int(c.concept == str(int(teY[i])))
         if int(teY[i]) < 9:
             pnext += int(c.predicted_next == str(int(teY[i]) + 1))

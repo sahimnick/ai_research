@@ -235,6 +235,34 @@ episodes. The `EpisodicBuffer` is constructed and stays empty for the object's
 whole life. The "+13% with no new data" sleep-consolidation result is real in
 `development.SleepConsolidator`, but the assembled mind never reaches it.
 
+> **Since fixed.** `perceive()` now lays down an episode, weighted by the world
+> model's own `1 - P(concept | previous)` so replay is prioritised by prediction
+> error. `remember=False` keeps probes out of the day, and the build's own
+> measurement loops use it — scoring a held-out set must not become the night's
+> experience. `benchmarks/dream.py`:
+>
+> | arm | replays | pallium recall before → after | vs no-sleep |
+> |---|---|---|---|
+> | **real day** | **1200** | 79.0% → **81.0%** | **+2.0** |
+> | shuffled-label day | 1200 | 79.0% → 55.8% | −23.3 |
+> | no sleep | 0 | 79.0% → 79.0% | — |
+>
+> `dream()` is a mechanism now (0 → 1200 replays), but the honest gain is
+> **+2.0 points**, not the +13% quoted for `SleepConsolidator` — that figure
+> comes from a purpose-built `SemanticCortex` experiment, not this pallium.
+>
+> The **shuffled control is the real result**: replaying a mislabelled day costs
+> 23.3 points. Consolidation is writing content-specific information, not just
+> churning. Real minus shuffled is a 25.3-point gap.
+>
+> **What it does not do yet.** On the *rare* half of the day replay made things
+> slightly **worse** (70.4% vs 73.9% unslept) — the opposite of what prioritised
+> replay exists for. The cause is visible in the priority signal: surprise takes
+> only **two distinct values** across 150 episodes, because it comes from a world
+> model that knows nothing but the counting order. Priority is tracking "did this
+> digit follow its successor", not "is this rare". That is item 4 (`_T` from lived
+> experience), and this is now the measurement that will show it working.
+
 ## 6. Efficiency
 
 ### Cost of one glance and one listen
@@ -290,7 +318,7 @@ Probed directly, all reproduce exactly as AUDIT.md describes:
 | # | problem | evidence | cost |
 |---|---|---|---|
 | 1 | ~~**Binding ignores vision entirely**~~ | **Fixed** — ablation spread 0% → 36%; sound now recalls a visual code | the "unified" claim now has a mechanism |
-| 2 | **Dream/consolidation never runs** | `replays: 0`; episodes stay 0 after perception | no replay ⇒ nothing feeds imagination |
+| 2 | ~~**Dream/consolidation never runs**~~ | **Fixed** — 0 → 1200 replays; +2.0 pts, and −23.3 for a shuffled day | replay now feeds consolidation |
 | 3 | **Imagination is a 10-state counting loop** | chains are `0→1→2→…→9`; temperature inert | "constantly imaginative" is absent |
 | 4 | **Streaming vision collapses on complex data** | Fashion 71.7% → 35.9% through the eye | the flagship path fails on realistic input |
 | 5 | ~~**`import neurobrain` fails without torch**~~ | **Fixed** — verified with no torch, with a *broken* torch, and with torch 2.13 present | was blocking CI, users, and this evaluation |
@@ -333,10 +361,11 @@ Ordered by what unblocks the goal, not by difficulty.
 
 ### The imagination gap (days–weeks) — give it something to imagine
 
-7. **Wire `perceive()` to record episodes.** One line where perception lands,
-   appending `(code, label)` to `self.episodes`. This alone turns `dream()` from
-   a no-op into the mechanism it was written to be, and the SleepConsolidator's
-   +13% becomes reachable from the assembled mind.
+7. ~~**Wire `perceive()` to record episodes**~~ — **done.** `dream()` now
+   replays (0 → 1200) and gains +2.0 points, while a shuffled-label day costs
+   23.3 — consolidation is content-specific. It does *not* yet rescue the rare
+   tail, because the surprise signal it prioritises by takes only two distinct
+   values; that is what step 8 fixes.
 8. **Learn transitions from lived experience, not the curriculum.**
    `UnifiedMind.live()` already runs a `CognitiveLoop` on the mind's own
    workspace. Use *that* to populate the transition matrix instead of the digit
