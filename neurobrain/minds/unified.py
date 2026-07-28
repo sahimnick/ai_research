@@ -62,6 +62,7 @@ class UnifiedMind:
     attention: Optional[str] = None            # currently attended concept
     attention_gain: float = 0.6
     last_percept: Optional[str] = None         # for the surprise signal
+    learn_transitions: bool = True   # lived percept order writes the world model
     # v0.17: the agent is not only a world model
     causal: object = None          # CausalWorldGraph -- objects, relations, causes
     self_model: object = None      # SelfModel -- body, capability, agency
@@ -102,26 +103,44 @@ class UnifiedMind:
         return concept
 
     def _record_episode(self, image: np.ndarray, concept: str) -> None:
-        """Store one waking moment, weighted by how unexpected it was.
+        """Store one waking moment, and learn the transition that produced it.
 
         Surprise is the world model's own ``1 - P(concept | previous)``, so
         replay is prioritised by prediction error rather than by recency --
         which is the whole point of prioritised replay. With no previous
         percept to predict from, the episode is maximally surprising (1.0);
-        the first thing you see today is by definition unexplained."""
+        the first thing you see today is by definition unexplained.
+
+        The order here is the point: **predict, then learn.** Surprise is read
+        off the world model *before* the transition is written into it, so a
+        transition can never explain itself away.
+
+        Writing that transition is what stops the world model being a lesson.
+        It used to be taught exactly one thing -- ``0->1->...->9``, twenty
+        times, from a literal loop in :func:`build_unified_mind` -- and nothing
+        else ever wrote to it, which is why the transition matrix was peaked
+        400:1 and the "train of thought" was reciting the number line at every
+        temperature. Now whatever the mind actually perceives, in whatever
+        order it happens to perceive it, is what it learns the world is like.
+        Set ``learn_transitions=False`` to keep the old taught-only behaviour."""
         if self.episodes is None:
             return
+        prev = self.last_percept
         surprise = 1.0
-        if self.last_percept is not None:
+        if prev is not None:
             try:
-                surprise = float(
-                    self.space._world().surprise(self.last_percept, concept))
+                surprise = float(self.space._world().surprise(prev, concept))
             except Exception:
                 surprise = 1.0
         pattern = np.asarray(image, np.float32).reshape(-1)
         if pattern.size and float(pattern.max()) > 1.5:   # uint8 [0,255] in
             pattern = pattern / 255.0
         self.episodes.store(pattern, concept, surprise)
+        if self.learn_transitions and prev is not None:
+            try:
+                self.space.experience([prev, concept])
+            except Exception:
+                pass
         self.last_percept = concept
 
     def comprehend(self, image: np.ndarray,
@@ -259,7 +278,9 @@ class UnifiedMind:
             cycles=cycles, replays_per_cycle=replays_per_cycle)
 
 
-def build_unified_mind(n_pallium: int = 4000, verbose: bool = False):
+def build_unified_mind(n_pallium: int = 4000, verbose: bool = False,
+                       teach_counting: bool = True, counting_reps: int = 20,
+                       learn_transitions: bool = True):
     """Assemble the whole mind on REAL handwritten digits and measure it end to
     end. ``n_pallium`` sets how many exemplar memories the pallium holds."""
     from ..sensing.realworld import build_digit_recognizer, load_mnist
@@ -295,9 +316,18 @@ def build_unified_mind(n_pallium: int = 4000, verbose: bool = False):
 
     # a MEANINGFUL world model: the counting order 0->1->...->9, so the mind
     # can predict "after 3 comes 4" and relate a digit to its successors.
-    say("world model: learning the counting structure 0->1->...->9 ...")
-    for _ in range(20):
-        space.experience([str(d) for d in range(10)], actions=["+1"] * 9)
+    # The counting order was once the ONLY thing this world model ever
+    # learned -- twenty repetitions of it, and nothing else wrote to _T for the
+    # object's whole life, which is why imagination could only recite the
+    # number line. It is kept because "after 3 comes 4" is a real relation
+    # worth having, but it is now a starting prior rather than the whole world:
+    # UnifiedMind._record_episode writes every lived transition on top of it.
+    # teach_counting=False leaves the world model empty for a mind that should
+    # learn its structure entirely from what it sees.
+    if teach_counting:
+        say("world model: seeding the counting structure 0->1->...->9 ...")
+        for _ in range(counting_reps):
+            space.experience([str(d) for d in range(10)], actions=["+1"] * 9)
 
     say("reasoner: a small relational knowledge base ...")
     reasoner = RelationalMind(seed=0)
@@ -330,7 +360,8 @@ def build_unified_mind(n_pallium: int = 4000, verbose: bool = False):
 
     mind = UnifiedMind(recog, space, reasoner, digit_cue,
                        causal=causal, self_model=self_model,
-                       episodes=EpisodicBuffer(), ws=ws)
+                       episodes=EpisodicBuffer(), ws=ws,
+                       learn_transitions=learn_transitions)
 
     # -- measure the whole pipeline on REAL held-out data --------------------
     # remember=False throughout: measuring the mind is not the mind living.

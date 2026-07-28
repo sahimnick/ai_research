@@ -212,6 +212,37 @@ wander. It is not a bug — the mechanism does exactly what it was built to do �
 but it is the whole distance between what exists and "constantly imaginative".
 Only at temperature 3.0 does it leave the sequence, and then it is noise.
 
+> **Since fixed.** `_record_episode` now writes every lived transition into the
+> world model — predict first, then learn, so a transition can never explain
+> itself away. The counting lesson survives as a *prior* (`teach_counting=`)
+> rather than as the entire world. `benchmarks/imagination.py`, 3 seeds:
+>
+> | | taught only | lived | Δ |
+> |---|---|---|---|
+> | transition matrix populated | 9.0% | **98.3%** | +89.3 |
+> | transition row entropy | 0.53 bits | **2.80 bits** | +2.27 |
+> | distinct surprise values | **2** | **154** | +152 |
+> | chain entropy @ t=0.6 | 3.02 | 3.16 | +0.14 |
+> | temperature span | 0.086 | 0.114 | +0.03 |
+> | **imagine → re-perceive** | 1.000 | **1.000** | 0.00 |
+>
+> ```
+> taught only:  0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 9 → 8 → 9 → 8 → 9 → 7
+> lived:        0 → 1 → 2 → 1 → 0 → 5 → 6 → 7 → 8 → 9 → 8 → 9 → 0 → 6 → 0 → 2
+> ```
+>
+> The structural change is large and the behavioural one is visible in the
+> trajectory — backtracking (`2→1→0`) and jumps (`0→5`, `9→0`) instead of a
+> fixed recital. **Coherence is not paid for it**: the round trip stays at
+> 1.000, which is the pair that matters — novelty without incoherence.
+>
+> **Two caveats.** Chain entropy is a weak instrument here: a deterministic
+> cycle through all ten states already has near-maximal *visit* entropy, so
+> +0.14 understates the change; row entropy of the transition matrix
+> (0.53 → 2.80) is the honest measure. And the round trip is saturated at
+> 1.000 in *both* arms because `imagine` reconstructs stored prototypes — it
+> is a ceiling, not evidence of imagery quality.
+
 ### The imagine → perceive round trip closes at 100%
 
 Feed each imagined percept back into perception: **100% of 208 imagined percepts
@@ -255,13 +286,23 @@ whole life. The "+13% with no new data" sleep-consolidation result is real in
 > 23.3 points. Consolidation is writing content-specific information, not just
 > churning. Real minus shuffled is a 25.3-point gap.
 >
-> **What it does not do yet.** On the *rare* half of the day replay made things
-> slightly **worse** (70.4% vs 73.9% unslept) — the opposite of what prioritised
-> replay exists for. The cause is visible in the priority signal: surprise takes
-> only **two distinct values** across 150 episodes, because it comes from a world
-> model that knows nothing but the counting order. Priority is tracking "did this
-> digit follow its successor", not "is this rare". That is item 4 (`_T` from lived
-> experience), and this is now the measurement that will show it working.
+> **Re-evaluated across 6 seeds**, because the numbers above are one run each:
+>
+> | comparison | Δ | wins | Cohen's d |
+> |---|---|---|---|
+> | replay vs no sleep | **+1.6 pts** ± 0.8 | **6/6** | **2.11** |
+> | real vs shuffled day | **+25.9 pts** ± 2.7 | 6/6 | 9.55 |
+> | **prioritised vs uniform** | +0.1 pts ± 0.6 | 3/6 | **0.21** |
+> | rare classes, replay vs none | −1.3 pts ± 1.5 | 2/6 | −0.83 |
+>
+> The gain survives repetition at +1.6 (not the +2.0 of the single run) and the
+> shuffled control is overwhelming. But **prioritisation was doing nothing** —
+> 3/6 seeds, d=0.21, a coin flip against uniform replay. That is exactly what a
+> surprise signal with two distinct values predicts. The rare-class regression
+> is suggestive but not established (loses 4/6, spread crosses zero).
+>
+> This is what item 4 addresses: with lived transitions the surprise signal goes
+> from 2 to 154 distinct values.
 
 ## 6. Efficiency
 
@@ -319,7 +360,7 @@ Probed directly, all reproduce exactly as AUDIT.md describes:
 |---|---|---|---|
 | 1 | ~~**Binding ignores vision entirely**~~ | **Fixed** — ablation spread 0% → 36%; sound now recalls a visual code | the "unified" claim now has a mechanism |
 | 2 | ~~**Dream/consolidation never runs**~~ | **Fixed** — 0 → 1200 replays; +2.0 pts, and −23.3 for a shuffled day | replay now feeds consolidation |
-| 3 | **Imagination is a 10-state counting loop** | chains are `0→1→2→…→9`; temperature inert | "constantly imaginative" is absent |
+| 3 | ~~**Imagination is a 10-state counting loop**~~ | **Fixed** — transition matrix 9% → 98% populated, surprise 2 → 154 distinct values, chains wander and backtrack | the world model now learns from what is seen |
 | 4 | **Streaming vision collapses on complex data** | Fashion 71.7% → 35.9% through the eye | the flagship path fails on realistic input |
 | 5 | ~~**`import neurobrain` fails without torch**~~ | **Fixed** — verified with no torch, with a *broken* torch, and with torch 2.13 present | was blocking CI, users, and this evaluation |
 | 6 | ~~**Ear default threshold costs 25% recall**~~ | **Fixed** — default now 1.5 after a 182-run sweep; named yield 69.4% → 87.5% | one constant |
