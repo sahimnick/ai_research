@@ -1,0 +1,46 @@
+{
+ "dataset": "mnist",
+ "multi_detection": {
+  "saccades": 45,
+  "on_object": 24,
+  "on_object_rate": 0.5333,
+  "named_correct": 15,
+  "accuracy_given_hit": 0.625
+ },
+ "scene_spread": [
+  {
+   "seed": 0,
+   "on_object_rate": 0.5333,
+   "named_correct": 15,
+   "on_object": 24
+  },
+  {
+   "seed": 1,
+   "on_object_rate": 0.8222,
+   "named_correct": 21,
+   "on_object": 37
+  },
+  {
+   "seed": 2,
+   "on_object_rate": 1.0,
+   "named_correct": 40,
+   "on_object": 45
+  }
+ ],
+ "pursuit": {
+  "steps": 8,
+  "tag_stable_frames": 8,
+  "tag_stability": 1.0,
+  "correct_frames": 8
+ },
+ "per_class_recall_streaming": {
+  "0": 1.0,
+  "1": 0.0,
+  "2": 0.0,
+  "3": 0.6667,
+  "4": 1.0,
+  "6": 1.0,
+  "7": 1.0,
+  "9": 0.0
+ }
+}

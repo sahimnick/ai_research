@@ -1,0 +1,43 @@
+{
+ "dataset": "fashion",
+ "multi_detection": {
+  "saccades": 45,
+  "on_object": 25,
+  "on_object_rate": 0.5556,
+  "named_correct": 11,
+  "accuracy_given_hit": 0.44
+ },
+ "scene_spread": [
+  {
+   "seed": 0,
+   "on_object_rate": 0.5556,
+   "named_correct": 11,
+   "on_object": 25
+  },
+  {
+   "seed": 1,
+   "on_object_rate": 0.9556,
+   "named_correct": 31,
+   "on_object": 43
+  },
+  {
+   "seed": 2,
+   "on_object_rate": 1.0,
+   "named_correct": 30,
+   "on_object": 45
+  }
+ ],
+ "pursuit": {
+  "steps": 8,
+  "tag_stable_frames": 8,
+  "tag_stability": 1.0,
+  "correct_frames": 8
+ },
+ "per_class_recall_streaming": {
+  "tshirt": 0.4286,
+  "dress": 0.0,
+  "sandal": 1.0,
+  "sneaker": 0.75,
+  "boot": 1.0
+ }
+}

@@ -40,9 +40,31 @@ Fashion-MNIST on first run and cache them; they need network access once.
 | `unified.py` | Does the assembled mind perceive, imagine, and consolidate? | imagination chain diversity; imagine → re-perceive round trip; dream before/after |
 | `efficiency.py` | Where do time and memory go, and are the known defects still live? | per-stage ms, V1 and population scaling, direct probes for A2–A5 |
 
+## Rendered reports
+
+These write JPGs into `--outdir` (see [`../reports/`](../reports/)):
+
+| script | panels |
+|---|---|
+| `report_vision.py --dataset {mnist,fashion}` | learned prototypes · multi-object detection with tags and labels · scene-to-scene spread · attention and inhibition-of-return · smooth pursuit · confusion |
+| `report_audio.py` | learned sounds · multi-event detection in an unsegmented soundscape · continuous tracking · detection-threshold sweep · confusion |
+| `report_binding.py` | the bound pairs · **the vision ablation** · concept cells in both senses · sound → visual-code recall |
+
+```bash
+PYTHONPATH=benchmarks/_shim python3 benchmarks/report_vision.py --dataset mnist --outdir reports
+PYTHONPATH=benchmarks/_shim python3 benchmarks/report_audio.py --outdir reports
+PYTHONPATH=benchmarks/_shim python3 benchmarks/report_binding.py --outdir reports
+```
+
+They need `matplotlib` and `pillow` on top of numpy.
+
 ## Reading the controls
 
 A number without its control is not a result. `binding_diagnostic.py` is the
 clearest example: the same mechanism scores **100%** under an exact-code query
 and **6.25%** under a shuffled-label control, and the gap between those two is
 the entire finding.
+
+The sharpest control in the suite is the **visual ablation** — rebind with
+every visual code replaced by noise, then by zeros. If the answer does not
+move, the binding is not cross-modal no matter what its accuracy says.

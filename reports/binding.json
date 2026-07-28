@@ -1,0 +1,27 @@
+{
+ "ablation": {
+  "nearest": {
+   "real": 0.7812,
+   "noise": 0.7812,
+   "zeros": 0.7812,
+   "shuffled_labels": 0.0625
+  },
+  "assoc": {
+   "real": 0.7037,
+   "noise": 0.3438,
+   "zeros": 0.5862,
+   "shuffled_labels": 0.1111
+  }
+ },
+ "concept_cells": {
+  "cells_used": 13,
+  "cells_total": 32,
+  "pure_cells": 10
+ },
+ "code_recall": {
+  "n": 32,
+  "correct": 15,
+  "code_recall_accuracy": 0.4688,
+  "chance": 0.125
+ }
+}

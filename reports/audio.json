@@ -1,0 +1,64 @@
+{
+ "multi_detection": {
+  "n_found": 18,
+  "n_true": 24,
+  "precision": 1.0,
+  "recall": 0.75,
+  "f1": 0.8571,
+  "true_positives": 18,
+  "false_alarms": 0,
+  "named_correct": 16,
+  "accuracy_given_detection": 0.8889
+ },
+ "tracking": {
+  "windows": 357,
+  "windows_with_sound": 193,
+  "tracking_accuracy": 0.7098
+ },
+ "threshold_sweep": [
+  {
+   "threshold": 1.0,
+   "precision": 0.9231,
+   "recall": 1.0,
+   "f1": 0.96
+  },
+  {
+   "threshold": 1.5,
+   "precision": 0.9231,
+   "recall": 1.0,
+   "f1": 0.96
+  },
+  {
+   "threshold": 2.0,
+   "precision": 0.9583,
+   "recall": 0.9583,
+   "f1": 0.9583
+  },
+  {
+   "threshold": 2.5,
+   "precision": 1.0,
+   "recall": 0.75,
+   "f1": 0.8571
+  },
+  {
+   "threshold": 3.0,
+   "precision": 1.0,
+   "recall": 0.1667,
+   "f1": 0.2857
+  },
+  {
+   "threshold": 3.5,
+   "precision": 1.0,
+   "recall": 0.125,
+   "f1": 0.2222
+  }
+ ],
+ "per_sound_recall": {
+  "pure": 1.0,
+  "up_chirp": 1.0,
+  "down_chirp": 1.0,
+  "harmonic": 0.0,
+  "noise": 1.0,
+  "fm": 1.0
+ }
+}

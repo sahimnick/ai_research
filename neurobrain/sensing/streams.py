@@ -553,16 +553,37 @@ class StreamingBrain:
     workspace at the same moment."""
 
     def __init__(self, v1_cells: int = 1024, window_ms: int = 50,
-                 dim: int = 512, seed: int = 0):
+                 dim: int = 512, seed: int = 0, n_concept: int = 32):
         from ..vision.widev1 import WideV1
         from ..workspace import GlobalWorkspace
+        from ..cognition.multimodal import AssociationArea
 
         self.v1 = WideV1(n_cells=v1_cells, window_ms=window_ms, seed=seed)
         self.ear = ContinuousEar()
         self.belt = AuditoryBelt(n_freq=self.ear.coch.n_freq, seed=seed)
         self.ws = GlobalWorkspace(dim=dim, vigilance=0.25, seed=seed, adapt=True)
         self.window_ms = window_ms
+        self._seed = seed
         self.bindings: List[Tuple[np.ndarray, np.ndarray, int]] = []
+        # Concept cells wired to BOTH senses. This is what makes the binding
+        # cross-modal: either sense can wake a cell, and the cell carries the
+        # other sense's learned expectation on its opposite weight row.
+        # Allocated on the first bind, from the codes actually handed over --
+        # callers legitimately pass either workspace codes (dim) or raw V1 /
+        # belt codes, and the area has to fit whichever it is given.
+        # ``n_concept`` wants to be a small multiple of the number of things
+        # being bound; far more cells than pairs leaves most cells untrained
+        # and each trained one holding almost no evidence.
+        self._AssociationArea = AssociationArea
+        self.n_concept = n_concept
+        self.assoc: Optional[AssociationArea] = None
+        self._cell_votes: Dict[int, Dict[int, int]] = {}
+
+    def _ensure_assoc(self, v_code: np.ndarray, a_code: np.ndarray) -> None:
+        if self.assoc is None:
+            self.assoc = self._AssociationArea(
+                n_vis=int(np.size(v_code)), n_aud=int(np.size(a_code)),
+                n_concept=self.n_concept, seed=self._seed)
 
     # -- one glance / one listen, in the shared code ------------------------
     def see(self, fixation: Fixation) -> np.ndarray:
@@ -581,16 +602,77 @@ class StreamingBrain:
     def bind(self, v_code: np.ndarray, a_code: np.ndarray, label: int) -> None:
         """Two codes present at the same instant become one association.
 
-        This is Hebbian binding at the level of the workspace: no supervision
-        says they belong together, only that they co-occurred."""
-        self.bindings.append((v_code, a_code, label))
+        A concept cell in :attr:`assoc` wins on the *sum* of both senses' drive
+        and tunes its visual and auditory weights toward what was seen and
+        heard together -- Hebbian, local, no supervision saying they belong to
+        each other, only that they co-occurred. ``label`` never enters the
+        learning; it is recorded separately so the cell can be *named* later,
+        which is the house rule: names are a read-out of a code, not its
+        substance.
 
-    def recall_visual_from_sound(self, a_code: np.ndarray) -> Optional[int]:
-        """Hear a sound, remember what was seen with it."""
-        if not self.bindings:
+        The raw pair is still appended to :attr:`bindings` so the legacy
+        nearest-neighbour path stays available for comparison."""
+        self.bindings.append((v_code, a_code, label))
+        self._ensure_assoc(v_code, a_code)
+        win = self.assoc.bind(v_code, a_code)
+        votes = self._cell_votes.setdefault(win, {})
+        votes[int(label)] = votes.get(int(label), 0) + 1
+
+    def _name_cell(self, cell: int) -> Optional[int]:
+        """The label most often present when this concept cell won."""
+        votes = self._cell_votes.get(cell)
+        if not votes:
             return None
-        sims = [float(a_code @ a) for _, a, _ in self.bindings]
-        return int(self.bindings[int(np.argmax(sims))][2])
+        return int(max(votes.items(), key=lambda kv: kv[1])[0])
+
+    def recall_visual_from_sound(self, a_code: np.ndarray,
+                                 via: str = "assoc") -> Optional[int]:
+        """Hear a sound, remember what was seen with it.
+
+        ``via="assoc"`` (default) routes through the concept cells: the sound
+        wakes a cell through ``Wa`` and the cell's name is read out. This is
+        the cross-modal path -- the visual code is what tuned ``Wv`` during
+        binding, so it genuinely participates.
+
+        ``via="nearest"`` is the original behaviour: nearest stored audio code,
+        return its stored label. It is kept only so the two can be measured
+        against each other; note that querying it with a code it has already
+        stored is a lookup and will score perfectly even on shuffled labels."""
+        if via == "nearest":
+            if not self.bindings:
+                return None
+            sims = [float(a_code @ a) for _, a, _ in self.bindings]
+            return int(self.bindings[int(np.argmax(sims))][2])
+        if not self._cell_votes or self.assoc is None:
+            return None
+        return self._name_cell(self.assoc.concept_from_sound(a_code))
+
+    def recall_visual_code_from_sound(self, a_code: np.ndarray
+                                      ) -> Optional[np.ndarray]:
+        """Hear a sound, recall the **visual code** it expects.
+
+        This is what the binding is for, and what a label can never be: the
+        answer is a vector the rest of the brain can consume -- match it in the
+        workspace, feed it to a read-out, compare it against what the eye is
+        seeing now."""
+        if not self._cell_votes or self.assoc is None:
+            return None
+        return self.assoc.vision_from_sound(a_code)
+
+    def recall_sound_code_from_vision(self, v_code: np.ndarray
+                                      ) -> Optional[np.ndarray]:
+        """See a thing, recall the **sound code** it expects. The reverse
+        direction, which the stored-label version could not express at all."""
+        if not self._cell_votes or self.assoc is None:
+            return None
+        return self.assoc.sound_from_vision(v_code)
+
+    def calibrate(self, V: np.ndarray, A: np.ndarray) -> None:
+        """Give the concept cells each modality's feature statistics so the two
+        senses compete on an equal footing (divisive normalisation)."""
+        V = np.asarray(V, np.float32); A = np.asarray(A, np.float32)
+        self._ensure_assoc(V[0], A[0])
+        self.assoc.set_stats(V, A)
 
 
 def streaming_experiment(n_saccades: int = 60, n_events: int = 24,

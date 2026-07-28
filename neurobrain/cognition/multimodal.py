@@ -82,6 +82,20 @@ class AssociationArea:
     def concept_from_sound(self, a: np.ndarray) -> int:
         return int(np.argmax(self.Wa @ self.prep_a(a)))
 
+    # -- the read-out the binding is *for* -----------------------------------
+    def vision_from_sound(self, a: np.ndarray) -> np.ndarray:
+        """Hear a sound; read out the visual pattern its concept expects.
+
+        This is the half of binding that makes it cross-modal rather than a
+        lookup: the sound wakes a concept cell through ``Wa``, and that cell's
+        ``Wv`` row *is* the vision it has learned to expect. Nothing about the
+        query is visual, and the answer is entirely visual."""
+        return self.Wv[self.concept_from_sound(a)].copy()
+
+    def sound_from_vision(self, v: np.ndarray) -> np.ndarray:
+        """See a thing; read out the sound its concept expects."""
+        return self.Wa[self.concept_from_vision(v)].copy()
+
     def novelty(self, v: np.ndarray, a: np.ndarray) -> float:
         """How poorly the current concept cells explain this audio-visual pair
         (1 = brand new, 0 = already a known concept)."""
