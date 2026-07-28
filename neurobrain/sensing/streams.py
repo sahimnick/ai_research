@@ -341,10 +341,43 @@ class ContinuousEar:
     Nothing tells this class where a sound starts. It computes the cochlear
     energy over time and looks for a **rising derivative** past a threshold --
     the same cue auditory onset cells use -- with a refractory period so one
-    event is not reported many times."""
+    event is not reported many times.
+
+    On ``threshold``
+    ----------------
+    This is the one number that decides what the ear even notices, and it used
+    to be 2.5. That was too deaf: it reported 100% precision while silently
+    dropping a quarter of every soundscape.
+
+    ``benchmarks/ear_threshold.py`` swept it over 182 runs -- 5 seeds, 3 event
+    densities, 4 background-noise levels -- scoring not F1 but **named yield**:
+    of the events that really happened, how many arrived both found *and*
+    correctly named. F1 alone picks the wrong value, because a detection with
+    no event behind it still gets classified and injects a confident wrong
+    percept downstream, so false alarms per minute are tracked as the cost.
+
+        threshold   named yield   F1      false alarms/min
+        1.25        76.0%         0.960   6.34
+        1.5         76.0%         0.969   4.30   <- chosen
+        1.75        72.8%         0.960   2.96
+        2.5 (old)   55.0%         0.796   0.19
+
+    1.25 and 1.5 tie exactly on yield, so 1.5 wins on the tiebreak: same
+    events recovered, better F1, and a third fewer false alarms.
+
+    The gain is largest exactly where the old default failed worst -- dense
+    soundscapes, where events arrive 0.05-0.20 s apart and the background never
+    settles enough for a 2.5-sigma jump: **83.3% vs 18.1%**.
+
+    Two things this does *not* fix, both measured: at high background noise
+    (0.30) naming collapses to ~21% even though recall stays at 100% -- the
+    onset detector still finds everything and the *classifier* is what breaks,
+    which is a separate problem in the belt code. And precision is no longer
+    perfect (0.95), so callers that cannot tolerate a false alarm should raise
+    this back and accept the missed events knowingly."""
 
     def __init__(self, sr: int = 8000, hop_ms: int = 10, win_ms: int = 50,
-                 refractory_ms: int = 250, threshold: float = 2.5):
+                 refractory_ms: int = 250, threshold: float = 1.5):
         from ..audition.audio import Cochleagram
 
         self.coch = Cochleagram(sr=sr)

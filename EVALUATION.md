@@ -71,6 +71,28 @@ Dropping `ContinuousEar.threshold` from 2.5 to 1.5 is worth **+10 F1 points**
 for one constant. The default is buying precision nobody asked for at the cost
 of a quarter of all events.
 
+> **Since changed**, on the strength of a 182-run sweep (5 seeds × 3 event
+> densities × 4 noise levels, `benchmarks/ear_threshold.py`). The deciding
+> metric is *named yield* — of the events that really happened, how many
+> arrived both found and correctly named — not F1, because a false alarm still
+> gets classified and injects a confident wrong percept downstream.
+>
+> | | recall | accuracy on detections | **named yield** |
+> |---|---|---|---|
+> | threshold 2.5 (old) | 75.0% | 92.6% | **69.4%** |
+> | threshold 1.5 (new) | **100%** | 87.5% | **87.5%** |
+>
+> Accuracy-on-detections *falls* 5 points and that is the metric becoming
+> honest, not the system regressing: it is now scored on every real event
+> instead of only the easy 75% the old threshold happened to find. Named yield,
+> the number that matters, gains **+18.1 points**.
+>
+> The gain is largest where the old default failed worst — dense soundscapes,
+> events 0.05–0.20 s apart: **83.3% vs 18.1%**. Two things it does not fix: at
+> noise 0.30 naming still collapses to ~21% *while recall stays 100%*, so that
+> failure is in the belt code's classifier, not the onset detector; and
+> precision is no longer perfect (0.95).
+
 > ⚠ **The 92.6% streaming figure is not comparable to the 84.4%.** Streaming is
 > scored only on events the ear successfully detected — the easy 75% — and
 > against a different clip pool than the pre-segmented condition. It is
@@ -272,7 +294,7 @@ Probed directly, all reproduce exactly as AUDIT.md describes:
 | 3 | **Imagination is a 10-state counting loop** | chains are `0→1→2→…→9`; temperature inert | "constantly imaginative" is absent |
 | 4 | **Streaming vision collapses on complex data** | Fashion 71.7% → 35.9% through the eye | the flagship path fails on realistic input |
 | 5 | ~~**`import neurobrain` fails without torch**~~ | **Fixed** — verified with no torch, with a *broken* torch, and with torch 2.13 present | was blocking CI, users, and this evaluation |
-| 6 | **Ear default threshold costs 25% recall** | 2.5 → 75% recall; 1.5 → 100%, F1 +10 | one constant |
+| 6 | ~~**Ear default threshold costs 25% recall**~~ | **Fixed** — default now 1.5 after a 182-run sweep; named yield 69.4% → 87.5% | one constant |
 | 7 | **Fashion class 4 at 0% recall** | designed filters, complete blind spot | hidden inside a 64.8% average |
 | 8 | **Belt is the throughput bottleneck** | 14.2 ms vs 7.5 ms for all of vision | halves the achievable tick rate |
 | 9 | **A2/A3 wiring bugs** | effective p = 0.0955; 2000× silent truncation | every scaling number is suspect |
@@ -286,11 +308,10 @@ Ordered by what unblocks the goal, not by difficulty.
 
 ### Immediate (hours) — stop working around bugs
 
-1. **Fix A1** (`backend.py` class guard). Five lines. It blocked this entire
-   evaluation behind a shim, and it blocks every user and every CI run. Nothing
-   else on this list is pleasant until it is done.
-2. **Retune `ContinuousEar.threshold` to ~1.5.** +10 F1 for one constant. Verify
-   across more soundscape seeds first.
+1. ~~**Fix A1**~~ — **done.** Locked by `tests/test_import_without_torch.py`,
+   which simulates torch's absence even where torch is installed.
+2. ~~**Retune `ContinuousEar.threshold`**~~ — **done**, to 1.5, after the
+   182-run sweep the original note asked for.
 3. **Fix A2/A3** before trusting any scaling result — warn on truncation, sample
    without replacement.
 

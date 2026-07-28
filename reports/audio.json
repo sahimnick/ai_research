@@ -1,19 +1,19 @@
 {
  "multi_detection": {
-  "n_found": 18,
+  "n_found": 26,
   "n_true": 24,
-  "precision": 1.0,
-  "recall": 0.75,
-  "f1": 0.8571,
-  "true_positives": 18,
-  "false_alarms": 0,
-  "named_correct": 16,
-  "accuracy_given_detection": 0.8889
+  "precision": 0.9231,
+  "recall": 1.0,
+  "f1": 0.96,
+  "true_positives": 24,
+  "false_alarms": 2,
+  "named_correct": 21,
+  "accuracy_given_detection": 0.875
  },
  "tracking": {
   "windows": 357,
   "windows_with_sound": 193,
-  "tracking_accuracy": 0.7098
+  "tracking_accuracy": 0.7254
  },
  "threshold_sweep": [
   {
@@ -59,6 +59,8 @@
   "down_chirp": 1.0,
   "harmonic": 0.0,
   "noise": 1.0,
-  "fm": 1.0
+  "am": 1.0,
+  "fm": 1.0,
+  "chord": 0.3333
  }
 }

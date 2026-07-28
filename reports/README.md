@@ -44,14 +44,15 @@ visible rather than to hide it behind an average.
 | `04_threshold` | the attention knob: detection threshold vs precision / recall / F1 |
 | `05_confusion` | which sounds it confuses |
 
-**Numbers:** 18 onsets found for 24 real events (precision 100%, recall 75%),
-16/18 named correctly (89%). The six misses are visible in `02` as blue bands
-with no green line.
+**Numbers (with the new `threshold=1.5` default):** 26 onsets found for 24 real
+events (precision 92%, **recall 100%**), 21 named correctly. Every real event is
+now found — compare the old default, which reported 18/24 and left six blue
+bands in `02` with no green line at all.
 
-`04_threshold` is the actionable one: the shipped default `threshold=2.5`
-scores F1 85.7%, while `1.5` scores **95.8%** — the default is trading a
-quarter of all events for precision it does not need. Above 3.0 the ear goes
-nearly deaf (recall 17%).
+`04_threshold` is the panel that drove the change. The default was 2.5 and is
+now 1.5, chosen over a 182-run sweep on *named yield* rather than F1 — see
+`benchmarks/ear_threshold.py` and the box in `../EVALUATION.md` §2. Above 3.0
+the ear goes nearly deaf (recall 17%).
 
 `harmonic` is at **0% recall** — a complete blind spot inside an otherwise
 good average.
