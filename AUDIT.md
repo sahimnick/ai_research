@@ -310,9 +310,9 @@ one-liner, a hosted instance, and a 30-second screen recording.
 - **`dashboard.py`** — 495 lines of dead code shipping in the package. Delete it or wire it back.
 - **`world_model.py` vs `worldmodel.py`** — will cost you and every future contributor real
   time. Rename one (e.g. `concepts.py`).
-- **A flat 62-module namespace** — sub-packages (`core/`, `vision/`, `audio/`, `cognition/`,
-  `experiments/`, `viz/`) would make the project legible at a glance and let you version the
-  experiment layer separately from the substrate.
+- ~~**A flat 62-module namespace**~~ — **done.** Now 11 subpackages (`core/`, `sensing/`,
+  `vision/`, `audition/`, `world/`, `memory/`, `cognition/`, `learning/`, `minds/`, `viz/`,
+  `tools/`) with `workspace.py` at the root. Public API unchanged. See ARCHITECTURE.md §3.5.
 - **`__init__.py` imports all 62 modules eagerly.** Import cost is ~0.5 s today and grows with
   every module. Consider PEP 562 lazy `__getattr__` for the experiment-tier modules.
 
