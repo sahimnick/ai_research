@@ -303,6 +303,29 @@ whole life. The "+13% with no new data" sleep-consolidation result is real in
 >
 > This is what item 4 addresses: with lived transitions the surprise signal goes
 > from 2 to 154 distinct values.
+>
+> **The follow-up did not vindicate the hypothesis.** Repeating the
+> prioritised-vs-uniform comparison *after* item 4, with surprise now taking 154
+> distinct values instead of 2:
+>
+> | world model | prioritised − uniform | wins | Cohen's d |
+> |---|---|---|---|
+> | taught only (2 values) | +0.12 pts ± 0.61 | 3/6 | 0.21 |
+> | lived (154 values) | +0.21 pts ± 0.58 | 4/6 | 0.36 |
+>
+> It moved in the predicted direction and is still **not meaningful** — a small
+> effect swamped by its own spread. Making the priority signal informative was
+> necessary but not sufficient.
+>
+> The remaining suspect is the consolidation *learner*, not the priority. Replay
+> calls `space.remember(label, image=pattern)`, which appends an exemplar; the
+> recall probe is nearest-neighbour over those exemplars, so replaying a
+> surprising episode more often mostly adds near-duplicates that
+> nearest-neighbour is insensitive to. With 400 episodes and 1200 replays
+> everything is seen ~3× regardless, so prioritisation only reweights something
+> the read-out does not measure. A consolidation step whose *strength* depends
+> on replay frequency — the `SemanticCortex` prototype update that the +13%
+> result actually uses — is where this would start to pay.
 
 ## 6. Efficiency
 
