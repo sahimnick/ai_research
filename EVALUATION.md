@@ -535,9 +535,38 @@ surprise from lived looking: 8 distinct values, mean 0.932
 dream on lived experience  : {'replays': 480, 'concepts_merged': 0}
 ```
 
-The path exists now. What replay is worth *on lived streaming experience*
-rather than on pre-cut digits is a question this makes askable for the first
-time, and it is not yet answered here.
+**Answer, measured** (`benchmarks/scene_to_dream.py`, 5 seeds, 180 episodes of
+real looking per mind, 900 replays, paired against a no-dream arm):
+
+| faculty | real dream − no dream | wins | d | |
+|---|---|---|---|---|
+| recall (`nn`) | **−0.0133** | 0/5 | −1.71 | **hurts** |
+| recall (`knn5`) | −0.0053 | 1/5 | −0.51 | no effect |
+| detection | **+0.0000** | 0/5 | 0.00 | no effect |
+| rare-class recall | −0.0100 | 2/5 | −0.48 | no effect |
+| world-model prediction | **+0.0000** | 0/5 | 0.00 | no effect |
+
+**Nothing improves. One thing gets slightly worse.** The episode path is
+demonstrably alive — 180 episodes laid down from real saccades, 900 replays —
+so by elimination the fault is in replay/consolidation itself. Two of those
+numbers are *exactly* zero, and that is structural rather than noisy:
+
+- **Detection cannot move**, because `perceive()` reads `vision.cortex` (the
+  DigitRecognizer) while `dream()` writes to `space.cortex` (the pallium). The
+  mind perceives with one store and remembers with another, and sleep only
+  touches the second. No amount of replay can reach perception.
+- **The world model cannot move**, because `sleep()` replays *patterns* and
+  never replays *transitions*. Consolidation is image-only; `_T` is never
+  consolidated at all.
+- Recall does move, and downward: consolidation folds distinct exemplars into
+  shared traces, which `nn` punishes (d=−1.71) and `knn5` is nearly neutral to
+  (−0.005). The shuffled-label day is worse still (−0.029), which confirms
+  replay writes content-specific information — it is simply information that
+  does not help.
+
+So the perception → experience → sleep → improvement loop **does not yet close
+in this architecture**, and the reason is now specific rather than suspected:
+replay reaches one of the three stores that would have to change.
 
 ### Prioritised replay does not matter — at any budget
 
