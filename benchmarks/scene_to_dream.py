@@ -27,6 +27,20 @@ A before/after difference on its own proves nothing -- probing, ordering and
 the mind's own state could move it. The controls are what make the number mean
 something.
 
+STANDING RE-TEST
+----------------
+As of the run recorded in EVALUATION.md, `detection` and `world_model` both
+come back at EXACTLY +0.0000. That is not a weak effect, it is a
+disconnection: `perceive()` reads `vision.cortex` while `dream()` writes
+`space.cortex`, and `sleep()` replays patterns but never transitions, so `_T`
+is never consolidated at all. Replay reaches one of the three stores that hold
+what the mind knows.
+
+That makes this file the re-test for a specific, falsifiable claim. If
+consolidation is ever routed into `vision.cortex` or into `_T`, **those two
+exact zeros must move**. If they stay exactly zero, the routing did not really
+happen. Run this unchanged after any such change.
+
 Usage:  python3 benchmarks/scene_to_dream.py out_scene_dream.json
 """
 import json, sys

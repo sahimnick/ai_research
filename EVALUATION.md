@@ -10,12 +10,29 @@ MNIST and Fashion-MNIST downloaded live. `import neurobrain` required a
 do-nothing torch shim throughout (defect A1); **A1 has since been fixed** and
 the shim is gone — every measurement here reproduces without it.
 
-**Headline.** The perception front end is real and the core scientific claim
-holds up: receptive fields *discovered* from data beat hand-designed ones on
-both datasets. Three things do not hold up — cross-modal binding never touches
-vision, the dream/consolidation path is a permanent no-op, and imagination is a
-ten-state loop reciting the number line. Those three are exactly the mechanisms
-the "unified, constantly imaginative mind" goal rests on.
+**Headline — the one result.** *Replay changes one of the three stores that hold
+what the mind knows, and the faculties expected to improve read the other two.*
+
+There are three stores: `vision.cortex` (how it perceives), `space.cortex` (what
+it remembers), and `_T` (what it expects to happen next). `dream()` writes only
+to the second. So detection cannot improve no matter how much the mind sleeps —
+it is read from a store sleep never touches — and neither can world-model
+prediction, because `sleep()` replays *patterns* and never replays
+*transitions*. Both measured at **exactly +0.0000** across 5 seeds, which is the
+signature of a disconnection rather than a weak effect.
+
+This is an architectural claim, not "sleep doesn't work", and it is falsifiable
+in a specific way: **if consolidation is ever routed into `vision.cortex` or
+`_T`, those two exact zeros must move.** If they stay exactly zero, the routing
+did not really happen. `benchmarks/scene_to_dream.py` is the standing re-test —
+run it unchanged after any such change and it re-answers the question.
+
+The perception front end is real and the core scientific claim holds up:
+receptive fields *discovered* from data beat hand-designed ones on both
+datasets. Three mechanisms that did not hold up when first measured —
+cross-modal binding never touching vision, dream as a permanent no-op,
+imagination as a ten-state counting loop — have since been fixed; each section
+below keeps the original measurement and the correction beside it.
 
 ---
 
