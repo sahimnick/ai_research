@@ -72,6 +72,8 @@ class AssociativeCortex:
                 self.modalities[mod] = np.vstack([mat, np.zeros((1, mat.shape[1]),
                                                                 np.float32)])
         self.labels.append(label)
+        if getattr(self, "_by_label", None) is not None:
+            self._by_label.setdefault(label, []).append(cell)
         return cell
 
     def recall(self, modality: str, cue: np.ndarray,
@@ -98,6 +100,88 @@ class AssociativeCortex:
     def reconstruct(self, cell: int, modality: str) -> np.ndarray:
         """The stored pattern of memory ``cell`` in ``modality``."""
         return self.modalities[modality][cell].copy()
+
+    # -- consolidation: repetition should STRENGTHEN, not duplicate ----------
+    def cells_for(self, label: object) -> np.ndarray:
+        """Indices of every memory cell carrying this label."""
+        if not hasattr(self, "_by_label") or self._by_label is None:
+            self._by_label = {}
+            for i, l in enumerate(self.labels):
+                self._by_label.setdefault(l, []).append(i)
+        return np.asarray(self._by_label.get(label, []), np.int64)
+
+    def _index_cell(self, cell: int, label: object) -> None:
+        if not hasattr(self, "_by_label") or self._by_label is None:
+            self._by_label = {}
+            for i, l in enumerate(self.labels):
+                self._by_label.setdefault(l, []).append(i)
+        self._by_label.setdefault(label, []).append(cell)
+
+    def consolidate(self, patterns: Dict[str, np.ndarray], label: object,
+                    lr: float = 0.05, vigilance: float = 0.55) -> int:
+        """Fold a replayed pattern into an EXISTING trace instead of adding a copy.
+
+        :meth:`remember` allocates a new cell every call, so replaying one
+        episode two hundred times left two hundred identical cells and moved
+        recall by exactly nothing -- which is why prioritised replay was
+        indistinguishable from uniform replay no matter how informative the
+        priority signal became. Frequency has to reach the weights or it
+        reaches nothing.
+
+        Here the replayed pattern competes for a cell of its own label. If the
+        best match is at least ``vigilance`` similar, that cell moves toward the
+        pattern by the instar rule ``w += lr * (x - w)`` -- local, Hebbian, no
+        gradient -- and its strength counter rises. Only genuinely novel
+        content allocates a new cell, so the store stays a summary of
+        experience rather than a log of it.
+
+        Returns the cell that absorbed the pattern."""
+        cells = self.cells_for(label)
+        best, best_sim = -1, -np.inf
+        if len(cells):
+            for mod, vec in patterns.items():
+                if mod not in self.modalities:
+                    continue
+                x = _unit(vec)
+                sims = self.modalities[mod][cells] @ x
+                j = int(np.argmax(sims))
+                if float(sims[j]) > best_sim:
+                    best, best_sim = int(cells[j]), float(sims[j])
+        if best < 0 or best_sim < vigilance:
+            cell = self.remember(patterns, label=label)
+            self._index_cell(cell, label)
+            self.strength = np.append(getattr(self, "strength",
+                                              np.zeros(0, np.float32)), 1.0)
+            while len(self.strength) < self.n_memories:      # cells added elsewhere
+                self.strength = np.append(self.strength, 1.0)
+            return cell
+        for mod, vec in patterns.items():
+            if mod not in self.modalities:
+                continue
+            w = self.modalities[mod][best]
+            self.modalities[mod][best] = _unit(w + lr * (_unit(vec) - w))
+        if not hasattr(self, "strength") or len(self.strength) < self.n_memories:
+            self.strength = np.ones(self.n_memories, np.float32)
+        self.strength[best] += 1.0
+        return best
+
+    # -- read-out: a population, not one winner ------------------------------
+    def reconstruct_population(self, modality: str, cells: np.ndarray,
+                               weights: np.ndarray) -> np.ndarray:
+        """Blend several memory cells into one percept.
+
+        :meth:`reconstruct` returns a stored row verbatim, so anything built on
+        it can only replay experience: every "imagined" percept had cosine
+        1.000000 to a cell already in the store. A cortical read-out is not one
+        winning cell, it is a population -- so this weights several cells and
+        sums them, which can express a pattern that was never stored while
+        staying inside the space the store spans."""
+        cells = np.asarray(cells, np.int64)
+        if not len(cells):
+            return np.zeros(self.modalities[modality].shape[1], np.float32)
+        w = np.asarray(weights, np.float32)
+        w = w / max(float(w.sum()), 1e-9)
+        return _unit(w @ self.modalities[modality][cells])
 
     def cross_recall(self, from_modality: str, cue: np.ndarray,
                      to_modality: str) -> Tuple[int, np.ndarray]:
@@ -188,22 +272,69 @@ class MentalSpace:
         """Which concept does this (noisy) percept belong to? (attractor recall)"""
         return self.cortex.labels[self.cortex.recall(modality, cue)]
 
+    def consolidate(self, concept: str, lr: float = 0.05,
+                    vigilance: float = 0.55, **modalities: np.ndarray) -> int:
+        """Fold a replayed pattern into an existing trace (see
+        :meth:`AssociativeCortex.consolidate`). This is what a night of replay
+        should call: :meth:`remember` appends, so it cannot express how often
+        something was replayed."""
+        if concept not in self.concepts:
+            self.concepts.append(concept)
+            self._grow_T()
+        return self.cortex.consolidate(modalities, concept, lr=lr,
+                                       vigilance=vigilance)
+
+    def blend(self, concept: str, modality: str = "image", k: int = 6,
+              concentration: float = 0.9, rng=None) -> np.ndarray:
+        """Re-create a percept as a **population blend** of remembered episodes.
+
+        The cells carrying this concept are mixed with Dirichlet-sampled
+        weights, so the result is a genuinely new pattern inside the span of
+        what was actually experienced -- not one stored row returned verbatim,
+        which is all :meth:`AssociativeCortex.reconstruct` can do.
+        ``concentration`` sets how far it wanders: below 1 the mixture leans on
+        a few episodes and stays vivid, far above 1 it converges on the flat
+        class average, which is the prototype problem again."""
+        rng = rng or np.random.default_rng()
+        cells = self.cortex.cells_for(concept)
+        if not len(cells):
+            return self.cortex.reconstruct(self._rep_cell(concept), modality)
+        strength = getattr(self.cortex, "strength", None)
+        if strength is not None and len(strength) >= self.cortex.n_memories:
+            order = cells[np.argsort(-strength[cells])][:k]
+        else:
+            order = cells[:k]
+        w = rng.dirichlet(np.full(len(order), concentration))
+        return self.cortex.reconstruct_population(modality, order, w)
+
     def imagine(self, seed: str, steps: int = 6, modality: str = "image",
-                temperature: float = 0.6, rng_seed: int = 0
+                temperature: float = 0.6, rng_seed: int = 0,
+                blend: int = 0, concentration: float = 0.9
                 ) -> Tuple[List[str], List[np.ndarray]]:
         """Wander the world model from ``seed`` and *re-create* each concept's
-        percept -- an inner train of thought made of reconstructed memories."""
+        percept -- an inner train of thought made of reconstructed memories.
+
+        With ``blend=0`` each percept is one stored cell returned verbatim, so
+        every "imagined" image has cosine 1.000000 to something already in the
+        store -- the mind can only replay what it has seen. ``blend=k`` mixes
+        the k strongest traces for that concept with Dirichlet weights
+        (:meth:`blend`), producing a pattern that was never stored while
+        staying inside the span of what was actually experienced."""
         rng = np.random.default_rng(rng_seed)
         cur = self.concepts.index(seed)
         names = [seed]
-        percepts = [self.cortex.reconstruct(self._rep_cell(seed), modality)]
+        _draw = (lambda c: self.blend(c, modality, k=blend,
+                                      concentration=concentration, rng=rng)
+                 ) if blend else (
+                 lambda c: self.cortex.reconstruct(self._rep_cell(c), modality))
+        percepts = [_draw(seed)]
         for _ in range(steps):
             p = self._T[cur] ** (1.0 / max(temperature, 1e-3))
             p = p / p.sum()
             cur = int(rng.choice(len(p), p=p))
             c = self.concepts[cur]
             names.append(c)
-            percepts.append(self.cortex.reconstruct(self._rep_cell(c), modality))
+            percepts.append(_draw(c))
         return names, percepts
 
 

@@ -266,16 +266,29 @@ class UnifiedMind:
         merged = self.ws.consolidate(consolidate) if self.ws is not None else 0
         return {"replays": replays, "concepts_merged": merged}
 
-    def sleep(self, cycles: int = 3, replays_per_cycle: int = 300) -> int:
+    def sleep(self, cycles: int = 3, replays_per_cycle: int = 300,
+              consolidating: bool = True, vigilance: float = 0.55) -> int:
         """Consolidate the day: prioritised hippocampal replay into the pallium.
-        No new data enters -- the day is simply re-processed."""
+        No new data enters -- the day is simply re-processed.
+
+        The learner is :meth:`MentalSpace.consolidate`, which folds a replayed
+        pattern into an existing trace. It used to be :meth:`remember`, which
+        allocates a new cell per call -- so replaying one episode two hundred
+        times left two hundred identical cells and moved recall by exactly
+        nothing. That is why prioritised replay measured the same as uniform
+        replay: however good the priority signal got, frequency had nowhere to
+        land. Pass ``consolidating=False`` for the old appending behaviour."""
         if self.episodes is None or len(self.episodes) == 0:
             return 0
         from ..memory.development import SleepConsolidator
         cons = SleepConsolidator(self.episodes, seed=0)
-        return cons.sleep(
-            lambda p, l, lr: self.space.remember(str(l), image=p),
-            cycles=cycles, replays_per_cycle=replays_per_cycle)
+        if consolidating:
+            learner = lambda p, l, lr: self.space.consolidate(
+                str(l), lr=lr, vigilance=vigilance, image=p)
+        else:
+            learner = lambda p, l, lr: self.space.remember(str(l), image=p)
+        return cons.sleep(learner, cycles=cycles,
+                          replays_per_cycle=replays_per_cycle)
 
 
 def build_unified_mind(n_pallium: int = 4000, verbose: bool = False,

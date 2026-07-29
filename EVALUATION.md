@@ -317,6 +317,18 @@ whole life. The "+13% with no new data" sleep-consolidation result is real in
 > effect swamped by its own spread. Making the priority signal informative was
 > necessary but not sufficient.
 >
+> **The suspect was confirmed, directly.** Replaying one episode 200 times:
+>
+> ```
+> cells: 210 -> 410   (+200 identical cells)
+> recall: 0.7600 -> 0.7600   (moved by exactly nothing)
+> the 200 added cells are identical: True
+> ```
+>
+> And reconstruction was verbatim — every imagined percept scored cosine
+> **1.000000** against a cell already in the store, so imagination could only
+> replay experience. Both are now fixed; see §7.
+>
 > The remaining suspect is the consolidation *learner*, not the priority. Replay
 > calls `space.remember(label, image=pattern)`, which appends an exemplar; the
 > recall probe is nearest-neighbour over those exemplars, so replaying a
@@ -394,6 +406,80 @@ Probed directly, all reproduce exactly as AUDIT.md describes:
 
 ---
 
+## 7. Two mechanisms built for two proven failures
+
+Both failures were established by direct probe, not inference:
+
+```
+replaying ONE episode 200 times, with the old learner:
+  cells: 210 -> 410      (+200 identical cells)
+  recall: 0.7600 -> 0.7600        (moved by exactly nothing)
+
+every imagined percept, with the old read-out:
+  max cosine to a STORED cell = 1.000000     (verbatim replay)
+```
+
+`AssociativeCortex.consolidate` folds a replay into an existing trace by the
+instar rule `w += lr·(x − w)` and counts its strength; `reconstruct_population`
+/ `MentalSpace.blend` read out a Dirichlet-weighted population instead of one
+winner. Both are local and Hebbian — no gradient enters.
+
+### The blend works
+
+| read-out | novelty (1 − max cosine to any stored cell) | imagine → re-perceive |
+|---|---|---|
+| verbatim (`blend=0`) | **0.00000** | 1.000 |
+| `blend=3, conc 0.6` | 0.02291 | 1.000 |
+| `blend=6, conc 0.9` | **0.04475** | **1.000** |
+| `blend=12, conc 0.9` | 0.05376 | 0.962 |
+
+This is the falsifiable pair, and it lands: the mind produces percepts that were
+never stored **while still recognising them as what it meant** — up to `blend=6`
+at no coherence cost at all, with the boundary visible at `blend=12` where the
+round trip finally starts to slip. That is the first thing in this system that
+imagines rather than replays.
+
+### The consolidator does what it says, but not what it was for
+
+| arm | recall after | cells |
+|---|---|---|
+| append / prioritised | **0.821** ± 0.009 | 1510 |
+| append / uniform | 0.819 ± 0.010 | 1510 |
+| consolidate / prioritised | 0.809 ± 0.009 | **315** |
+| consolidate / uniform | 0.807 ± 0.005 | 315 |
+
+Mechanically it is correct — 200 replays now add 0 cells and drive a strength
+counter to 201. But **it costs 1.2 points of recall, losing on 6/6 seeds**
+(d = −1.06). What it buys is **4.8× compression**: 315 traces instead of 1510.
+Nearest-neighbour recall simply likes having more exemplars, so summarising
+experience is a real trade rather than a free win. Worth having if memory is
+bounded; not worth having for accuracy.
+
+### Prioritised replay does not matter — at any budget
+
+It was built to fix this, and it did not. Testing the obvious remaining
+explanation — that 1200 replays over 400 episodes means everything is replayed
+~3× and prioritisation has nothing left to choose:
+
+| replay budget | prioritised − uniform | wins | Cohen's d |
+|---|---|---|---|
+| 1200 replays / 400 episodes (3.0×) | +0.0025 | 3/6 | +0.27 |
+| 120 replays (0.3×) | −0.0004 | 4/6 | −0.05 |
+| 39 replays (0.1×) | −0.0004 | 2/6 | −0.10 |
+
+Scarcity does not rescue it either. **Three hypotheses have now been tested and
+all three were wrong** — the two-valued surprise signal, the frequency-blind
+learner, and the abundant budget. Prioritised replay provides no measurable
+benefit in this architecture on this task.
+
+The open question, stated as a question because the last two guesses failed:
+surprise here is `1 − P(concept | previous)`, which measures how unexpected a
+*transition* was. Whether an exemplar is hard to *recall* is a different
+quantity. A priority signal built from reconstruction error rather than
+transition surprise might behave differently — but that is untested.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
@@ -434,7 +520,9 @@ Ordered by what unblocks the goal, not by difficulty.
    `UnifiedMind.live()` already runs a `CognitiveLoop` on the mind's own
    workspace. Use *that* to populate the transition matrix instead of the digit
    successor lesson, and the train of thought stops being the number line.
-9. **Then measure imagination properly.** `benchmarks/unified.py` already
+9. ~~**Then measure imagination properly.**~~ — **done**, and the blend read-out
+   passes it: novelty 0.045 at a round trip of 1.000. Original note follows.
+   **Then measure imagination properly.** `benchmarks/unified.py` already
    reports chain entropy, unique-concept count and the imagine→perceive round
    trip. Today: 3.02 bits over 10 concepts, round trip 100% because it only ever
    replays prototypes. A mind that is *actually* imaginative should show entropy
