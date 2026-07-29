@@ -610,6 +610,78 @@ transition surprise might behave differently — but that is untested.
 
 ---
 
+## 7.5 The acceptance gate — does replay change behaviour?
+
+Three criteria, fixed in advance so the gate cannot be argued into passing:
+a criterion passes at |Cohen's d| ≥ 0.8 in the right direction on ≥ 4 of 5
+seeds. `benchmarks/acceptance.py`, measured against a watch-but-do-not-dream
+arm on the same lived day.
+
+Two wires were added to make the criteria attemptable at all:
+`sleep(to_perception=…)` routes replay into `vision.cortex` via the same
+ART-style Hebbian rule waking perception uses, and `sleep(to_world=…)` replays
+the day's **order** rather than isolated frames — hippocampal replay is
+sequential, and the episodic buffer already holds the lived sequence.
+
+| | memory-only night | **all-stores night** |
+|---|---|---|
+| detection | +0.0000 · 0/5 · d=0.00 | **+0.0000 · 0/5 · d=0.00** |
+| world model | +0.0000 · 0/5 · d=0.00 | **+0.1455 · 5/5 · d=1.95** |
+| recall (`nn`) | −0.0053 · d=−0.42 | −0.0053 · d=−0.42 |
+| recall (`knn5`) | −0.0040 · d=−0.62 | −0.0040 · d=−0.62 |
+
+| criterion | verdict |
+|---|---|
+| 1. detection changes meaningfully | **FAIL** |
+| 2. world model changes meaningfully | **PASS** — +14.6 points, 5/5 seeds |
+| 3. without a drop in recall | **PASS** |
+| **all three** | **FAIL — 2 of 3** |
+
+### What passed, and why
+
+The world model moves decisively because the day's *order* is information it
+genuinely did not have. The taught counting prior (20 passes of 0→1→…→9) was
+simply wrong about this world, and replaying the lived sequence three times
+outweighs it. Note the labels do not have to be *correct* for the ordering to
+be informative — which is exactly why this works where detection does not.
+
+### Why detection cannot be fixed by tuning
+
+The wire is live: at the waking rate it moves detection by −3.4 points, so the
+exact-zero disconnection is gone. But sweeping the consolidation rate over two
+orders of magnitude finds **no beneficial window**:
+
+| effective rate | detection Δ | wins |
+|---|---|---|
+| 0.000 | +0.0000 | 0/5 |
+| 0.050 (the sleep rate) | +0.0000 | 0/5 |
+| 0.100 | −0.0194 | 0/5 |
+| 0.250 | **−0.0427** | 0/5 |
+| 1.500 | −0.0361 | 0/5 |
+
+Gentle does nothing; aggressive harms; **0/5 seeds at every rate**. Two
+hypotheses were tested and rejected along the way. Background contamination:
+45% of a free-viewing day lands on background and only 47% of episodes carry a
+ground-truth-correct label, but a confidence gate separates background
+perfectly (0.842 vs 0.154, keeping 33/33 objects and 0/27 background) — it
+fixed criterion 3 and left detection untouched. Confidence predicting
+correctness: it does not, r = +0.11, with correct fixations at 0.844 and wrong
+ones at 0.830.
+
+The structural reason is that **replay into perception is self-training on its
+own beliefs**. The labels replayed into `vision.cortex` were produced *by*
+`vision.cortex`. There is no external signal anywhere in the loop, so the best
+it can do is sharpen what it already believes and the worst is amplify its own
+error rate. It cannot add information it did not already have.
+
+That asymmetry is the finding: **replay helps a store that was missing
+structure the day contained, and cannot help a store that generated the very
+labels being replayed.** Improving detection through sleep needs a signal
+perception did not produce — a second modality, a prediction error, or a
+teacher — not a better replay schedule.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
