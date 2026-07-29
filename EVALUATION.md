@@ -682,6 +682,69 @@ teacher — not a better replay schedule.
 
 ---
 
+## 7.6 Does replay need an external teaching signal?
+
+The structural story from §7.5 — replay into perception is self-training on its
+own beliefs, so no information enters — makes a sharp prediction: supply the
+label from outside vision and the same replay should start to help. If it did,
+"replay does not help perception" would become **"replay needs an external
+teaching signal"**, which is a much stronger claim.
+
+Tested with `benchmarks/external_signal.py`: the same lived day, replayed into
+`vision.cortex`, differing only in where the consolidation label comes from —
+the mind's own belief, ground truth, a prediction-error gate, or a genuinely
+independent second sense (a ten-tone auditory bank with its own 34.8% error
+rate).
+
+**Two of my own bugs had to be found first, and the identical-numbers signature
+found both.** The first run reported five identical zeros: it was executed at a
+consolidation rate the earlier sweep had already shown to be a dead zone, so no
+label source could have registered. The second reported `self`, `teacher` and
+`second_mod` all at exactly 0.7819 — different labels, identical outcome, which
+can only mean the label was never read. It was not: `_replay_into_perception`
+picked the cell to move by *similarity*, making the update unsupervised by
+construction. Consolidation is now label-directed (LVQ-style: the competition
+runs within the taught class), which is what lets an outside signal teach at
+all.
+
+Re-run properly powered — 8 seeds, a detection probe of 184 fixations
+(resolution 0.0054 rather than 0.030):
+
+| rate | arm | vs no-dream | wins | d |
+|---|---|---|---|---|
+| eff 0.10 | self | −0.0069 | 2/8 | −0.23 |
+| eff 0.10 | **teacher** | −0.0029 | 4/8 | −0.12 |
+| eff 0.25 | self | −0.0182 | 2/8 | −0.41 |
+| eff 0.25 | **teacher** | **+0.0007** | 4/8 | +0.04 |
+
+| comparison | Δ | wins | d |
+|---|---|---|---|
+| teacher − self, eff 0.10 | +0.0040 | 3/8 | +0.64 |
+| teacher − self, eff 0.25 | +0.0190 | 3/8 | +0.38 |
+
+**The claim is not established.** The label source does matter directionally —
+teacher beats self at both rates, consistently in sign — but a ground-truth
+teacher only brings replay back to **parity** (+0.0007). It prevents replay
+from damaging perception; it does not make replay improve it. Neither effect
+clears the pre-registered bar.
+
+Also worth correcting: the earlier "−0.0427, HURTS" was inflated by the coarse
+probe. At proper resolution the self-label damage is −0.007 to −0.018.
+
+### The likelier explanation, stated as a hypothesis
+
+`vision.cortex` was already grown on 15,000 clean MNIST digits with this same
+ART rule. A day of 180 foveal fixations cannot add to a store that saturated
+long ago, no matter who supplies the labels — so a perfect teacher has nothing
+left to teach. That predicts replay *should* help when the day contains
+something the original training did not: a class the recogniser never saw, or a
+real distribution shift. **That is the next experiment**, and it is written here
+as a hypothesis rather than a result, because the last two structural stories in
+this document were both wrong and were both caught by measurement rather than
+by reasoning.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.

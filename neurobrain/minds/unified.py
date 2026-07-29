@@ -295,7 +295,7 @@ class UnifiedMind:
               consolidate: float = 0.75, to_perception: bool = True,
               to_world: bool = True, world_reps: int = 3,
               confidence_gate: float = 0.55,
-              perception_lr: float = 1.0) -> Dict[str, int]:
+              perception_lr: float = 1.0, relabel=None) -> Dict[str, int]:
         """A full night: replay the day into memory, then **consolidate** the
         workspace (merging redundant concepts that noise spawned).
 
@@ -306,7 +306,7 @@ class UnifiedMind:
                              to_perception=to_perception, to_world=to_world,
                              world_reps=world_reps,
                              confidence_gate=confidence_gate,
-                             perception_lr=perception_lr)
+                             perception_lr=perception_lr, relabel=relabel)
         merged = self.ws.consolidate(consolidate) if self.ws is not None else 0
         return {"replays": replays, "concepts_merged": merged}
 
@@ -314,7 +314,7 @@ class UnifiedMind:
               consolidating: bool = True, vigilance: float = 0.55,
               to_perception: bool = True, to_world: bool = True,
               world_reps: int = 3, confidence_gate: float = 0.55,
-              perception_lr: float = 1.0) -> int:
+              perception_lr: float = 1.0, relabel=None) -> int:
         """Consolidate the day: prioritised hippocampal replay into the pallium.
         No new data enters -- the day is simply re-processed.
 
@@ -341,8 +341,38 @@ class UnifiedMind:
             if to_perception:
                 self._replay_into_perception(p, l, lr * perception_lr)
 
-        n = cons.sleep(learner, cycles=cycles,
-                       replays_per_cycle=replays_per_cycle)
+        if relabel is None:
+            n = cons.sleep(learner, cycles=cycles,
+                           replays_per_cycle=replays_per_cycle)
+        else:
+            # An EXTERNAL teaching signal supplies the label the perceptual
+            # update learns from. Replay into perception is otherwise
+            # self-training: the labels handed to `vision.cortex` were produced
+            # BY `vision.cortex`, so with no outside signal the best case is
+            # sharpening an existing belief and the worst is amplifying an
+            # existing error. `relabel(episode) -> label` is where a teacher, a
+            # second modality, or any other outside evidence enters.
+            rng = np.random.default_rng(0)
+            n = 0
+            for c in range(cycles):
+                cycle_lr = 0.05 * (0.6 ** c)
+                for ep in self.episodes.sample_replay(replays_per_cycle, rng,
+                                                      prioritised=True):
+                    if (confidence_gate > 0
+                            and self._percept_confidence(ep.pattern) < confidence_gate):
+                        continue
+                    if consolidating:
+                        self.space.consolidate(str(ep.label), lr=cycle_lr,
+                                               vigilance=vigilance,
+                                               image=ep.pattern)
+                    else:
+                        self.space.remember(str(ep.label), image=ep.pattern)
+                    if to_perception:
+                        lab = relabel(ep)
+                        if lab is not None:
+                            self._replay_into_perception(
+                                ep.pattern, lab, cycle_lr * perception_lr)
+                    n += 1
         if to_world:
             self._replay_transitions(reps=world_reps)
         return n
@@ -408,15 +438,37 @@ class UnifiedMind:
         if len(W) == 0:
             return
         sim = W @ xn
-        cell = int(np.argmax(sim))
-        if float(sim[cell]) < cx.vigilance and len(W) < cx.max_cells:
+        # The cell to move is chosen WITHIN the taught label, not by raw
+        # similarity. Choosing by similarity alone makes the update
+        # unsupervised -- the same cell moves whatever label the replay
+        # carries -- and a first version did exactly that, which is why
+        # ground-truth teaching, self-labelling and a second modality all
+        # produced the identical number: the label was never read. Restricting
+        # the competition to cells of the taught class is what lets an outside
+        # signal actually teach (LVQ-style, still a local instar step).
+        try:
+            lab = int(label)
+        except (TypeError, ValueError):
+            return
+        own = np.where(cx.cell_label == lab)[0] if getattr(
+            cx, "cell_label", None) is not None else np.arange(len(W))
+        if len(own) == 0:
+            if len(W) >= cx.max_cells:
+                return
             cx.W = np.vstack([W, xn.astype(np.float32)])
             cx.wins = np.append(cx.wins, 1.0)
-            cell = len(cx.W) - 1
-        else:
-            W[cell] += lr * (xn - W[cell])
-            W[cell] /= np.linalg.norm(W[cell]) + 1e-9
-            cx.wins[cell] += 1.0
+            cx.cell_label = np.append(cx.cell_label, lab)
+            return
+        j = int(own[int(np.argmax(sim[own]))])
+        if float(sim[j]) < cx.vigilance and len(W) < cx.max_cells:
+            cx.W = np.vstack([W, xn.astype(np.float32)])
+            cx.wins = np.append(cx.wins, 1.0)
+            cx.cell_label = np.append(cx.cell_label, lab)
+            return
+        W[j] += lr * (xn - W[j])
+        W[j] /= np.linalg.norm(W[j]) + 1e-9
+        cx.wins[j] += 1.0
+        return
         if getattr(cx, "cell_label", None) is None:
             return
         if len(cx.cell_label) < len(cx.W):        # a category was just grown
