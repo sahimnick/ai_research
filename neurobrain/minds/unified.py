@@ -237,6 +237,39 @@ class UnifiedMind:
             return "unknown"
         return str(self.self_model.attribute(sensation, action=action)["agent"])
 
+    def watch(self, scene, n_saccades: int = 40, eye=None, seed: int = 0,
+              correct: bool = True):
+        """Look around a real scene, and let what the eye finds become the day.
+
+        Everything replay was ever measured on arrived as a pre-cut, centred
+        28x28 image handed straight to :meth:`perceive`. That is the gift the
+        streaming work exists to remove: :class:`~neurobrain.sensing.streams.StreamingBrain`
+        had no episodic buffer at all, so lived sensory experience could not
+        reach consolidation even in principle, and any verdict on whether replay
+        is worth anything in the assembled mind was a verdict about hand-fed
+        digits.
+
+        Here the saccadic eye free-views a scene, and each fixation is
+        perceived and laid down as an episode -- with its surprise, and with the
+        transition from the previous fixation written into the world model. The
+        *order the eye chose* becomes what the mind learns the world is like,
+        and background fixations are part of the day exactly as they were part
+        of the looking.
+
+        Returns the fixations, so the caller can score what the eye actually
+        got against ``Fixation.true_label``."""
+        from ..sensing.streams import SaccadicEye
+
+        eye = eye or SaccadicEye(scene, seed=seed)
+        fixations = eye.free_view(n_saccades=n_saccades, correct=correct)
+        for f in fixations:
+            frames = getattr(f, "frames", None)
+            img = np.mean(frames, axis=0) if frames else None
+            if img is None:
+                continue
+            self.perceive(np.asarray(img, np.float32))
+        return fixations
+
     def experience_episode(self, pattern: np.ndarray, label: object,
                            surprise: float = 1.0) -> None:
         """Store a waking episode for tonight's replay."""

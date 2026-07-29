@@ -433,27 +433,111 @@ winner. Both are local and Hebbian — no gradient enters.
 | `blend=6, conc 0.9` | **0.04475** | **1.000** |
 | `blend=12, conc 0.9` | 0.05376 | 0.962 |
 
-This is the falsifiable pair, and it lands: the mind produces percepts that were
-never stored **while still recognising them as what it meant** — up to `blend=6`
-at no coherence cost at all, with the boundary visible at `blend=12` where the
-round trip finally starts to slip. That is the first thing in this system that
-imagines rather than replays.
+The mind produces percepts that were never stored **while still recognising them
+as what it meant** — up to `blend=6` at no coherence cost.
 
-### The consolidator does what it says, but not what it was for
+But cosine alone cannot tell "genuinely new" from "the same thing nudged", and
+it is measured in pixel space, which is not where this system sees. Scored
+again through the mind's own `WideV1`, and against real images as the yardstick
+(`benchmarks/novelty.py`):
 
-| arm | recall after | cells |
-|---|---|---|
-| append / prioritised | **0.821** ± 0.009 | 1510 |
-| append / uniform | 0.819 ± 0.010 | 1510 |
-| consolidate / prioritised | 0.809 ± 0.009 | **315** |
-| consolidate / uniform | 0.807 ± 0.005 | 315 |
+| | cosine | pixel L2 | **V1 perceptual** |
+|---|---|---|---|
+| a training image it saw | 0.166 | 0.556 | 0.166 |
+| **a real held-out digit** | **0.223** | **0.655** | **0.198** |
+| gaussian noise | 0.495 | 0.995 | 0.150 |
+| shuffled-pixel digit | 0.762 | 1.234 | 0.374 |
+| imagined, `blend=0` | −0.000 | 0.000 | 0.004 |
+| imagined, `blend=6` | 0.047 | 0.295 | 0.075 |
+| imagined, `blend=24` | 0.045 | 0.294 | 0.079 |
 
-Mechanically it is correct — 200 replays now add 0 cells and drive a strength
-counter to 201. But **it costs 1.2 points of recall, losing on 6/6 seeds**
-(d = −1.06). What it buys is **4.8× compression**: 315 traces instead of 1510.
-Nearest-neighbour recall simply likes having more exemplars, so summarising
-experience is a real trade rather than a free win. Worth having if memory is
-bounded; not worth having for accuracy.
+As a fraction of what a **real unseen digit** scores — the honest yardstick for
+"new but valid":
+
+| | cosine | pixel L2 | V1 perceptual |
+|---|---|---|---|
+| `blend=0` | 0.00× | 0.00× | 0.02× |
+| `blend=6` | 0.21× | 0.45× | **0.38×** |
+| `blend=12` | 0.23× | 0.48× | 0.41× |
+| `blend=24` | 0.20× | 0.45× | 0.40× |
+
+**The movement is real but partial.** Perceptual distance rises 19-fold from
+`blend=0` (0.004) to `blend=6` (0.075), so this is not a rounding artefact in
+one embedding — it moves in the space the system actually sees with. But it
+reaches only **38–45% of the novelty a real unseen digit carries**, and it
+**saturates**: `blend=24` is no further out than `blend=6`.
+
+That saturation is structural, not a tuning failure. A Dirichlet-weighted sum
+of stored traces is a convex combination, so it cannot leave the convex hull of
+what was stored however many traces are mixed. **This interpolates rather than
+replays — a real step past verbatim recall — but it does not extrapolate, and
+extrapolation is what "imagining something new" finally requires.**
+
+One caveat on the V1 metric: gaussian noise scores *lower* (0.150) than a real
+held-out digit (0.198), because broadband noise drives V1 everywhere and lands
+near the store. V1 distance is a good measure of perceptual novelty for
+plausible images and a poor one for off-manifold junk; the shuffled-pixel
+control (0.374) behaves as expected.
+
+### The consolidator: the "recall loss" was the retriever, not the memory
+
+First measurement said consolidation costs 1.2 points (0.821 → 0.809, losing
+6/6 seeds). **That conclusion was wrong**, and it was wrong in an avoidable
+way: it scored both memories with one retriever — plain nearest-neighbour,
+which structurally rewards having more exemplars. It confounded *what the
+memory knows* with *how it is read*.
+
+Reading the same two memories five ways (`benchmarks/retrievers.py`, 5 seeds):
+
+| retriever | append (1510 cells) | consolidate (315 cells) | append − consolidate |
+|---|---|---|---|
+| `nn` (the shipped one) | 0.822 ± 0.010 | 0.810 ± 0.010 | +0.012 · 5/5 · d=0.98 |
+| **`knn5`** | 0.789 ± 0.028 | **0.824 ± 0.013** | **−0.035 · 0/5 · d=−1.78** |
+| `proto` | 0.730 ± 0.027 | 0.722 ± 0.006 | +0.008 |
+| `softmax` | 0.481 ± 0.087 | 0.789 ± 0.023 | −0.308 |
+| `strength_nn` | 0.822 ± 0.010 | 0.331 ± 0.086 | +0.492 |
+
+**Best against best: 0.824 (consolidate + knn5) vs 0.822 (append + nn) — a gap
+of −0.002.** Consolidation destroyed no information. Under a retriever that
+does not count duplicates, the 315-cell summary *beats* the 1510-cell log by
+3.5 points, losing 0/5 seeds.
+
+So the real result is **4.8× compression at no accuracy cost**, provided the
+read-out is k-NN rather than a single nearest neighbour. The apparent loss was
+an artefact of the measurement, exactly as separating the two effects was meant
+to reveal.
+
+Two retrievers fail informatively rather than randomly. `softmax` collapses on
+the appending memory (0.481) because 1510 near-duplicates let one cluster
+dominate a temperature-weighted vote. `strength_nn` collapses on the
+consolidated memory (0.331) because a strength counter that reaches 201 swamps
+similarity entirely — the most-replayed trace wins everything. Both are
+retriever pathologies, not memory ones.
+
+### Episode → dream now runs on lived looking, not hand-fed crops
+
+Every replay result above was measured on `perceive(trx[i])` — a pre-cut,
+centred 28×28 digit handed straight to the mind. `StreamingBrain` had **no
+episodic buffer at all**, so lived sensory experience could not reach
+consolidation even in principle, and a verdict on replay was a verdict about
+hand-fed crops.
+
+`UnifiedMind.watch(scene)` closes it: the saccadic eye free-views a real
+256×256 scene, and each fixation — background ones included, because they were
+part of the looking — is perceived, laid down as an episode with its surprise,
+and its transition from the previous fixation written into the world model.
+
+```
+episodes after build   : 0
+watched a real scene   : 40 saccades, 23 landed on an object
+episodes after watching: 40
+surprise from lived looking: 8 distinct values, mean 0.932
+dream on lived experience  : {'replays': 480, 'concepts_merged': 0}
+```
+
+The path exists now. What replay is worth *on lived streaming experience*
+rather than on pre-cut digits is a question this makes askable for the first
+time, and it is not yet answered here.
 
 ### Prioritised replay does not matter — at any budget
 
