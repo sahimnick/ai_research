@@ -9,19 +9,51 @@ is still a usable result. Findings from a full pass are written up in
 
 ```bash
 pip install numpy
-python3 benchmarks/vision.py            out_vision.json
-python3 benchmarks/streaming.py         out_streaming.json
-python3 benchmarks/unified.py           out_unified.json
-python3 benchmarks/efficiency.py        out_efficiency.json
-python3 benchmarks/binding_diagnostic.py out_binding.json
+PYTHONPATH=. python3 benchmarks/vision.py            out_vision.json
+PYTHONPATH=. python3 benchmarks/streaming.py         out_streaming.json
+PYTHONPATH=. python3 benchmarks/unified.py           out_unified.json
+PYTHONPATH=. python3 benchmarks/efficiency.py        out_efficiency.json
+PYTHONPATH=. python3 benchmarks/binding_diagnostic.py out_binding.json
 ```
 
 numpy is the only requirement. Torch is optional and untouched by these runs.
 (Until AUDIT.md A1 was fixed these all needed a stub-torch shim on `PYTHONPATH`
-just to get `import neurobrain` to succeed; that shim is gone.)
+just to get `import neurobrain` to succeed; that shim is gone. `PYTHONPATH=.`
+is still needed because the package is not installed -- run from the repo root.)
 
 `vision.py`, `streaming.py` and `efficiency.py` download MNIST and
 Fashion-MNIST on first run and cache them; they need network access once.
+
+## The real-world pass
+
+These use **CIFAR-10 photographs and ESC-50 field recordings** instead of digits
+and synthetic tones, and they are what EVALUATION.md section 7.8 is written from.
+Both datasets download and cache on first run (CIFAR is 170 MB; the fetch is
+resumable and streaming, and `load_cifar10` will read a partial download).
+
+```bash
+PYTHONPATH=. python3 benchmarks/real_audio.py        out_real_audio.json
+PYTHONPATH=. python3 benchmarks/belt_gain.py         out_belt_gain.json
+PYTHONPATH=. python3 benchmarks/real_binding.py      out_real_binding.json
+PYTHONPATH=. python3 benchmarks/concept_formation.py out_concept_formation.json
+PYTHONPATH=. python3 benchmarks/cross_modal_dream.py out_dream.json
+PYTHONPATH=. python3 benchmarks/natural_v1.py        out_natural_v1.json
+PYTHONPATH=. python3 benchmarks/vision_ceiling.py    out_vision_ceiling.json
+PYTHONPATH=. python3 benchmarks/second_stage.py      out_second_stage.json
+PYTHONPATH=. python3 benchmarks/natural_scene.py     out_natural_scene.json
+```
+
+| script | question | key control |
+|---|---|---|
+| `real_audio.py` | Does the auditory front end hear real environmental sound? | five front ends on identical clips; prototype, 5-NN **and** linear probe, because a probe-minus-prototype gap means the geometry is wrong rather than the code empty |
+| `belt_gain.py` | How much tonotopy should the belt keep? | swept on real audio **and** the synthetic bank it was originally tuned on, 8 paired splits |
+| `real_binding.py` | Do concepts form from two corpora that share only meaning? | `shuffled` for the label paths, `mismatched` for the cross-modal ones, and a 1-NN unimodal floor |
+| `concept_formation.py` | Does the layer form concepts or keep one cell per experience? | cells-per-pair below 1.0 with purity and recall held |
+| `cross_modal_dream.py` | Can the mind learn from a sight it never saw? | a **confabulated** arm that performs identical binds on a random imagined sight |
+| `natural_v1.py` | What does the eye need for photographs? | colour, adaptation and discovered fields added cumulatively, with MNIST carried through as a regression check |
+| `vision_ceiling.py` | Which part of the eye is the limit? | width, aperture, spike noise and integration window, each against a control |
+| `second_stage.py` | Does depth help where width did not? | two learning rules for V2, and a concatenated arm that can only fail by V2 adding nothing |
+| `natural_scene.py` | Does the saccadic eye work on scenes of photographs? | on-object rate against the chance of landing on one, with digit scenes as reference |
 
 ## What each script measures
 
