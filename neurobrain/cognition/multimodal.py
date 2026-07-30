@@ -47,7 +47,8 @@ class AssociationArea:
                  conscience: float = 1.0,
                  match_rule: str = "reliability",
                  novelty_rate: Optional[float] = 0.50,
-                 vigilance_lr: float = 0.02, seed: int = 0):
+                 vigilance_lr: float = 0.02, n_modes: int = 4,
+                 mode_lr: float = 0.05, seed: int = 0):
         rng = np.random.default_rng(seed)
         self.Wv = _rows_unit(rng.standard_normal((n_concept, n_vis)) * 0.1)
         self.Wa = _rows_unit(rng.standard_normal((n_concept, n_aud)) * 0.1)
@@ -60,6 +61,14 @@ class AssociationArea:
                              else float(novelty_rate))
         self.vigilance_lr = float(vigilance_lr)
         self._rel_v = self._rel_a = 0.0   # running per-sense precision
+        # the directions each concept VARIES in, so it can imagine a
+        # member rather than only recall the average -- see _grow_subspace
+        self.n_modes = int(n_modes)
+        self.mode_lr = float(mode_lr)
+        self.Pv = _rows_unit(rng.standard_normal(
+            (n_concept * max(n_modes, 1), n_vis)).astype(np.float32)
+            ).reshape(n_concept, max(n_modes, 1), n_vis)
+        self.mode_var = np.zeros((n_concept, max(n_modes, 1)), np.float32)
         self.wins = np.zeros(n_concept)
         self._rng = rng
         self.v_mu = self.v_sd = self.a_mu = self.a_sd = None
@@ -158,6 +167,7 @@ class AssociationArea:
             self.Wv[win] = _unit(self.Wv[win] + self.lr * (vn - self.Wv[win]))
             self.Wa[win] = _unit(self.Wa[win] + self.lr * (an - self.Wa[win]))
             self.wins[win] += 1
+            self._grow_subspace(win, vn)
         self._homeostasis(recruited)
         return win
 
@@ -310,6 +320,81 @@ class AssociationArea:
         self.wins = np.concatenate([self.wins, [1.0]])
         self.n_concept += 1
         return self.n_concept - 1
+
+    # -- imagining, as opposed to recalling ---------------------------------
+    def _grow_subspace(self, cell: int, vn: np.ndarray) -> None:
+        """Track the directions a concept *varies* in, by Oja's rule.
+
+        `Wv[cell]` is the mean of everything bound to a cell, so reading it back
+        gives a category average and nothing else. Measured: what that produces
+        is 3.2x closer to memory than a real unseen photograph is, sits closer
+        to the class mean than any real member of the class, and has a total
+        vocabulary of one output per cell. A mean is not an imagination.
+
+        What is missing is the *spread*. A cell that also knows the few
+        directions its members differ along can place a new point inside its own
+        category instead of at its centre -- a cat it has not seen, rather than
+        the average cat. That is a generative model, and the local rule for
+        obtaining it is Oja's (1982): a Hebbian update with a decay that
+        converges on principal components without anyone computing a covariance
+        matrix or differentiating anything. Sanger's deflation makes the
+        components distinct.
+
+        Kept to ``n_modes`` directions per cell because this is a concept cell,
+        not a density estimator: a handful of axes of variation is what a
+        category has, and each one costs a vector.
+        """
+        if self.n_modes <= 0:
+            return
+        P = self.Pv[cell]
+        r = vn - self.Wv[cell] * float(self.Wv[cell] @ vn)   # what the mean misses
+        for k in range(self.n_modes):
+            nr = float(np.linalg.norm(r))
+            if nr < 1e-6:
+                break
+            if self.mode_var[cell, k] <= 0.0:
+                # Cold start. Oja's rule is multiplicative in the current
+                # correlation, and in 12288 dimensions a randomly initialised
+                # direction has essentially none: measured, the modes never left
+                # their initialisation, variance stayed at 0.003, and sampling
+                # at temperature 16 moved fidelity by 0.002. So an unused mode
+                # is *seeded* from the first residual it meets rather than
+                # waiting for a correlation that never arrives -- which is also
+                # the more biological start, a synapse shaped by early input.
+                P[k] = (r / nr).astype(np.float32)
+                self.mode_var[cell, k] = nr * nr
+                break
+            a = float(P[k] @ r)
+            P[k] += self.mode_lr * a * (r - a * P[k])        # Oja
+            n = float(np.linalg.norm(P[k]))
+            if n > 1e-6:
+                P[k] /= n
+            self.mode_var[cell, k] += 0.05 * (a * a - self.mode_var[cell, k])
+            r = r - a * P[k]                                 # Sanger deflation
+
+    def imagine_vision(self, cell: int, temperature: float = 1.0,
+                       rng: Optional[np.random.Generator] = None) -> np.ndarray:
+        """A sight this concept could have had, rather than the one it averages.
+
+        ``mean + sum_k z_k * sigma_k * direction_k`` with ``z`` standard normal:
+        a sample from the cell's own learned subspace of variation. At
+        ``temperature=0`` this is exactly :meth:`vision_from_sound`'s answer, so
+        the old behaviour is the zero-temperature limit of the new one and the
+        two can be compared on the same axis.
+        """
+        v = self.Wv[cell].copy()
+        if self.n_modes > 0 and temperature > 0:
+            rng = rng or self._rng
+            z = rng.standard_normal(self.n_modes).astype(np.float32)
+            s = np.sqrt(np.maximum(self.mode_var[cell], 0.0))
+            v = v + temperature * (z * s) @ self.Pv[cell]
+        return _unit(v)
+
+    def imagine_from_sound(self, a: np.ndarray, temperature: float = 1.0,
+                           rng: Optional[np.random.Generator] = None
+                           ) -> np.ndarray:
+        """Hear a sound; imagine *a* sight it could go with, not *the* sight."""
+        return self.imagine_vision(self.concept_from_sound(a), temperature, rng)
 
     def consolidate(self, threshold: float = 0.75) -> Dict[int, int]:
         """Merge concept cells that turned out to be the same thing.

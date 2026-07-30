@@ -49,6 +49,9 @@ from real_binding import encode, split                       # noqa: E402
 
 SEEDS = (0, 1, 2, 3, 4)
 N_CONCEPT = 256
+# 0.0 is the old behaviour exactly -- read the cell mean back. Above that the
+# cell samples from the subspace it has learned it varies in.
+TEMPERATURES = (0.0, 1.0, 2.0, 4.0, 8.0, 16.0)
 
 
 def hull_residual(v, B, iters=300, lr=0.5):
@@ -81,12 +84,22 @@ def run_seed(V, A, y, n_cls, seed):
     Btr = V[tr]                                   # everything it has ever seen
     protos = np.stack([_unit(Btr[y[tr] == c].mean(0)) for c in range(n_cls)])
 
-    imagined, cells = [], []
-    for i in te:
-        c = assoc.concept_from_sound(A[i])
-        cells.append(c)
-        imagined.append(_unit(assoc.Wv[c]))
-    imagined = np.asarray(imagined, np.float32)
+    rng = np.random.default_rng(seed + 31)
+    cells = [assoc.concept_from_sound(A[i]) for i in te]
+
+    # coherence: does the imagined sight still read as its own category?
+    protos_all = np.stack([_unit(Btr[y[tr] == c].mean(0)) for c in range(n_cls)])
+    per_temp = {}
+    for T in TEMPERATURES:
+        M = np.asarray([assoc.imagine_vision(c, temperature=T, rng=rng)
+                        for c in cells], np.float32)
+        fid_T = (M @ Btr.T).max(1)
+        coh_T = np.array([int(np.argmax(protos_all @ M[k])) == int(y[i])
+                          for k, i in enumerate(te)], float)
+        per_temp[T] = dict(fidelity=float(fid_T.mean()),
+                           coherence=float(coh_T.mean()))
+    imagined = np.asarray([assoc.imagine_vision(c, temperature=0.0)
+                           for c in cells], np.float32)
 
     # -- fidelity: how close is the imagined sight to a remembered one? -----
     fid = (imagined @ Btr.T).max(1)
@@ -114,6 +127,7 @@ def run_seed(V, A, y, n_cls, seed):
         hull_residual=float(hull.mean()),
         real_hull_residual=float(hull_real.mean()),
         distinct=uniq, cells_live=int((assoc.wins > 0).sum()),
+        per_temp=per_temp,
         entropy_bits=float(-(p * np.log2(p)).sum()),
         effective=float(2 ** (-(p * np.log2(p)).sum())),
         n_test=int(len(te)))
@@ -131,7 +145,8 @@ def main():
     print(f"{len(images)} real pairs, {n_cls} categories\n", flush=True)
 
     rows = [run_seed(V, A, y, n_cls, sd) for sd in SEEDS]
-    m = {k: float(np.mean([r[k] for r in rows])) for k in rows[0]}
+    m = {k: float(np.mean([r[k] for r in rows]))
+         for k in rows[0] if k != 'per_temp'}
     res = {"per_seed": rows, "mean": {k: round(v, 4) for k, v in m.items()},
            "n_class": n_cls}
 
@@ -147,6 +162,33 @@ def main():
     print(f"{'':<36}{m['effective']:>10.1f} effective "
           f"({m['entropy_bits']:.2f} bits) over {m['cells_live']:.0f} "
           f"concept cells")
+
+    # -- can sampling the concept's own variation make it novel AND right? --
+    print(f"\n{'temperature':<14}{'fidelity':>10}{'coherence':>11}   "
+          f"(real photograph: fidelity {m['real_fidelity']:.3f})")
+    tt = {}
+    for T in TEMPERATURES:
+        f = float(np.mean([r["per_temp"][T]["fidelity"] for r in rows]))
+        c = float(np.mean([r["per_temp"][T]["coherence"] for r in rows]))
+        tt[T] = dict(fidelity=round(f, 4), coherence=round(c, 4))
+        mark = "  <- novel as a real sight" if f <= m["real_fidelity"] else ""
+        print(f"{T:<14.1f}{f:>10.3f}{c:>11.3f}{mark}")
+    res["temperature"] = tt
+    ok = [T for T in TEMPERATURES
+          if tt[T]["fidelity"] <= m["real_fidelity"] and tt[T]["coherence"] >= 0.5]
+    if ok:
+        T = min(ok)
+        print(f"\n  at temperature {T}: fidelity {tt[T]['fidelity']:.3f} "
+              f"(<= {m['real_fidelity']:.3f}) AND still names its own category "
+              f"{tt[T]['coherence']:.0%} of the time.")
+        print("  novel and coherent at once -- that is imagining.")
+    else:
+        best = min(TEMPERATURES, key=lambda T: tt[T]["fidelity"])
+        print(f"\n  no temperature is both novel and coherent. The furthest "
+              f"from memory is T={best} at {tt[best]['fidelity']:.3f}, "
+              f"coherence {tt[best]['coherence']:.3f}.")
+        print("  Sampling the learned subspace does not escape the average.")
+    res["imagination_passes"] = bool(ok)
 
     print("\n=== does it imagine? ===")
     verdicts = []

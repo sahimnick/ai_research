@@ -1381,10 +1381,59 @@ averaging over.
 
 The claim this project can defend is therefore narrower than the one it made:
 **replaying a concept's own average into the layer that formed it improves real
-cross-modal recall.** Everything about an infinite inner world remains
-unbuilt — §8 step 16 is where it goes, and this measurement is the test any
-future version has to pass: *the imagined must be further from memory than a
-real photograph is.*
+cross-modal recall.**
+
+#### Giving the concepts something to vary along
+
+A mean has one output. So concept cells were given the *directions they vary in*
+— a few principal components per cell, learned by Oja's rule with Sanger
+deflation, which is local, Hebbian and gradient-free — and `imagine_vision`
+samples `mean + Σ z·σ·direction`. At temperature 0 this reduces exactly to the
+old behaviour, so the two sit on one axis.
+
+It took one bug to get there, and the bug is worth recording because it produced
+a *flat* result rather than an error: Oja's rule is multiplicative in the current
+correlation, and in 12288 dimensions a randomly initialised direction has
+essentially none. The modes never left their initialisation, variance stayed at
+0.003, and sampling at temperature 16 moved fidelity by 0.002 — a mechanism
+reporting "no effect" because it had never started. Seeding an unused mode from
+the first residual it meets fixes it (variance 0.003 → 0.45).
+
+With it working, 5 seeds:
+
+| temperature | fidelity (↓ is more novel) | coherence |
+|---|---|---|
+| 0.0 (the mean) | 0.886 | 0.775 |
+| 1.0 | 0.788 | 0.658 |
+| 2.0 | 0.751 | 0.556 |
+| 8.0 | 0.714 | 0.511 |
+| 16.0 | 0.700 | 0.479 |
+
+*a real unseen photograph scores 0.277.*
+
+Sampling **does** produce genuine novelty — 0.886 → 0.700 is a real move, not
+noise — and it trades against coherence monotonically, which is the shape a
+temperature should have. But it saturates at 0.700, still 2.5× closer to memory
+than a real photograph, and **more directions do not help**: 4, 16, 64 and 128
+modes give 0.693 / 0.728 / 0.725 / 0.706. The dimensional explanation was the
+obvious one and it is wrong.
+
+The actual reason is structural, and it also indicts the test. The imagined code
+is assembled from stored components — a mean of training codes plus directions
+derived from their residuals — so it necessarily lies in the span of memory. A
+real photograph does not, and this eye makes distinct photographs *nearly
+orthogonal* (between-exemplar cosine ≈ 0), which is why a fresh one scores 0.277.
+So "further from memory than a real photograph" may be unpassable by **any**
+recombination-based process in this representation, and a bar that no
+construction from experience could clear is a bar about the representation
+rather than about imagining.
+
+What survives, stated at the width it deserves: the mechanism now produces
+**controllably novel** members of a concept rather than one average, the
+novelty-coherence trade is measured, and the limit is that everything it makes
+stays inside the span of what it has seen. Whether that counts as imagining is a
+question the numbers can inform and not settle — but "it recalls one average per
+concept", which is what was true before, is no longer the description.
 
 ### The imagining has to be anchored to something real
 
@@ -1493,15 +1542,23 @@ Ordered by what unblocks the goal, not by difficulty.
     sights, against a confabulation control at exactly +0.0000. Novelty-
     prioritised replay came out *below* uniform (+0.016 vs +0.023) — the
     opposite of the prediction, and cheap to re-test once the sparse case works.
-16. **Build something that actually imagines.** The current mechanism does not:
-    what it produces is 3.2x closer to memory than a real unseen photograph is,
-    sits closer to the class mean than any real member of the class, stays
-    inside the convex hull of experience, and has a total vocabulary of 59
-    distinct outputs. `benchmarks/imagination_shape.py` is the standing test and
-    the bar is explicit — **the imagined has to be further from memory than a
-    real photograph is**. Until that number flips, "imagination" is a lookup
-    into a finite set of category averages. Still open, and now with the search
-    narrowed. Sampling the concept instead of the episode — the
+16. **Build something that actually imagines.** Half-done. Concept cells now
+    learn the directions they vary in (Oja + Sanger, local and gradient-free)
+    and sample members rather than returning one mean: fidelity to memory falls
+    0.886 -> 0.700 as temperature rises, trading monotonically against coherence
+    0.775 -> 0.479. That is controllable novelty where there was one fixed
+    output per concept.
+
+    What it does not do is reach the novelty of real perception (0.277), and
+    **more directions do not help** (4/16/64/128 modes all land near 0.70), so
+    the limit is not dimensional. It is that anything assembled from stored
+    components lies in the span of memory while a fresh photograph does not.
+    That also indicts the bar: "further from memory than a real photograph"
+    may be unpassable by any recombination in a code where distinct photographs
+    are nearly orthogonal. The next move is therefore to fix the *bar* as much
+    as the mechanism — a novelty measure that asks whether the imagined lands on
+    the data manifold in a place no training example occupies, rather than
+    whether it is decorrelated from all of them. Sampling the concept instead of the episode — the
     "infinite inner world" version — was tried and *degrades* the concepts
     (`dreamt` −0.0301, the worst arm measured), because nothing real is holding
     the categories apart. The direction that survives is a night that is
