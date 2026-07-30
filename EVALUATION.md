@@ -1242,15 +1242,36 @@ CIFAR had been centre-cropped to 28×28 for no better reason than that MNIST is
 end-to-end on the audiovisual task, **`sound → vision` goes 0.581 → 0.775** and
 the eye's own 1-NN goes 0.312 → 0.362.
 
-The whitening rows are **not a result** — 0.108 is chance, which means the
-implementation is broken, not that whitening is harmful. Global ZCA over 3072
-dimensions from 2000 samples is badly conditioned, and re-normalising each
-channel afterwards destroys the whitened structure it just computed. The correct
-form is per-patch, and it is not tested here. What *has* been tested is its
-local approximation — a difference-of-Gaussians retina, with and without
-divisive gain — which moved 5-NN by +0.03 and prototype not at all. So
-whitening remains genuinely open rather than ruled out, and the honest statement
-is that this measurement failed rather than that it answered.
+The whitening rows in that table are **not a result** — 0.108 is chance, which
+means the implementation was broken, not that whitening is harmful. Global ZCA
+over 3072 dimensions from 2000 samples is badly conditioned, and re-normalising
+each channel afterwards destroys the structure it just computed.
+
+Redone correctly, per-patch. For stationary image statistics the ZCA matrix over
+`p×p` patches *is* a convolution, so its centre row reshaped to `p×p` is the
+retinal decorrelation filter (Atick & Redlich 1992) and can be applied in one
+pass:
+
+| input (32×32) | proto | **1-NN** | 5-NN |
+|---|---|---|---|
+| opponent channels | 0.345 | **0.343** | 0.362 |
+| + per-patch ZCA, 5×5 | 0.222 | 0.188 | 0.192 |
+| + per-patch ZCA, 9×9 | 0.217 | 0.197 | 0.238 |
+| + per-patch ZCA, 13×13 | 0.225 | 0.212 | 0.207 |
+
+**Whitening hurts, consistently, at every kernel width.** The explanation is
+specific to this eye rather than general: whitening flattens the spectrum, which
+removes low-frequency structure — and the low-frequency structure of a
+*colour-opponent* channel is the broad chromatic signal that says sky, grass,
+fur. Colour is measurably where this eye gets much of its class information
+(+0.040 on the prototype read-out when opponency was added), so decorrelating it
+away costs more than the edge enhancement returns. Whitening earns its keep in
+pipelines that follow it with thousands of learned dictionary elements and a
+discriminative read-out; it does not here.
+
+That is the seventh mechanism to fail, and it makes the shape of §7.8 hard to
+miss: **six mechanisms and one preprocessing step failed to move the eye, and a
+cropping decision inherited from MNIST was worth more than all of them.**
 
 ### The imagining has to be anchored to something real
 
@@ -1384,11 +1405,19 @@ Ordered by what unblocks the goal, not by difficulty.
     mechanisms failed and one cropping decision was worth more than all of them
     is the most useful thing in §7.8.
 
-    Still open: **per-patch whitening**. The attempt recorded here scored 0.108
-    against a chance of 0.100, which means the implementation was broken (global
-    ZCA over 3072 dimensions, then re-normalised) rather than that whitening
-    does not help. It is the one preprocessing step every unsupervised CIFAR
-    pipeline that works has in common, and it deserves a correct test.
+    Per-patch whitening was then tested correctly — as the convolution the
+    patch covariance implies — and **hurts** at every kernel width (0.343 →
+    0.188/0.197/0.212). It flattens the spectrum, and the low-frequency
+    structure of a colour-opponent channel is exactly the chromatic signal this
+    eye depends on. Seven mechanisms have now failed and one cropping decision
+    was worth more than all of them.
+
+    What that leaves is not a smarter layer but **more of the world**: 32×32 is
+    still a thumbnail, and the eye has a fovea, a periphery and saccades that
+    the audiovisual benchmarks never use — every image is handed over whole and
+    static. Letting the mind *look around* a photograph, which is the one
+    faculty this project built and then stopped pointing at real images, is the
+    experiment that has never been run.
 
 ### The perception gap (weeks)
 
