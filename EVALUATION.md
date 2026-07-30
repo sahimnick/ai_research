@@ -1178,7 +1178,36 @@ ceiling to depth — a second cortical stage — which is precisely the thing §
 measured as *harmful* (V1→V2→V3 at 39.2% against 63.4% for one wide layer). But
 that was measured at narrow widths and on MNIST digits, where a single layer was
 already near its ceiling and there was nothing for a second stage to add.
-Photographs are the opposite case, and it has never been retried there.
+Photographs are the opposite case, so it was retried there.
+
+### Depth fails a fifth time, on the case most favourable to it
+
+`neurobrain/vision/secondstage.py` is a standard V2: complex-cell max-pooling
+over V1 positions, a wider aperture across all V1 filters, and units learned by
+competition with the instar rule — Hubel & Wiesel's simple/complex distinction
+and HMAX's S/C alternation, no gradients anywhere. Built on the best
+single-layer configuration (4096 cells, rf 7, stride 2, an 11×11 grid), 3 seeds:
+
+| code | CIFAR proto | CIFAR **1-NN** | MNIST 1-NN |
+|---|---|---|---|
+| V1 alone | 0.299 | **0.337** | **0.917** |
+| V1 + V2 | 0.245 | 0.210 | 0.819 |
+| V1 + V2, concatenated | 0.312 | 0.323 | 0.912 |
+
+V2 alone loses a third of the accuracy on photographs and a tenth on digits, and
+concatenating it with V1 — which lets a read-out take whichever it prefers, so
+it can only fail by V2 adding nothing — lands at −0.014 and −0.005. The stage is
+not adding information; it is discarding it.
+
+This was the experiment most likely to overturn the project's central
+architectural claim, run under the conditions chosen to favour depth: a first
+layer far from its ceiling, wide rather than narrow, on photographs rather than
+digits. **Width instead of depth stands.**
+
+One honest limit on the claim: this is *one* second stage, the textbook one. It
+shows that the obvious way of adding depth does not rescue the eye, not that no
+hierarchy could. What it does settle is that the eye's gap to the ear is not
+going to be closed by stacking another competitive layer on top.
 
 ### The imagining has to be anchored to something real
 
@@ -1296,15 +1325,19 @@ Ordered by what unblocks the goal, not by difficulty.
     *variation* rather than the content be self-generated. Interpolating between
     two same-label concepts is the only self-generated arm that helps on a
     sparse day (+0.0058), which is a signal worth chasing rather than a result.
-17. **The eye is still the ceiling, and it is a depth problem.** 1-NN 0.323 on
-    photographs against 0.914 for the ear. Four levers were swept and none of
-    them is the limit: width is flat from 1024 to 4096 cells, a larger aperture
-    is worse, a longer integration window does nothing, and **spiking costs
-    nothing at all** against the noiseless filter response (−0.002). Nothing
-    inside a single layer moves it, which leaves depth. §1's finding that
-    stacking hurt (39.2% against 63.4%) was measured at narrow widths on MNIST,
-    where a single layer was already near its ceiling; photographs are the
-    opposite case and it has never been retried there. That is the experiment.
+17. **The eye is the ceiling, and six levers have now failed to move it.**
+    1-NN 0.337 on photographs against 0.914 for the ear. Width is flat from
+    1024 to 4096 cells; a larger aperture is worse; a longer integration window
+    does nothing; **spiking costs nothing at all** against the noiseless filter
+    response (−0.002); and a textbook second stage loses information on both
+    photographs (−0.014 concatenated, −0.127 alone) and digits. What is left is
+    not another layer of the same kind. The candidates that remain untried are
+    a genuinely different objective for the second stage — temporal slowness or
+    predictive coding over saccade sequences rather than competition over static
+    patches — and simply more pixels than 28×28. The first is the interesting
+    one: `PredictiveA1` is the auditory version and it is the front end that
+    *works*, which is at least suggestive about which stream got the better
+    learning rule.
 
 ### The perception gap (weeks)
 
