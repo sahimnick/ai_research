@@ -1148,6 +1148,41 @@ recording because each produced a confident wrong answer first:
 Consolidation, once concepts existed to merge, compresses 78 → 69 cells at
 purity 0.982 with `sound → vision` unchanged — modest, and no longer nothing.
 
+### The imagining has to be anchored to something real
+
+The goal asks for an *infinite* inner world — new percepts and concepts made
+from the mind's own imagination rather than from replayed episodes. There are
+finitely many episodes and unboundedly many points between concepts, so three
+arms were added that use no episode at all:
+
+| arm | what is imagined | balanced | wins | purity |
+|---|---|---|---|---|
+| `imagined` | **the sight only**, real recording kept | **+0.0231** | **6/6** | 1.000 |
+| `dreamt` | sight *and* sound, from one concept cell | −0.0301 | 0/6 | 0.923 |
+| `blended` | both, between two same-label concepts | −0.0046 | 1/6 | 0.706 |
+| `chimera` | both, between two different concepts | −0.0035 | 2/6 | 0.592 |
+
+**Only the anchored one helps.** The moment the night stops containing a real
+sensory signal and the mind invents both halves, the gain does not merely
+vanish — `dreamt` is the *worst* arm in the table at −0.0301, worse than
+confabulating a random sight. Purity says why: self-generated content drags
+categories together (1.000 → 0.923 → 0.706 → 0.592) because nothing outside the
+mind is holding them apart.
+
+That is the same shape as this project's earlier finding in §7.6 — replay into
+perception needs an external teaching signal — arriving independently in a
+different mechanism, and it is the well-attested failure mode of training a
+generative system on its own output. The blending is not useless in principle:
+on the *sparse* day it is the only arm that helps at all (+0.0058, 4/6, and
++0.0140 on the starved categories for the chimera version), which is where
+interpolation between concepts should pay. But those are effects of a fraction
+of a point and none of them clears the bar.
+
+So the honest form of the goal's claim, as measured: **a mind can learn from a
+sight it never saw, provided something it really heard is holding that sight in
+place.** An entirely self-generated inner world, in this architecture, degrades
+the concepts it is made of.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
@@ -1220,13 +1255,21 @@ Ordered by what unblocks the goal, not by difficulty.
     sights, against a confabulation control at exactly +0.0000. Novelty-
     prioritised replay came out *below* uniform (+0.016 vs +0.023) — the
     opposite of the prediction, and cheap to re-test once the sparse case works.
-16. **Make imagination work where the day was thin.** The one place generative
-    replay is supposed to earn its keep is the case it currently fails: on a
-    sparse day it does nothing (−0.012) while stored replay still helps
-    (+0.015). The mind cannot imagine well from a category it has barely met.
-    Sampling the *concept* rather than the episode — imagining from `Wa` alone,
-    with no recording to replay — is the version that could break that
-    dependency, and it is the closest thing here to an "infinite inner world".
+16. **Make imagination work where the day was thin.** Still open, and now with
+    the search narrowed. Sampling the concept instead of the episode — the
+    "infinite inner world" version — was tried and *degrades* the concepts
+    (`dreamt` −0.0301, the worst arm measured), because nothing real is holding
+    the categories apart. The direction that survives is a night that is
+    **partly** anchored: keep a real recording, imagine the sight, and let the
+    *variation* rather than the content be self-generated. Interpolating between
+    two same-label concepts is the only self-generated arm that helps on a
+    sparse day (+0.0058), which is a signal worth chasing rather than a result.
+17. **The eye is still the ceiling on all of it.** 1-NN 0.326 on photographs
+    against 0.914 for the ear. Every cross-modal number in this section is
+    limited by it, `vision → sound` most of all (0.247, barely 1.5× chance).
+    Learned fields helped; the next candidates are more than 28×28, and a
+    second cortical stage that the 2018-era result in §1 said was harmful at
+    narrow widths but has never been retried at the widths used now.
 
 ### The perception gap (weeks)
 

@@ -28,6 +28,15 @@ Four arms, differing only in what the night contains:
                 is an exemplar memory rather than a set of concepts. This is
                 the other thing a night is for
     imagined_consolidated   both: imagine, then integrate
+    dreamt      no episode at all -- sample a concept cell and live its own
+                content back, perturbed. The mind dreaming its own vocabulary
+    blended     two concepts it believes are the SAME thing, mixed: a cat it
+                has never seen, sitting between two it has. This is the
+                "infinite inner world" -- there are finitely many episodes and
+                unboundedly many points between concepts
+    chimera     two concepts it believes are DIFFERENT, mixed: a thing that does
+                not exist. The control for `blended` -- inventing inside a
+                category should help where inventing across them does not
     imagined_prioritised    imagine, but replay by NOVELTY rather than
                 uniformly -- how poorly the concept cells already explain each
                 pair. Uniform replay spends the night on material already
@@ -94,7 +103,11 @@ REPLAYS = 400
 # ones for material already lived through.
 DREAM_NOVELTY_RATE = 0.02
 ARMS = ("no_dream", "stored", "imagined", "confabulated", "consolidated",
-        "imagined_consolidated", "imagined_prioritised")
+        "imagined_consolidated", "imagined_prioritised",
+        "dreamt", "blended", "chimera")
+# How far a self-generated experience is allowed to drift from the concept it
+# came from. Zero would replay the concept verbatim, which teaches nothing.
+DREAM_NOISE = 0.15
 SPARSE_FRAC = 0.4          # this share of categories gets a starved day
 SPARSE_KEEP = 3            # ...this many waking examples each
 
@@ -166,6 +179,43 @@ def dream(assoc, votes, V, A, y, tr, arm, seed):
             win = assoc.bind(v, A[i])
             votes.setdefault(win, {})
             votes[win][int(y[i])] = votes[win].get(int(y[i]), 0) + 1
+    if arm in ("dreamt", "blended", "chimera"):
+        # No episode is replayed at all. The mind samples its OWN concept cells
+        # and lives an experience it never had -- which is the only version of
+        # this that does not run out: there are finitely many episodes and
+        # unboundedly many points between concepts.
+        live = np.flatnonzero(assoc.wins > 0)
+        lab = {c: max(v.items(), key=lambda kv: kv[1])[0]
+               for c, v in votes.items() if v}
+        for _ in range(REPLAYS):
+            c = int(rng.choice(live))
+            if c not in lab:
+                continue
+            if arm == "dreamt":
+                v, a_ = assoc.Wv[c].copy(), assoc.Wa[c].copy()
+            else:
+                # blended: two concepts the mind believes are the SAME thing,
+                # mixed -- a cat it has never seen, between two it has.
+                # chimera: two it believes are different, mixed -- a thing that
+                # does not exist. The contrast is the point: inventing inside a
+                # category should help where inventing across them does not.
+                pool = [d for d in live
+                        if d in lab and ((lab[d] == lab[c]) == (arm == "blended"))
+                        and d != c]
+                if not pool:
+                    continue
+                d = int(rng.choice(pool))
+                w = float(rng.uniform(0.25, 0.75))
+                v = w * assoc.Wv[c] + (1 - w) * assoc.Wv[d]
+                a_ = w * assoc.Wa[c] + (1 - w) * assoc.Wa[d]
+            v = _unit(v + DREAM_NOISE * rng.standard_normal(len(v)).astype(np.float32))
+            a_ = _unit(a_ + DREAM_NOISE * rng.standard_normal(len(a_)).astype(np.float32))
+            win = assoc.bind(v, a_)
+            votes.setdefault(win, {})
+            # the label is the mind's own belief about what it just imagined --
+            # there is no ground truth for an experience that never happened
+            votes[win][int(lab[c])] = votes[win].get(int(lab[c]), 0) + 1
+
     if arm in ("consolidated", "imagined_consolidated"):
         # the other thing a night is for: exemplars that turned out to be the
         # same thing become one concept, and their evidence is pooled
@@ -245,6 +295,37 @@ def report(res, per_seed, chance, tag):
     return res
 
 
+def anchoring(res, tag):
+    """The contrast that turned out to matter more than any single arm.
+
+    `imagined` keeps the real recording and invents only the sight. `dreamt`,
+    `blended` and `chimera` invent both halves -- no sensory signal enters the
+    night at all. If the self-generated arms fail where the anchored one works,
+    the lesson is not "imagination does not help" but "imagination helps while
+    something real is holding it in place", which is the same shape as this
+    project's earlier finding that replay into perception needs an external
+    teaching signal.
+    """
+    r = res[tag]
+    print(f"\n  is the imagining ANCHORED to something real?")
+    print(f"    {'arm':<12}{'what is imagined':<28}{'delta':>9}{'wins':>7}"
+          f"{'purity':>8}")
+    for arm, what in (("imagined", "the sight only"),
+                      ("dreamt", "sight AND sound, from a cell"),
+                      ("blended", "both, between two same-label"),
+                      ("chimera", "both, between two different")):
+        if arm not in r:
+            continue
+        a = r[arm]
+        print(f"    {arm:<12}{what:<28}{a['delta']:>+9.4f}"
+              f"{a['wins']:>4}/{a['n']}{a['purity']:>8.3f}")
+    if "dreamt" in r and r["imagined"]["delta"] > 0 and r["dreamt"]["delta"] < 0:
+        print(f"    -> only the anchored one helps. Inventing both halves is "
+              f"self-training on the mind's own")
+        print(f"       output, and it degrades: {r['dreamt']['delta']:+.4f} "
+              f"against {r['imagined']['delta']:+.4f}.")
+
+
 def verdict(res, tag):
     r = res[tag]
     imag, conf, stor = r["imagined"], r["confabulated"], r["stored"]
@@ -300,6 +381,7 @@ def main():
         res.setdefault("_raw", {})[tag] = per_seed
         report(res, per_seed, 1 / n_cls, tag)
         verdict(res, tag)
+        anchoring(res, tag)
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")
