@@ -28,6 +28,19 @@ Four arms, differing only in what the night contains:
                 is an exemplar memory rather than a set of concepts. This is
                 the other thing a night is for
     imagined_consolidated   both: imagine, then integrate
+    imagined_prioritised    imagine, but replay by NOVELTY rather than
+                uniformly -- how poorly the concept cells already explain each
+                pair. Uniform replay spends the night on material already
+                covered, which is what made the first version help starved
+                categories and hurt rich ones so the two cancelled
+
+**Everything below was first measured against a concept layer holding one cell
+per experience**, where a replayed pair re-selects its own cell and the instar
+step moves it to where it already is -- so `stored` replay measured exactly
++0.0000 for a structural reason and nothing else could be read either. That
+layer is fixed (reliability-weighted senses, homeostatic vigilance) and the eye
+is repaired (colour, adaptation, discovered fields), so this is a re-run rather
+than a first run.
 
 Then the same held-out probes as `real_binding.py`, on recordings the mind has
 never heard:
@@ -72,8 +85,16 @@ TRAIN_FRAC = 0.6
 # a night cannot create a new concept when every cell is already spoken for.
 N_CONCEPT = 256
 REPLAYS = 400
+# A night is not a day. With the waking novelty_rate the homeostatic
+# controller keeps creating categories at the same pace during replay, and
+# 400 replays drove every dreaming arm to the 256-cell pool ceiling while
+# no_dream sat at 115 -- so the arms differed in how many cells they had, not
+# only in what they dreamt. Sleep consolidates rather than encodes, so the
+# rate drops: replay refines the categories that exist instead of minting new
+# ones for material already lived through.
+DREAM_NOVELTY_RATE = 0.02
 ARMS = ("no_dream", "stored", "imagined", "confabulated", "consolidated",
-        "imagined_consolidated")
+        "imagined_consolidated", "imagined_prioritised")
 SPARSE_FRAC = 0.4          # this share of categories gets a starved day
 SPARSE_KEEP = 3            # ...this many waking examples each
 
@@ -117,9 +138,23 @@ def dream(assoc, votes, V, A, y, tr, arm, seed):
     if arm == "no_dream":
         return
     rng = np.random.default_rng(seed + 101)
-    if arm in ("imagined", "stored", "confabulated", "imagined_consolidated"):
+    waking_rate, assoc.novelty_rate = assoc.novelty_rate, DREAM_NOVELTY_RATE
+    replaying = ("imagined", "stored", "confabulated", "imagined_consolidated",
+                 "imagined_prioritised")
+    if arm in replaying:
+        # Prioritised replay picks by NOVELTY -- how poorly the concept cells
+        # explain a pair -- rather than uniformly. Uniform replay spends most of
+        # the night on material already well covered, which is what made the
+        # first version help starved categories (+0.028) and hurt rich ones
+        # (-0.096) so that the two halves cancelled. The hippocampus does not
+        # replay uniformly either.
+        p = None
+        if arm == "imagined_prioritised":
+            nov = np.array([assoc.novelty(V[i], A[i]) for i in tr], np.float64)
+            nov = np.maximum(nov, 1e-6)
+            p = nov / nov.sum()
         for _ in range(REPLAYS):
-            i = int(rng.choice(tr))
+            i = int(rng.choice(tr, p=p))
             if arm == "stored":
                 v = V[i]
             elif arm == "confabulated":
@@ -134,11 +169,12 @@ def dream(assoc, votes, V, A, y, tr, arm, seed):
     if arm in ("consolidated", "imagined_consolidated"):
         # the other thing a night is for: exemplars that turned out to be the
         # same thing become one concept, and their evidence is pooled
-        for old, new in assoc.consolidate().items():
+        for old, new in assoc.consolidate(threshold=0.25).items():
             if old in votes:
                 dst = votes.setdefault(new, {})
                 for lab, n in votes.pop(old).items():
                     dst[lab] = dst.get(lab, 0) + n
+    assoc.novelty_rate = waking_rate           # morning
 
 
 def probe(assoc, votes, V, A, y, tr, te, n_cls):
@@ -226,8 +262,13 @@ def verdict(res, tag):
         print(f"  yes: {imag['delta']:+.4f} (d={imag['cohens_d']:+.2f}, "
               f"{imag['wins']}/{imag['n']}), against confabulation "
               f"{conf['delta']:+.4f} and stored replay {stor['delta']:+.4f}.")
-        print(f"  the imagined sights are worth "
-              f"{imag['delta'] / max(stor['delta'], 1e-9):.0%} of real ones.")
+        if stor["delta"] > 0.002:
+            print(f"  the imagined sights are worth "
+                  f"{imag['delta'] / stor['delta']:.0%} of real ones.")
+        else:
+            print(f"  and replaying the REAL stored sights does not help at all "
+                  f"({stor['delta']:+.4f}), so there is no 'fraction of real'"
+                  f" to quote -- imagining beat remembering.")
 
 
 def main():
@@ -237,12 +278,18 @@ def main():
 
     from neurobrain.sensing.natural import load_audiovisual
     from neurobrain.sensing.streams import StreamingBrain
-    images, waves, y, names = load_audiovisual(n_per_class=n_per, seed=0)
+    sys.path.insert(0, "benchmarks")
+    from real_binding import encode
+
+    images, waves, y, names = load_audiovisual(n_per_class=n_per, seed=0,
+                                               grayscale=False)
     n_cls = len(names)
     brain = StreamingBrain(seed=0)
-    V = np.array([_unit(brain.v1.rate(im)) for im in images], np.float32)
-    A = np.array([brain.belt.code(brain.ear.coch.forward(w)[0])
-                  for w in waves], np.float32)
+    # the repaired eye: colour opponency, running-mean adaptation, and fields
+    # grown from these photographs. The first version of this benchmark used
+    # raw grayscale V1, where 1-NN is 0.185 and no concept can form from two
+    # pictures of the same thing.
+    V, A = encode(brain, images, waves, colour=True, adapt=True, develop=True)
     print(f"{len(images)} audiovisual samples, {n_cls} categories "
           f"({', '.join(names)}), chance {1/n_cls:.3f}", flush=True)
 

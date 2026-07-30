@@ -12,15 +12,23 @@ since been fixed** and the shim is gone — every measurement here reproduces
 without it.
 
 **§7.8 is the real-world pass** — 600 ESC-50 field recordings and CIFAR-10
-photographs, two corpora that share real categories and nothing else. Read it
-first if you want to know what works outside the pre-segmented datasets: the ear
-does (50-way at 17.5× chance, 1-NN 0.914 on six real categories), the eye did
-not (1-NN 0.185 on photographs against 0.818 on digits) and is now roughly
-half-fixed (0.326, with digits improving to 0.920 in the process). Cross-modal
-retrieval works and *beats a real percept* at naming its own category — but
-while the concept layer stores one cell per experience, that is the only claim
-it can support. The eye, and concept formation behind it, are what everything
-else now waits on.
+photographs, two corpora that share real categories and nothing else, so any
+association between them has to be semantic. Read it first if you want to know
+what works outside the pre-segmented datasets.
+
+Its headline: **the mind imagines a sight it has never seen, learns from it, and
+is measurably better at a real task afterwards** — 6 of 6 seeds, d=1.79, worth
+74% of replaying the sights it actually saw, against a control that performs the
+identical binding operations on a *random* imagined sight and moves the result
+by exactly +0.0000. That control is what makes the claim readable: the gain is
+the content of the imagining, not the plasticity events.
+
+Getting there meant repairing three things that had each produced a confident
+wrong answer: the ear's read-out (a label-range bug reading as "the front end
+collapses on environmental sound"), the eye (1-NN 0.185 on photographs against
+0.818 on digits — now 0.326, with digits improving to 0.920 as a side effect),
+and the concept layer, which held one cell per experience and made replay a
+no-op by construction.
 
 **Headline — the one result.** *Replay changes one of the three stores that hold
 what the mind knows, and the faculties expected to improve read the other two.*
@@ -1085,38 +1093,60 @@ The eye is substantially better and **the gap to hearing is still open** — 0.3
 against 0.914 for the ear on six real ESC-50 categories. That is the honest
 statement; §8 step 13 is what remains.
 
-### What a night does, and does not do, to concepts
+### A mind learns from a sight it never saw
 
-`benchmarks/cross_modal_dream.py` replays **only sound** and asks the
-association area what it expects to see, binding that imagined sight as if it
-had been experienced. Nothing visual enters from outside.
+This is the goal's hardest claim, and it now has a number. `cross_modal_dream.py`
+replays **only sound**; for each replayed recording the association area is asked
+what it expects to *see* and that imagined sight is bound as if it had been
+experienced. Nothing visual enters from outside — whatever those concepts become
+on the visual side, the mind made up.
 
-| arm | sound → vision | vs no_dream | cells |
-|---|---|---|---|
-| no_dream | 0.714 | — | 216 |
-| stored replay | 0.714 | +0.0000 | 216 |
-| imagined | 0.721 | +0.0069 | 216 |
-| confabulated (random sight) | 0.571 | −0.1435 | 256 |
+Balanced day, 6 categories, 6 seeds, chance 0.167:
 
-Three findings, one of them structural:
+| arm | sound → vision | vs no_dream | d | wins | cells |
+|---|---|---|---|---|---|
+| no_dream | 0.676 | — | — | — | 115.0 |
+| **stored** replay (real sights) | 0.707 | +0.0313 | 0.98 | 5/6 | 128.2 |
+| **imagined** | **0.699** | **+0.0231** | **1.79** | **6/6** | 115.3 |
+| confabulated (random sight) | 0.676 | +0.0000 | 0.00 | 2/6 | 115.8 |
+| imagined, novelty-prioritised | 0.692 | +0.0162 | 1.19 | 4/6 | 115.3 |
 
-1. **Ordinary replay is a no-op by construction here** — exactly +0.0000, the
-   signature again, and this time it is real. With one cell per exemplar, a
-   replayed pair re-selects its own cell and the instar step moves it toward
-   where it already is.
-2. **Confabulation is clearly destructive** (−0.14) and expands the pool to its
-   limit, so the control behaves as a control should.
-3. **Imagination helps only where the day was thin.** On a sparse day —
-   categories given 3 waking examples — imagined replay moves the starved
-   categories 0.524 → 0.552 while costing the rich ones 0.613 → 0.517. That is
-   the generative-replay prediction (van de Ven et al. 2020) showing up with the
-   right sign in the right place, and it is *not* yet a net win.
+**Imagining improves a real-world task in 6 of 6 seeds, and a random sight does
+nothing at all.** The confabulation control is what makes this readable: the two
+arms perform the identical number of binding operations on the identical
+soundtrack, differing only in whether the visual half is imagined or noise, and
+the noise arm moves the result by +0.0000. So the gain is not extra plasticity
+events — it is the *content* of the imagining. Against replaying the sights the
+mind actually saw, imagination is worth **74%**.
 
-`AssociationArea.consolidate` was added to merge exemplars into concepts and
-currently merges almost nothing, for a reason the measurement names: the joint
-similarity criterion is limited by vision, whose between-exemplar similarity
-tops out at 0.42. **Concept formation is blocked behind the visual front end**,
-which is the same bottleneck as everything else in this section.
+Two honest limits:
+
+* **The effect is small** — 2.3 points on a 0.167-chance task. It is reliable
+  (6/6, d=1.79) rather than large.
+* **It does not rescue what was barely seen.** On a sparse day, where some
+  categories get 3 waking examples, imagined replay does nothing (−0.012) while
+  stored replay still helps (+0.015). A mind cannot imagine well from a category
+  it has hardly met, which is sensible and is the opposite of what generative
+  replay is usually proposed for (van de Ven et al. 2020). An earlier version of
+  this table appeared to show the sparse-day gain; that was an artifact of the
+  broken concept layer and does not survive its repair.
+
+Two things had to be fixed before any of this could be read, and both are worth
+recording because each produced a confident wrong answer first:
+
+1. **With one cell per experience, replay is a no-op by construction.** The
+   earlier table measured `stored` replay at exactly +0.0000 — a replayed pair
+   re-selects its own cell and the instar step moves it to where it already is.
+   Every other arm was equally unreadable.
+2. **A night is not a day.** Left at the waking `novelty_rate`, the homeostatic
+   controller kept minting categories during replay: 400 replays drove every
+   dreaming arm to the 256-cell pool ceiling while `no_dream` sat at 115, so the
+   arms differed in *how many cells they had* rather than in what they dreamt.
+   With sleep's rate lowered to 0.02 all arms land at 115–128 and the comparison
+   is about content. Sleep consolidates; it does not encode at waking rates.
+
+Consolidation, once concepts existed to merge, compresses 78 → 69 cells at
+purity 0.982 with `sound → vision` unchanged — modest, and no longer nothing.
 
 ---
 
@@ -1184,14 +1214,19 @@ Ordered by what unblocks the goal, not by difficulty.
     experience to 0.32–0.53, purity ≥0.98, with cross-modal retrieval rising
     0.581 → 0.671 and the synthetic bank unchanged. Consolidation now merges
     (1.13× at no cross-modal cost) where it previously merged nothing.
-15. **Re-run the dream now that concepts exist.** Every dream result in §7.8 was
-    measured against a layer with one cell per experience, where replay is a
-    structural no-op — `stored` replay measured exactly +0.0000 for that reason.
-    That precondition is gone, so the whole table needs re-running before any
-    of it can be believed. The sparse-day result already has the right shape —
-    imagination helps starved categories (+0.028) and hurts rich ones (−0.096) —
-    and prioritising replay by `AssociationArea.novelty` rather than uniformly
-    is the obvious next move.
+15. ~~**Re-run the dream now that concepts exist.**~~ — **done**, and it is the
+    section's headline: imagining a sight the mind never saw improves real
+    cross-modal recall in 6 of 6 seeds (d=1.79), worth 74% of replaying the real
+    sights, against a confabulation control at exactly +0.0000. Novelty-
+    prioritised replay came out *below* uniform (+0.016 vs +0.023) — the
+    opposite of the prediction, and cheap to re-test once the sparse case works.
+16. **Make imagination work where the day was thin.** The one place generative
+    replay is supposed to earn its keep is the case it currently fails: on a
+    sparse day it does nothing (−0.012) while stored replay still helps
+    (+0.015). The mind cannot imagine well from a category it has barely met.
+    Sampling the *concept* rather than the episode — imagining from `Wa` alone,
+    with no recording to replay — is the version that could break that
+    dependency, and it is the closest thing here to an "infinite inner world".
 
 ### The perception gap (weeks)
 
