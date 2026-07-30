@@ -16,12 +16,19 @@ photographs, two corpora that share real categories and nothing else, so any
 association between them has to be semantic. Read it first if you want to know
 what works outside the pre-segmented datasets.
 
-Its headline: **the mind imagines a sight it has never seen, learns from it, and
-is measurably better at a real task afterwards** — 6 of 6 seeds, d=1.79, worth
-74% of replaying the sights it actually saw, against a control that performs the
-identical binding operations on a *random* imagined sight and moves the result
-by exactly +0.0000. That control is what makes the claim readable: the gain is
-the content of the imagining, not the plasticity events.
+Its headline, stated at the width the measurements support: **replaying a
+concept's own average sight back into the layer that formed it improves real
+cross-modal recall** — 6 of 6 seeds, d=1.79, worth 74% of replaying the sights
+it actually saw, against a control that performs the identical binding
+operations on a *random* sight and moves the result by exactly +0.0000. That
+control is what makes it readable: the gain is the content, not the plasticity
+events.
+
+An earlier version of this line said the mind *imagines* a sight it has never
+seen. That was measured and it is wrong: what it produces is **3.2× closer to
+memory than a real unseen photograph is**, and closer to its class average than
+a real member of the class. It recalls an average. The effect is real and the
+word was not.
 
 Getting there meant repairing three things that had each produced a confident
 wrong answer: the ear's read-out (a label-range bug reading as "the front end
@@ -1273,6 +1280,35 @@ That is the seventh mechanism to fail, and it makes the shape of §7.8 hard to
 miss: **six mechanisms and one preprocessing step failed to move the eye, and a
 cropping decision inherited from MNIST was worth more than all of them.**
 
+### The neuron model is ~90% of the compute and none of the accuracy
+
+`vision_ceiling.py` found that replacing the spiking rate code with the raw
+filter response changes CIFAR 1-NN by −0.002. Profiling the real-world pipeline
+shows what that costs, and the same test on the *auditory* side gives the same
+answer:
+
+| stage | spiking | without the neuron model | accuracy |
+|---|---|---|---|
+| `WideV1` on static images | 4.5 s | 0.2 s — **18×** | 0.322 → 0.323 |
+| `AuditoryBelt` on 600 real clips | 12.6 s | 7.4 s — 1.7× | 0.527 → **0.527** |
+
+The belt row is the striking one: identical to three decimal places on five real
+ESC-50 categories. Across both senses, simulating Izhikevich dynamics over a
+50 ms window contributes **nothing** to recognition accuracy on real data.
+
+This is not an argument for removing it. §1 measured what the window is actually
+for — 4-way motion direction at 72.0% against a 28.5% static control, and
+left-versus-right at 75.5% on sequences containing *identical frames in reversed
+order*, which no static code can pass. The window carries **movement and
+temporal order**, and identity is simply not where it pays.
+
+The practical consequence is that any experiment about *identity* — every
+measurement in this section — can use the static path and run an order of
+magnitude faster, and any experiment about motion or streams cannot. That
+distinction was not previously stated anywhere, and stating it is worth more
+than the speed: it says precisely what the project's central biological
+commitment buys and where.
+
 ### Looking transfers to photographs; recognising does not
 
 Every measurement above hands the mind a whole photograph at once, centred and
@@ -1302,6 +1338,53 @@ looks in the right place and cannot say what is there. Seven mechanisms inside
 the recognition path have now failed to move it and one cropping decision moved
 it more than all of them, and the faculty that every one of those experiments
 skipped turns out to be the one part that already works.
+
+### It does not imagine. It recalls an average — and the word matters
+
+The section above is headed "a mind learns from a sight it never saw", and the
+effect is real: 6 of 6 seeds, against a confabulation control at exactly zero.
+But "imagines" was doing unearned work in that sentence, and asking what the
+imagined content actually *is* settles it. The imagined sight is
+`Wv[concept_from_sound(a)]` — a stored weight vector, and a concept cell's `Wv`
+is the running average of everything bound to it. `benchmarks/imagination_shape.py`
+measures the four things that would distinguish imagining from recalling, on
+held-out sounds, 5 seeds:
+
+| | imagined | a real unseen photograph |
+|---|---|---|
+| closeness to a **remembered** sight | **0.886** | 0.277 |
+| closeness to its **class prototype** | **0.186** | 0.074 |
+| residual outside the hull of experience | 0.725 | 0.908 |
+
+**What it imagines is 3.2× closer to memory than opening its eyes is.** That is
+the decisive number. If perception is more novel than imagination, imagination
+is the wrong word: nothing is being invented, a stored average is being replayed.
+The second row says the same thing from the other side — the produced code sits
+2.5× closer to the class mean than a real member of that class does, which is
+what an average looks like and not what a cat looks like. The third says it stays
+further *inside* the convex hull of experience than a real photograph does, so
+it interpolates and never extrapolates.
+
+And the inner world is not infinite. Over 144 held-out sounds it produces **59
+effectively distinct imaginings — 5.88 bits** — from 112 concept cells. That is
+the whole vocabulary: a finite set of attractors, one per concept, and the
+"imagining" is a lookup into it.
+
+So the honest reading of the +0.0231 gain is **self-distillation, not
+imagination**: replaying a category's own average back into the layer sharpens
+the categories, which helps, and is exactly what the consolidation literature
+describes rather than what the generative-replay literature does. It also
+explains the anchoring result below without any appeal to imagination — feeding
+back an average works while feeding back *noise* does not, and feeding back both
+halves of the average (`dreamt`, −0.0301) collapses the categories it is
+averaging over.
+
+The claim this project can defend is therefore narrower than the one it made:
+**replaying a concept's own average into the layer that formed it improves real
+cross-modal recall.** Everything about an infinite inner world remains
+unbuilt — §8 step 16 is where it goes, and this measurement is the test any
+future version has to pass: *the imagined must be further from memory than a
+real photograph is.*
 
 ### The imagining has to be anchored to something real
 
@@ -1410,8 +1493,15 @@ Ordered by what unblocks the goal, not by difficulty.
     sights, against a confabulation control at exactly +0.0000. Novelty-
     prioritised replay came out *below* uniform (+0.016 vs +0.023) — the
     opposite of the prediction, and cheap to re-test once the sparse case works.
-16. **Make imagination work where the day was thin.** Still open, and now with
-    the search narrowed. Sampling the concept instead of the episode — the
+16. **Build something that actually imagines.** The current mechanism does not:
+    what it produces is 3.2x closer to memory than a real unseen photograph is,
+    sits closer to the class mean than any real member of the class, stays
+    inside the convex hull of experience, and has a total vocabulary of 59
+    distinct outputs. `benchmarks/imagination_shape.py` is the standing test and
+    the bar is explicit — **the imagined has to be further from memory than a
+    real photograph is**. Until that number flips, "imagination" is a lookup
+    into a finite set of category averages. Still open, and now with the search
+    narrowed. Sampling the concept instead of the episode — the
     "infinite inner world" version — was tried and *degrades* the concepts
     (`dreamt` −0.0301, the worst arm measured), because nothing real is holding
     the categories apart. The direction that survives is a night that is

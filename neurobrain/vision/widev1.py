@@ -322,6 +322,24 @@ class WideV1:
         This is the code the rest of the brain reads. It is not a single
         instantaneous response: the cells integrate for the whole window under
         continuous membrane noise, and the rate is the average of what they did.
+
+        **What the window costs and what it buys.** For *identity* on static
+        images it buys nothing measurable: on CIFAR-10 photographs this scores
+        1-NN 0.322 against 0.323 for :meth:`drive`, the same filters with the
+        neuron model removed, at **18x the wall clock** (4.5 s against 0.2 s for
+        120 images). The same test on :class:`AuditoryBelt` over 600 real ESC-50
+        clips gives 0.527 against 0.527, identical to three decimals.
+
+        What it *does* buy is movement. Measured in this module's own
+        experiments: 4-way direction 72.0% against a 28.5% static control, and
+        left-versus-right 75.5% on sequences built from the **identical frames
+        in reversed order**, which no instantaneous code can pass at all.
+
+        So: use :meth:`drive` when the question is what something is and the
+        input is static, and :meth:`rate_over` when the question involves time.
+        Nothing about that is a shortcut around the spiking commitment -- it is
+        a statement of where the commitment pays, which is in temporal
+        structure and not in static identity.
         """
         return self.rate_over([image], window_ms=window_ms)
 
