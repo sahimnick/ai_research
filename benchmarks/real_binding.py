@@ -236,15 +236,18 @@ def main():
     n_per = int(sys.argv[2]) if len(sys.argv) > 2 else 60
     develop = "--no-develop" not in sys.argv
 
+    # 32x32, not the 28x28 centre crop. The crop was costing the eye
+    # 1-NN 0.343 -> 0.320 before anything downstream even saw the code.
     images, waves, y, names = load_audiovisual(n_per_class=n_per, seed=0,
-                                               grayscale=False)
+                                               grayscale=False, size=32)
     n_cls = len(names)
     print(f"{len(images)} audiovisual samples, {n_cls} shared categories: "
           f"{', '.join(names)}")
     print(f"vision: CIFAR-10 photographs {images.shape[1:]} in colour  "
           f"audio: ESC-50 field recordings\n", flush=True)
 
-    brain = StreamingBrain(seed=0)
+    brain = StreamingBrain(seed=0, image_shape=(32, 32),
+                           v1_cells=4096, rf=7, stride=2)
     V, A = encode(brain, images, waves, colour=True, adapt=True,
                   develop=develop)
     print(f"eye: colour + adaptation + {'DISCOVERED' if develop else 'designed'} fields", flush=True)
@@ -321,13 +324,13 @@ def main():
     print(f"   the 1-NN version of the same probe reads {sv1:.3f}")
     if abs(sv1 - sl_r) < 1e-6:
         print(f"   -- and that is EXACTLY sound_to_label ({sl_r:.3f}), which "
-              f"is not a coincidence. Recruitment sets Wv[cell] = the pair's")
-        print(f"      own visual code, so with one cell per pair the nearest "
-              f"training image to a recalled sight IS that pair's image, and")
-        print(f"      every sound -> X probe collapses to 'find the nearest "
-              f"stored sound, read off what was stored beside it'.")
-        print(f"      Until cells < pairs, the prototype probe above is the "
-              f"only one measuring something a lookup cannot do.")
+              f"is not a coincidence. A concept cell's Wv is the average of")
+        print(f"      the sights bound to it, so the nearest training image to "
+              f"a recalled sight is one of that cell's OWN members -- and while")
+        print(f"      purity is 1.00 every member carries the cell's label. The "
+              f"two probes are then the same question asked twice, however many")
+        print(f"      cells there are. The prototype probe above is the one "
+              f"measuring something a lookup cannot do.")
 
     print(f"\nunimodal controls, no concept layer:")
     print(f"   prototype   sound {us:.3f}   vision {uv:.3f}")

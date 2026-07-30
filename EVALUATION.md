@@ -1224,6 +1224,34 @@ One honest limit: these are two second stages, not all possible ones. They
 settle that the eye's gap to the ear will not be closed by stacking another
 competitive or slowness-driven layer on top — not that no hierarchy could.
 
+### What did work was not a mechanism at all
+
+After six mechanisms failed, the two remaining candidates were the ordinary
+handicaps still sitting on the input. One of them is worth 5 points:
+
+| input | proto | **1-NN** | 5-NN |
+|---|---|---|---|
+| 28×28 centre crop, opponent | 0.317 | 0.320 | 0.343 |
+| **32×32 full frame**, opponent | 0.345 | **0.343** | 0.362 |
+| 28×28, global ZCA whitening | 0.105 | 0.108 | 0.108 |
+| 32×32, global ZCA whitening | 0.132 | 0.140 | 0.115 |
+
+CIFAR had been centre-cropped to 28×28 for no better reason than that MNIST is
+28×28 and the eye was built for digits. Handing it the whole frame is worth
++0.023 on 1-NN before anything downstream sees the code, and it carries through:
+end-to-end on the audiovisual task, **`sound → vision` goes 0.581 → 0.775** and
+the eye's own 1-NN goes 0.312 → 0.362.
+
+The whitening rows are **not a result** — 0.108 is chance, which means the
+implementation is broken, not that whitening is harmful. Global ZCA over 3072
+dimensions from 2000 samples is badly conditioned, and re-normalising each
+channel afterwards destroys the whitened structure it just computed. The correct
+form is per-patch, and it is not tested here. What *has* been tested is its
+local approximation — a difference-of-Gaussians retina, with and without
+divisive gain — which moved 5-NN by +0.03 and prototype not at all. So
+whitening remains genuinely open rather than ruled out, and the honest statement
+is that this measurement failed rather than that it answered.
+
 ### The imagining has to be anchored to something real
 
 The goal asks for an *infinite* inner world — new percepts and concepts made
@@ -1340,7 +1368,8 @@ Ordered by what unblocks the goal, not by difficulty.
     *variation* rather than the content be self-generated. Interpolating between
     two same-label concepts is the only self-generated arm that helps on a
     sparse day (+0.0058), which is a signal worth chasing rather than a result.
-17. **The eye is the ceiling, and six levers have now failed to move it.**
+17. **The eye is the ceiling; six mechanisms failed and one non-mechanism
+    worked.**
     1-NN 0.337 on photographs against 0.914 for the ear. Width is flat from
     1024 to 4096 cells; a larger aperture is worse; a longer integration window
     does nothing; **spiking costs nothing at all** against the noiseless filter
@@ -1349,14 +1378,17 @@ Ordered by what unblocks the goal, not by difficulty.
     concatenated). Each was measured with a control and none of them is the
     limit.
 
-    What that leaves is not another layer of the same kind. Two candidates
-    remain, and they are ordinary rather than exotic: **more than 28×28 pixels**
-    — CIFAR is being centre-cropped and downsampled before the eye ever sees it,
-    which is the one deliberate handicap still in place — and **whitening the
-    input patches**, which is the single preprocessing step every unsupervised
-    CIFAR pipeline that works has in common and which this project has never
-    applied to vision. Neither is a new mechanism, which after six failed
-    mechanisms is the point.
+    Giving the eye the **whole 32×32 frame** instead of a 28×28 centre crop —
+    a handicap inherited from MNIST and never revisited — is worth +0.023 on
+    1-NN and carries end-to-end: `sound → vision` 0.581 → 0.775. That six
+    mechanisms failed and one cropping decision was worth more than all of them
+    is the most useful thing in §7.8.
+
+    Still open: **per-patch whitening**. The attempt recorded here scored 0.108
+    against a chance of 0.100, which means the implementation was broken (global
+    ZCA over 3072 dimensions, then re-normalised) rather than that whitening
+    does not help. It is the one preprocessing step every unsupervised CIFAR
+    pipeline that works has in common, and it deserves a correct test.
 
 ### The perception gap (weeks)
 

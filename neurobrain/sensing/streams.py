@@ -664,12 +664,17 @@ class StreamingBrain:
     workspace at the same moment."""
 
     def __init__(self, v1_cells: int = 1024, window_ms: int = 50,
-                 dim: int = 512, seed: int = 0, n_concept: int = 32):
+                 dim: int = 512, seed: int = 0, n_concept: int = 32,
+                 image_shape: Tuple[int, int] = (28, 28), **v1_kw):
         from ..vision.widev1 import WideV1
         from ..workspace import GlobalWorkspace
         from ..cognition.multimodal import AssociationArea
 
-        self.v1 = WideV1(n_cells=v1_cells, window_ms=window_ms, seed=seed)
+        # image_shape is a passthrough because the eye is not only ever
+        # pointed at 28x28 digits any more: CIFAR is 32x32, and
+        # centre-cropping it to 28 costs 1-NN 0.343 -> 0.320.
+        self.v1 = WideV1(n_cells=v1_cells, window_ms=window_ms,
+                         image_shape=image_shape, seed=seed, **v1_kw)
         self.ear = ContinuousEar()
         self.belt = AuditoryBelt(n_freq=self.ear.coch.n_freq, seed=seed)
         self.ws = GlobalWorkspace(dim=dim, vigilance=0.25, seed=seed, adapt=True)
