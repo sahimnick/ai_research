@@ -9,8 +9,39 @@ Three probes, each with a control:
 3. **visual ablation** -- replace every visual code with noise, then with
    zeros. If the answer does not move, vision is not participating.
 
-Probe 3 is the one that matters. Everything runs twice: `via="nearest"` is the
-original stored-label path, `via="assoc"` routes through the concept cells.
+Everything runs twice: `via="nearest"` is the original stored-label path,
+`via="assoc"` routes through the concept cells.
+
+A correction about probe 3
+--------------------------
+It was described here as "the one that matters". It is not, and reading it that
+way gives the wrong answer. Probe 3 ablates vision at *bind* time and then scores
+**sound -> label** recall -- but that read-out selects its concept cell through
+``Wa`` alone and reports a name. Vision is nowhere on that path, so what the
+probe detects is not whether vision contributes information; it is whether
+corrupting vision *perturbs the competition* enough to change which cell wins.
+
+Those are different things, and the numbers separate them. Fixing the
+association area's runaway (ART vigilance + a conscience term, see
+`neurobrain/cognition/multimodal.py`) moved every substantive measure the right
+way and moved the ablation spread to zero:
+
+                              old rule   new rule
+    held-out recall             0.516      0.750
+    shuffled control            0.161      0.125   (chance is 0.125)
+    cross-modal CODE recall     0.312      0.375
+    ablation spread             0.205      0.000
+
+The old rule's spread was instability, not participation: with no recruitment,
+whichever cell won first captured everything, so changing the visual input
+changed which cell that was. The new rule recruits an uncommitted cell for a
+poor match, which makes the sound -> label path *robust* to a corrupted visual
+channel. Zero spread there is the correct behaviour, not a regression.
+
+The probe that does measure vision's participation is `code_recall` below:
+hear a sound, retrieve a **visual code** through the concept cell, and identify
+that code against visual prototypes. The output of that path is visual, so it
+cannot be passed without vision -- and it reads 0.375 against a chance of 0.125.
 """
 import json, sys
 import numpy as np

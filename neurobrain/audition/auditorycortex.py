@@ -153,6 +153,7 @@ class PredictiveA1:
                       ).astype(np.float32)
         self.decay = 1e-4
         self.duty = np.full(self.n_units, sparsity, np.float32)
+        self._e2 = self._y2 = 0.0        # last step's squared norms, for train()
         self.rng = rng
 
     # -- response ----------------------------------------------------------
@@ -197,10 +198,34 @@ class PredictiveA1:
                                                         keepdims=True), 1e-6)
         self.duty *= (1.0 - lr)
         self.duty += lr * act
+        # kept for :meth:`train` to pool -- see the note there on why the mean
+        # of per-step ratios is not usable on real recordings
+        self._e2 = float(err @ err)
+        self._y2 = float(y @ y)
         return float(np.linalg.norm(err) / (np.linalg.norm(y) + 1e-9))
 
     def train(self, cochleagrams: Sequence[np.ndarray], epochs: int = 4,
               lr: float = 0.03, step: int = 2, seed: int = 0) -> List[float]:
+        """Returns the curve of **pooled** normalized error, one point per epoch.
+
+        Pooled -- ``sqrt(sum||err||^2 / sum||y||^2)`` -- rather than the mean of
+        the per-step ratios :meth:`learn` returns, and the difference is not
+        cosmetic. A synthetic tone is loud in every frame, so per-frame
+        ``||err||/||y||`` is well behaved and averaging it is fine. A real field
+        recording is mostly *silence*: a car-horn clip is one second of horn in
+        four seconds of street, and in those frames ``||y||`` is ~0 while the
+        prediction is not, so the ratio is divided by the 1e-9 guard and returns
+        a number near 1e9. Averaged, a handful of silent frames set the whole
+        epoch's figure. Measured on 363 ESC-50 clips this reported
+        **3,425,472 -> 1,723,145**, which says nothing except that some frames
+        were quiet.
+
+        Pooling weights each frame by how much sound was actually in it, which
+        is the standard normalized RMSE and is exactly what a scale error shows
+        up in: the 35.8x-too-large prediction that motivated the free decoder
+        still reads as ~35. Learning itself was never affected -- the delta rule
+        uses the raw error and never saw this ratio.
+        """
         rng = np.random.default_rng(seed)
         pairs = []
         for c in cochleagrams:
@@ -209,9 +234,12 @@ class PredictiveA1:
             pairs.extend(zip(ctx, tgt))
         curve = []
         for _ in range(int(epochs)):
-            e = [self.learn(pairs[i][0], pairs[i][1], lr=lr)
-                 for i in rng.permutation(len(pairs))]
-            curve.append(float(np.mean(e)))
+            e2 = y2 = 0.0
+            for i in rng.permutation(len(pairs)):
+                self.learn(pairs[i][0], pairs[i][1], lr=lr)
+                e2 += self._e2
+                y2 += self._y2
+            curve.append(float(np.sqrt(e2 / (y2 + 1e-12))))
         return curve
 
     # -- the code a downstream area reads ----------------------------------

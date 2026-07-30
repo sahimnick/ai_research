@@ -494,17 +494,33 @@ def static_middle(image: np.ndarray, n_frames: int = 6) -> List[np.ndarray]:
 # Experiments
 # ---------------------------------------------------------------------------
 def _nearest_prototype(Xtr: np.ndarray, ytr: np.ndarray, Xte: np.ndarray,
-                       n_class: int) -> np.ndarray:
+                       n_class: Optional[int] = None) -> np.ndarray:
     """Class-mean read-out. Deliberately the simplest possible decoder so the
     number reflects the *code*, not a classifier's cleverness.
 
     Note this one **is** supervised -- the labels build the prototypes -- so it
     is reported only as a secondary figure. The project's standard rule is
-    :func:`grown_readout` below."""
+    :func:`grown_readout` below.
+
+    **Returns label values, not row indices.** This used to iterate
+    ``range(n_class)`` and so silently assumed labels were ``0..n_class-1``.
+    Handing it ESC-50's *nature* classes (labels 10-19) with ``n_class=10``
+    built ten all-zero prototypes and scored **exactly 0.000** -- not an
+    informative failure but a bug wearing a result's clothes. Class identity is
+    now taken from the labels themselves whenever they fall outside
+    ``range(n_class)``, so any label set works and the old callers, whose
+    labels *are* ``0..n_class-1``, are unchanged."""
+    ytr = np.asarray(ytr)
+    present = np.unique(ytr)
+    if (n_class is not None and len(present)
+            and present.min() >= 0 and present.max() < n_class):
+        classes = np.arange(n_class)      # legacy contract: index == label
+    else:
+        classes = present                 # arbitrary label set
     proto = np.stack([_unit(Xtr[ytr == c].mean(0)) if (ytr == c).any()
                       else np.zeros(Xtr.shape[1], np.float32)
-                      for c in range(n_class)])
-    return (Xte @ proto.T).argmax(1)
+                      for c in classes])
+    return classes[(Xte @ proto.T).argmax(1)]
 
 
 # The ladder has to reach low as well as high. Dense rate codes need the top

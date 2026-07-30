@@ -43,12 +43,15 @@ class AssociationArea:
     """
 
     def __init__(self, n_vis: int, n_aud: int, n_concept: int,
-                 lr: float = 0.15, seed: int = 0):
+                 lr: float = 0.15, vigilance: float = 0.80,
+                 conscience: float = 1.0, seed: int = 0):
         rng = np.random.default_rng(seed)
         self.Wv = _rows_unit(rng.standard_normal((n_concept, n_vis)) * 0.1)
         self.Wa = _rows_unit(rng.standard_normal((n_concept, n_aud)) * 0.1)
         self.n_concept = n_concept
         self.lr = lr
+        self.vigilance = float(vigilance)
+        self.conscience = float(conscience)
         self.wins = np.zeros(n_concept)
         self.v_mu = self.v_sd = self.a_mu = self.a_sd = None
 
@@ -66,11 +69,73 @@ class AssociationArea:
 
     def bind(self, v: np.ndarray, a: np.ndarray) -> int:
         """Co-present a visual code ``v`` and a sound code ``a``; a concept cell
-        wins and learns both. Returns the winning concept cell."""
+        wins and learns both. Returns the winning concept cell.
+
+        Two guards, and neither is optional -- without them this layer collapses.
+
+        **Vigilance.** The old rule was pure argmax over the summed drive, and
+        it had a runaway in it. The first cell to win tunes toward the data, so
+        its drive rises; every subsequent pair then finds it the best match and
+        tunes it further, while 31 other cells stay at their random
+        initialisation and never win anything. Measured: binding 48 audio-visual
+        pairs from 8 well-separated classes woke **1 concept cell out of 32**,
+        and cross-modal recall sat at exactly chance (0.125) even though the
+        sound codes themselves were 96% separable by nearest prototype. The
+        association area was not failing to learn the pairing; it had one
+        category and could not express a second.
+
+        So a match below ``vigilance`` does not update the incumbent -- it
+        recruits an uncommitted cell instead. This is the ART rule the rest of
+        the project already runs on (:class:`GrowingCategoryMap`,
+        :meth:`AssociativeCortex.consolidate`), applied here for the same
+        reason: a new thing should become a new category rather than blurring
+        an old one.
+
+        **Conscience.** A frequency bias in the competition itself (DeSieno
+        1988), scaled to the drive rather than the 0.1 the old rule used. A
+        penalty of 0.1 cannot move an argmax whose winner leads by ~1.0, which
+        is why the old homeostatic term was present and did nothing.
+
+        Both defaults are measured (``benchmarks/concept_cells.py``), on
+        cross-modal recall from sounds that were **never bound** -- 5 sounds per
+        class bound, 3 held out, over 5 seeds. Querying with a code that was
+        bound is a lookup and scores well even on shuffled labels; a held-out
+        query does not:
+
+            vigilance  conscience   recall   shuffled   cells   spread
+              0.00        0.0        0.125    0.125       1.0   +0.000
+              0.50        2.0        0.325    0.133       3.0   +0.192
+              0.80        1.0        0.742    0.058      16.0   +0.683
+              0.90        0.0        0.825    0.108      32.0   +0.717
+
+        0.125 is chance. The layer as it was scored **exactly** chance with one
+        cell; 0.80/1.0 reaches 0.742 against a shuffled control at 0.058, d=10.8
+        over 5 of 5 seeds.
+
+        0.90/0.0 scores a little higher but is not the default, because it was
+        *saturating the pool* -- it used 16 of 16, 32 of 32, and only became
+        selective at 40 cells once given 64. A parameter whose behaviour is set
+        by how many cells happen to be allocated will change silently the first
+        time the pool is resized. 0.80/1.0 recruits **15.3 cells whether the
+        pool is 16, 32, 64 or 128**, which means the number is a property of the
+        data rather than of the array, and that is the setting worth shipping.
+        """
         vn, an = self.prep_v(v), self.prep_a(a)
-        drive = self.Wv @ vn + self.Wa @ an - 0.1 * (self.wins /
-                                                     (self.wins.sum() + 1))
-        win = int(np.argmax(drive))
+        # a *mean* over the two senses, so match sits on the same [-1, 1] scale
+        # as vigilance no matter how many modalities are wired in
+        match = 0.5 * (self.Wv @ vn) + 0.5 * (self.Wa @ an)
+        tot = max(float(self.wins.sum()), 1.0)
+        bias = self.conscience * (self.wins / tot - 1.0 / self.n_concept)
+        win = int(np.argmax(match - bias))
+        if match[win] < self.vigilance:
+            free = np.flatnonzero(self.wins == 0)
+            if len(free):
+                # an uncommitted cell takes the pair whole -- not a fraction of
+                # the way toward it, since it has nothing worth preserving
+                win = int(free[0])
+                self.Wv[win], self.Wa[win] = vn.copy(), an.copy()
+                self.wins[win] += 1
+                return win
         self.Wv[win] = _unit(self.Wv[win] + self.lr * (vn - self.Wv[win]))
         self.Wa[win] = _unit(self.Wa[win] + self.lr * (an - self.Wa[win]))
         self.wins[win] += 1

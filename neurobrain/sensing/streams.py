@@ -515,6 +515,7 @@ class AuditoryBelt:
                  adapt_bands: bool = True, floor_pct: float = 30.0,
                  floor_gain: float = 0.8, divisive: bool = False,
                  sigma_band: float = 2.5, semi_saturation: float = 0.1,
+                 tonotopic: bool = True, tono_gain: float = 0.25,
                  seed: int = 0):
         from ..vision.widev1 import WideV1
 
@@ -537,6 +538,12 @@ class AuditoryBelt:
                             lag_ms=max(1, window_ms // max(n_frames, 1)),
                             seed=seed)
         self.index, self.n_groups = self.layer.pooling_index("both")
+        # A SECOND, tonotopic channel -- see :meth:`code`. "cols" keeps the
+        # frequency row of each cell and pools away time-within-slice, so this
+        # channel says *which filter fired in which frequency band*.
+        self.tono_index, self.n_tono = self.layer.pooling_index("cols")
+        self.tonotopic = bool(tonotopic)
+        self.tono_gain = float(tono_gain)
 
     def slices(self, coch: np.ndarray) -> List[np.ndarray]:
         w, st = self.slice_w, self.step
@@ -572,9 +579,80 @@ class AuditoryBelt:
         return c
 
     def code(self, coch: np.ndarray) -> np.ndarray:
-        """Frequency-invariant spiking code for one cochleagram."""
+        """Two channels: fully shift-invariant, and tonotopic.
+
+        The original code was the first channel alone -- ``pooling_index("both")``,
+        which keeps only *which filter fired* and discards both frequency and
+        time. On the synthetic 8-class bank that was the right call and it was
+        measured: the classes there differ by pattern while their absolute pitch
+        is randomised over an octave and a half, so a frequency-specific code
+        cannot generalise, and pooling everything away took 37.5% to 87.5%.
+
+        Real environmental sound inverts that premise. Rain, wind, sea waves and
+        crickets are not the same pattern at different pitches -- they are
+        largely *stationary textures whose spectral profile is their identity*,
+        and pooling frequency away deletes exactly the feature that separates
+        them. Measured on 600 ESC-50 clips, the pooled-only belt reached 0.198
+        on the 50-way task while the plain pooled cochleagram reached 0.350:
+        a 1024-cell spiking layer doing worse than the spectrum it was built on,
+        because it was compressing 36x497 down to 38 numbers.
+
+        The fix is not to choose. Auditory cortex does not: the core is
+        tonotopic with narrow tuning, the surrounding belt is broader and more
+        abstract, and both project forward together (Kaas & Hackett's
+        core/belt/parabelt organisation; Rauschecker & Tian's parallel streams).
+        So this returns both channels concatenated -- one that says *what kind
+        of thing happened* regardless of where in frequency, and one that says
+        *in which bands it happened* -- and lets whatever reads the belt use
+        whichever the task needs.
+
+        The two are not weighted equally, and the weight is not a preference.
+        ``tono_gain`` scales the tonotopic block before concatenation -- the
+        relative strength of the two inputs onto whatever reads the belt -- and
+        it has to be there, because at equal weight the fix trades one failure
+        for another. Swept over 8 paired train/test splits of 600 ESC-50 clips
+        (five categories, best of prototype and 5-NN) and the 320-clip designed
+        bank (``benchmarks/belt_gain.py``):
+
+            gain    real   +/-    synth   +/-    d(real)  wins
+            0.000   0.452  0.023  0.870  0.030     --      --     the belt as it was
+            0.125   0.487  0.035  0.875  0.023   +1.36    8/8
+            0.250   0.520  0.036  0.879  0.022   +2.23    8/8    <- default
+            0.500   0.551  0.032  0.846  0.036   +4.65    8/8
+            1.000   0.550  0.021  0.778  0.048   +3.87    8/8
+            2.000   0.550  0.023  0.733  0.024   +3.54    8/8
+
+        Real audio rises steeply to gain 0.5 and then flattens; the designed
+        bank falls monotonically past 0.25. The two curves cross in a place with
+        no tradeoff in it: at **0.25 both improve** -- real +0.069 (d=2.23, 8 of
+        8 splits) and synthetic +0.009 -- so this is not a compromise but a
+        strictly better setting than the belt had before, and that is why it is
+        the default.
+
+        Past 0.5 the designed bank's loss is *geometric, not informational*: its
+        linear probe holds at 0.828 while its prototype read-out falls to 0.711.
+        There pitch is randomised within a class, so a frequency-resolved channel
+        adds a dimension that varies inside the class and drags the class means
+        together. The information is still present; the class-mean decoder just
+        stops being the right way to read it. Real audio has the opposite
+        structure -- spectral profile *is* class identity -- which is the whole
+        reason the channel is here.
+
+        ``tonotopic=False`` restores the single-channel code exactly.
+        """
+        inv, tono = self.code_channels(coch)
+        if not self.tonotopic or self.tono_gain <= 0.0:
+            return inv
+        return _unit(np.concatenate([inv, self.tono_gain * tono]))
+
+    def code_channels(self, coch: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """``(shift_invariant, tonotopic)``, each unit-normed, before mixing.
+
+        Exposed so a gain sweep can re-weight without recomputing the spiking
+        layer, which is the expensive part."""
         r = self.layer.rate_over(self.slices(self.adapt(coch)))
-        return self.layer.pooled_code(r, self.index, self.n_groups)
+        return (self.layer.pooled_code(r, self.index, self.n_groups),
+                self.layer.pooled_code(r, self.tono_index, self.n_tono))
 
 
 class StreamingBrain:
