@@ -1148,6 +1148,38 @@ recording because each produced a confident wrong answer first:
 Consolidation, once concepts existed to merge, compresses 78 → 69 cells at
 purity 0.982 with `sound → vision` unchanged — modest, and no longer nothing.
 
+### Where the eye runs out, and what it is not
+
+Four candidate limits, each with a control (`benchmarks/vision_ceiling.py`),
+1-NN on CIFAR-10 colour against 0.914 for the ear:
+
+| lever | swept | result |
+|---|---|---|
+| width | 1024 → 2048 → 4096 cells | 0.323 → 0.315 → 0.315 — **flat** |
+| aperture | rf 7 / 10 / 14 | 0.323 / 0.315 / 0.272 — bigger is worse |
+| spike noise | spiking vs **noiseless** filter response | 0.322 vs 0.323 — **costs nothing** |
+| integration | 50 ms vs 200 ms window | 0.322 vs 0.323 — nothing |
+
+The third row is the one that matters for this project. The whole architecture
+is committed to spiking neurons, and it would have been reasonable to suspect
+that a windowed firing rate under membrane noise was throwing away what natural
+images need. It is not: removing the neuron model entirely and reading the raw
+filter response scores **the same number**, −0.002. Spiking is exonerated on
+real photographs, and quadrupling the integration window buys nothing either, so
+the rate estimate is not noise-limited. (It does cost ~20× the compute for that
+identical result, which is a fair thing to know.)
+
+Width is the striking negative. Single-layer unsupervised features on CIFAR are
+known to scale with feature count, and going from 20 to 83 distinct filters per
+location moves 1-NN by nothing at all.
+
+So **nothing available within a single layer moves this**. That localises the
+ceiling to depth — a second cortical stage — which is precisely the thing §1
+measured as *harmful* (V1→V2→V3 at 39.2% against 63.4% for one wide layer). But
+that was measured at narrow widths and on MNIST digits, where a single layer was
+already near its ceiling and there was nothing for a second stage to add.
+Photographs are the opposite case, and it has never been retried there.
+
 ### The imagining has to be anchored to something real
 
 The goal asks for an *infinite* inner world — new percepts and concepts made
@@ -1264,12 +1296,15 @@ Ordered by what unblocks the goal, not by difficulty.
     *variation* rather than the content be self-generated. Interpolating between
     two same-label concepts is the only self-generated arm that helps on a
     sparse day (+0.0058), which is a signal worth chasing rather than a result.
-17. **The eye is still the ceiling on all of it.** 1-NN 0.326 on photographs
-    against 0.914 for the ear. Every cross-modal number in this section is
-    limited by it, `vision → sound` most of all (0.247, barely 1.5× chance).
-    Learned fields helped; the next candidates are more than 28×28, and a
-    second cortical stage that the 2018-era result in §1 said was harmful at
-    narrow widths but has never been retried at the widths used now.
+17. **The eye is still the ceiling, and it is a depth problem.** 1-NN 0.323 on
+    photographs against 0.914 for the ear. Four levers were swept and none of
+    them is the limit: width is flat from 1024 to 4096 cells, a larger aperture
+    is worse, a longer integration window does nothing, and **spiking costs
+    nothing at all** against the noiseless filter response (−0.002). Nothing
+    inside a single layer moves it, which leaves depth. §1's finding that
+    stacking hurt (39.2% against 63.4%) was measured at narrow widths on MNIST,
+    where a single layer was already near its ceiling; photographs are the
+    opposite case and it has never been retried there. That is the experiment.
 
 ### The perception gap (weeks)
 
