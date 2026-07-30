@@ -151,6 +151,72 @@ class SecondStage:
             curve.append(float(np.mean(sims)) if sims else 0.0)
         return curve
 
+    def learn_temporal(self, sequences: Sequence[Sequence[np.ndarray]],
+                       epochs: int = 3, lr0: float = 0.30, lr1: float = 0.02,
+                       seed: int = 0) -> List[float]:
+        """Learn invariance from *time* instead of from competition alone.
+
+        Why try this at all: the competitive version above failed, and so did
+        every other single-layer lever. But the auditory front end that *works*
+        in this project does not learn by competing over static snapshots -- it
+        learns by predicting its own next input (:class:`PredictiveA1`,
+        :class:`ContrastivePredictiveA1`). Vision never got the equivalent, and
+        the eye is the modality that is failing. That asymmetry is at least
+        suggestive about which stream got the better learning rule.
+
+        The rule is Foldiak's (1991) **trace rule**, and it is one change: the
+        winner is chosen once for a whole sequence of views of the same thing,
+        and then moved toward *every* view. A unit that fires for an object at
+        one fixation has its synapses strengthened onto the object at the next
+        one, so it comes to respond to all of them. Invariance is not designed
+        in; it is picked up from the fact that the world changes more slowly
+        than the retina does (Wiskott & Sejnowski's slow feature analysis makes
+        the same assumption).
+
+        Nothing here differentiates anything -- the update is still
+        ``w += lr * (x - w)`` with a duty cycle, exactly as above. The only
+        difference is *which* patches one winner is updated on.
+
+        ``sequences`` are views of one thing: small shifts stand in for
+        fixational drift and micro-saccades, which is what actually arrives at a
+        retina looking at a stationary object.
+        """
+        rng = np.random.default_rng(seed)
+        pool = [[self.patches(self.complex_cells(v)) for v in seq]
+                for seq in sequences]
+        curve = []
+        total = max(1, epochs * len(pool))
+        step = 0
+        for _ in range(int(epochs)):
+            sims = []
+            for k in rng.permutation(len(pool)):
+                views = pool[k]
+                if not views:
+                    continue
+                n_pos = min(len(v) for v in views)
+                for j in rng.permutation(n_pos):
+                    xs = [v[j] for v in views]
+                    norms = [float(np.linalg.norm(x)) for x in xs]
+                    if max(norms) < 1e-6:
+                        continue
+                    xs = [(x / n).astype(np.float32)
+                          for x, n in zip(xs, norms) if n > 1e-6]
+                    # ONE winner for the whole sequence, chosen on the view-
+                    # averaged input -- this is the trace that carries across
+                    # fixations
+                    mean = _unit(np.mean(xs, axis=0))
+                    drive = self.W @ mean - 2.0 * (self.duty - 1.0 / self.n_units)
+                    w = int(np.argmax(drive))
+                    lr = lr0 * (lr1 / lr0) ** (step / total)
+                    for xn in xs:                    # ...and updated on all
+                        self.W[w] = _unit(self.W[w] + lr * (xn - self.W[w]))
+                    self.duty *= 0.999
+                    self.duty[w] += 0.001
+                    sims.append(float(self.W[w] @ mean))
+                step += 1
+            curve.append(float(np.mean(sims)) if sims else 0.0)
+        return curve
+
     # -- the code a downstream area reads ----------------------------------
     def code(self, image: np.ndarray) -> np.ndarray:
         """k-winners per position, pooled over position, unit-normed.

@@ -19,9 +19,17 @@ untested under conditions where it could matter.
 So this runs the comparison honestly and on both worlds:
 
     V1 alone          the current eye, at its best single-layer configuration
-    V1 + V2           the same V1, with `SecondStage` on top
+    V1 + V2           the same V1, with `SecondStage` on top, learned by
+                      competition over static patches
     V1 + V2 (concat)  both codes together, since a downstream area is free to
                       read whichever it needs and discarding V1 is not required
+    V1 + V2temporal   V2 learned by Foldiak's trace rule instead -- one winner
+                      per sequence of views of the same object, updated on all
+                      of them, so invariance comes from the world changing more
+                      slowly than the retina does. This is the visual version of
+                      what PredictiveA1 does for hearing, which is the front end
+                      in this project that actually works
+    V1 + V2temporal (concat)
 
 on CIFAR-10 photographs **and** MNIST digits -- because the claim being tested
 is not "depth is good" but "depth helps where a single layer is not already at
@@ -63,6 +71,18 @@ def opponent(im):
     return n((r + g + b) / 3.0), n(r - g), n(b - (r + g) / 2.0)
 
 
+def views(im, n=4, seed=0):
+    """One object, several fixations. Small shifts stand in for fixational
+    drift and micro-saccades -- what actually reaches a retina looking at a
+    stationary thing."""
+    rng = np.random.default_rng(seed)
+    out = [im]
+    for _ in range(n - 1):
+        dy, dx = rng.integers(-2, 3, 2)
+        out.append(np.roll(np.roll(im, int(dy), axis=-2), int(dx), axis=-1))
+    return out
+
+
 def channels(im):
     """Colour images become three opponent planes; digits stay one plane."""
     return opponent(im) if im.ndim == 3 else (im.astype(np.float32),)
@@ -92,29 +112,46 @@ def run(X, y, Xt, yt, tag, seed):
                      seed=seed)
     curve = v2.learn([channels(im)[0] for im in X[:N_DEV]], epochs=2, seed=seed)
 
+    v2t = SecondStage(v1, n_units=V2_UNITS, pool=V2_POOL, span=V2_SPAN,
+                      seed=seed)
+    curve_t = v2t.learn_temporal(
+        [[channels(v)[0] for v in views(im, seed=seed + i)]
+         for i, im in enumerate(X[:N_DEV])], epochs=2, seed=seed)
+
     def code1(im):
         return np.concatenate([v1.drive(c) for c in channels(im)])
 
     def code2(im):
         return np.concatenate([v2.code(c) for c in channels(im)])
 
+    def code2t(im):
+        return np.concatenate([v2t.code(c) for c in channels(im)])
+
     A1 = np.array([code1(im) for im in X], np.float32)
     A1t = np.array([code1(im) for im in Xt], np.float32)
     A2 = np.array([code2(im) for im in X], np.float32)
     A2t = np.array([code2(im) for im in Xt], np.float32)
+    A3 = np.array([code2t(im) for im in X], np.float32)
+    A3t = np.array([code2t(im) for im in Xt], np.float32)
     both = np.concatenate([_unit_rows(A1), _unit_rows(A2)], 1)
     botht = np.concatenate([_unit_rows(A1t), _unit_rows(A2t)], 1)
+    bothT = np.concatenate([_unit_rows(A1), _unit_rows(A3)], 1)
+    bothTt = np.concatenate([_unit_rows(A1t), _unit_rows(A3t)], 1)
 
     out = {"V1 alone": evaluate(A1, A1t, y, yt),
            "V1 + V2": evaluate(A2, A2t, y, yt),
            "V1 + V2 (concat)": evaluate(both, botht, y, yt),
+           "V1 + V2temporal": evaluate(A3, A3t, y, yt),
+           "V1 + V2temporal (concat)": evaluate(bothT, bothTt, y, yt),
            "v2_learn_curve": [round(c, 4) for c in curve],
+           "v2t_learn_curve": [round(c, 4) for c in curve_t],
            "seconds": round(time.time() - t0, 1),
            "v1_filters": v1.n_cells // v1.n_pos, "v1_grid": [v1.n_rows, v1.n_cols],
            "v2_dim": v2.dim}
     print(f"  seed {seed}: V1 {out['V1 alone']['knn1']:.3f}  "
-          f"V2 {out['V1 + V2']['knn1']:.3f}  "
-          f"both {out['V1 + V2 (concat)']['knn1']:.3f}   "
+          f"V2 {out['V1 + V2']['knn1']:.3f}/{out['V1 + V2 (concat)']['knn1']:.3f}"
+          f"  V2temporal {out['V1 + V2temporal']['knn1']:.3f}/"
+          f"{out['V1 + V2temporal (concat)']['knn1']:.3f}   "
           f"({out['seconds']:.0f}s)", flush=True)
     return out
 
@@ -139,7 +176,8 @@ def main():
         runs = [run(*data, tag, sd) for sd in SEEDS]
         res[tag] = runs
         print(f"  {'code':<20}{'proto':>8}{'1-NN':>8}{'5-NN':>8}")
-        for arm in ("V1 alone", "V1 + V2", "V1 + V2 (concat)"):
+        for arm in ("V1 alone", "V1 + V2", "V1 + V2 (concat)",
+                    "V1 + V2temporal", "V1 + V2temporal (concat)"):
             m = {k: float(np.mean([r[arm][k] for r in runs]))
                  for k in ("proto", "knn1", "knn5")}
             sd = float(np.std([r[arm]["knn1"] for r in runs], ddof=1))
@@ -152,7 +190,8 @@ def main():
     for tag in ("CIFAR-10 photographs", "MNIST digits"):
         s = res["summary"][tag]
         base = s["V1 alone"]["knn1"]
-        best_arm = max(("V1 + V2", "V1 + V2 (concat)"),
+        best_arm = max(("V1 + V2", "V1 + V2 (concat)", "V1 + V2temporal",
+                        "V1 + V2temporal (concat)"),
                        key=lambda a: s[a]["knn1"])
         d = np.array([r[best_arm]["knn1"] - r["V1 alone"]["knn1"] for r in res[tag]])
         sd = float(d.std(ddof=1))
@@ -164,8 +203,13 @@ def main():
               f"via {best_arm:<17} {verdict}")
     c = res["summary"]["CIFAR-10 photographs"]
     m = res["summary"]["MNIST digits"]
-    dc = max(c["V1 + V2"]["knn1"], c["V1 + V2 (concat)"]["knn1"]) - c["V1 alone"]["knn1"]
-    dm = max(m["V1 + V2"]["knn1"], m["V1 + V2 (concat)"]["knn1"]) - m["V1 alone"]["knn1"]
+    arms = ("V1 + V2", "V1 + V2 (concat)", "V1 + V2temporal",
+            "V1 + V2temporal (concat)")
+    dc = max(c[a]["knn1"] for a in arms) - c["V1 alone"]["knn1"]
+    dm = max(m[a]["knn1"] for a in arms) - m["V1 alone"]["knn1"]
+    print(f"  competition {c['V1 + V2 (concat)']['knn1']:.3f} vs trace rule "
+          f"{c['V1 + V2temporal (concat)']['knn1']:.3f} on photographs "
+          f"(V1 alone {c['V1 alone']['knn1']:.3f})")
     print()
     if dc > 0.02 and dm <= 0.02:
         print("  -> depth helps on photographs and not on digits, which is the")

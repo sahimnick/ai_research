@@ -1188,26 +1188,41 @@ competition with the instar rule — Hubel & Wiesel's simple/complex distinction
 and HMAX's S/C alternation, no gradients anywhere. Built on the best
 single-layer configuration (4096 cells, rf 7, stride 2, an 11×11 grid), 3 seeds:
 
+Two learning rules were tried for it, not one. The second is Földiák's **trace
+rule** — one winner chosen per *sequence of views of the same object* and then
+updated on all of them, so invariance is picked up from the world changing more
+slowly than the retina does (small shifts stand in for fixational drift). That
+rule is the visual counterpart of what `PredictiveA1` does for hearing, and
+hearing is the front end in this project that works, which made it the obvious
+thing to try.
+
 | code | CIFAR proto | CIFAR **1-NN** | MNIST 1-NN |
 |---|---|---|---|
 | V1 alone | 0.299 | **0.337** | **0.917** |
-| V1 + V2 | 0.245 | 0.210 | 0.819 |
-| V1 + V2, concatenated | 0.312 | 0.323 | 0.912 |
+| V1 + V2, competition | 0.245 | 0.210 | 0.819 |
+| V1 + V2, competition, concatenated | 0.312 | 0.323 | 0.912 |
+| V1 + V2, trace rule | 0.255 | 0.202 | 0.845 |
+| V1 + V2, trace rule, concatenated | 0.311 | 0.313 | 0.913 |
 
-V2 alone loses a third of the accuracy on photographs and a tenth on digits, and
-concatenating it with V1 — which lets a read-out take whichever it prefers, so
-it can only fail by V2 adding nothing — lands at −0.014 and −0.005. The stage is
+V2 alone loses a third of the accuracy on photographs and a tenth on digits.
+Concatenating it with V1 — which lets a read-out take whichever it prefers, so
+it can only fail by V2 adding nothing — lands at −0.014 and −0.004. The stage is
 not adding information; it is discarding it.
+
+The trace rule *did* do what it was designed to do: V2-alone on MNIST rises
+0.819 → 0.845, which is the shift invariance it was supposed to buy. It simply
+does not help on photographs, because shift is not what CIFAR is hard about.
+A mechanism working exactly as intended and still not moving the number is a
+more useful negative than a mechanism that failed.
 
 This was the experiment most likely to overturn the project's central
 architectural claim, run under the conditions chosen to favour depth: a first
 layer far from its ceiling, wide rather than narrow, on photographs rather than
-digits. **Width instead of depth stands.**
+digits, with two different objectives. **Width instead of depth stands.**
 
-One honest limit on the claim: this is *one* second stage, the textbook one. It
-shows that the obvious way of adding depth does not rescue the eye, not that no
-hierarchy could. What it does settle is that the eye's gap to the ear is not
-going to be closed by stacking another competitive layer on top.
+One honest limit: these are two second stages, not all possible ones. They
+settle that the eye's gap to the ear will not be closed by stacking another
+competitive or slowness-driven layer on top — not that no hierarchy could.
 
 ### The imagining has to be anchored to something real
 
@@ -1329,15 +1344,19 @@ Ordered by what unblocks the goal, not by difficulty.
     1-NN 0.337 on photographs against 0.914 for the ear. Width is flat from
     1024 to 4096 cells; a larger aperture is worse; a longer integration window
     does nothing; **spiking costs nothing at all** against the noiseless filter
-    response (−0.002); and a textbook second stage loses information on both
-    photographs (−0.014 concatenated, −0.127 alone) and digits. What is left is
-    not another layer of the same kind. The candidates that remain untried are
-    a genuinely different objective for the second stage — temporal slowness or
-    predictive coding over saccade sequences rather than competition over static
-    patches — and simply more pixels than 28×28. The first is the interesting
-    one: `PredictiveA1` is the auditory version and it is the front end that
-    *works*, which is at least suggestive about which stream got the better
-    learning rule.
+    response (−0.002); and a second stage discards information under *both* a
+    competitive objective and Földiák's trace rule (−0.014 and −0.024
+    concatenated). Each was measured with a control and none of them is the
+    limit.
+
+    What that leaves is not another layer of the same kind. Two candidates
+    remain, and they are ordinary rather than exotic: **more than 28×28 pixels**
+    — CIFAR is being centre-cropped and downsampled before the eye ever sees it,
+    which is the one deliberate handicap still in place — and **whitening the
+    input patches**, which is the single preprocessing step every unsupervised
+    CIFAR pipeline that works has in common and which this project has never
+    applied to vision. Neither is a new mechanism, which after six failed
+    mechanisms is the point.
 
 ### The perception gap (weeks)
 
