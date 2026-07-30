@@ -27,6 +27,14 @@ in a specific way: **if consolidation is ever routed into `vision.cortex` or
 did not really happen. `benchmarks/scene_to_dream.py` is the standing re-test —
 run it unchanged after any such change and it re-answers the question.
 
+**Both wires were then built, and both zeros moved.** The world model gains
++14.6 points (5/5 seeds, d=1.95) from replaying the day's *order*. Perception
+turned out to be conditional rather than immovable, and §7.7 states the
+condition: replay improves perceptual representations **only where the day
+carries material the store does not already cover AND an external signal
+supplies the label** — +38.5 points on an unfamiliar day with a teacher, and
+nothing at all if either factor is missing.
+
 The perception front end is real and the core scientific claim holds up:
 receptive fields *discovered* from data beat hand-designed ones on both
 datasets. Three mechanisms that did not hold up when first measured —
@@ -742,6 +750,54 @@ real distribution shift. **That is the next experiment**, and it is written here
 as a hypothesis rather than a result, because the last two structural stories in
 this document were both wrong and were both caught by measurement rather than
 by reasoning.
+
+---
+
+## 7.7 The condition under which replay improves perception
+
+The question stopped being "does replay work" and became **"replay improves
+latent sequential knowledge — under what conditions does it improve perceptual
+representations?"** That is answerable, and the answer is a clean interaction.
+
+The mind is always MNIST-trained. Only the *day it lives* varies, from material
+its perceptual store already covers to material it has never seen:
+
+| the day | no dream | self-labelled | **teacher-labelled** | teacher − no dream | wins | d |
+|---|---|---|---|---|---|---|
+| **familiar** (MNIST) | 0.8681 | 0.8606 | 0.8643 | −0.0038 | 2/6 | −0.40 |
+| **mixed** (half Fashion) | 0.4751 | 0.4387 | **0.6880** | **+0.2130** | 6/6 | **+1.80** |
+| **novel** (Fashion) | 0.0858 | 0.0764 | **0.4710** | **+0.3852** | 6/6 | **+7.70** |
+
+`benchmarks/novel_day.py`, 6 seeds, a 176-fixation probe on held-out scenes
+from the day's own world.
+
+**Both factors are necessary and neither is sufficient.**
+
+- *Familiar day + perfect teacher* → nothing (−0.004). A store already grown on
+  15,000 clean digits has nothing left to be taught about digits.
+- *Novel day + self-labelling* → nothing (−0.009). On Fashion the mind's own
+  beliefs sit at chance, so replaying them reinforces noise. **Self-labelled
+  replay never helps in any condition** (−0.008 to −0.036).
+- *Novel day + teacher* → **+38.5 points, 6/6 seeds, d=7.70**, lifting detection
+  from 8.6% (chance) to 47.1%.
+
+And it is monotone in how unfamiliar the day is: −0.004 → +0.213 → +0.385.
+
+So the standing hypothesis was right, and this is the form the claim should
+take:
+
+> **Replay improves perceptual representations only where the day carries
+> material the perceptual store does not already cover, *and* an external
+> signal supplies the label. Neither condition alone does anything.**
+
+That is sharper than either earlier version — the teaching signal is necessary
+but useless without novelty, and novelty is necessary but useless without the
+signal.
+
+One caveat kept in view: on the novel day `no_dream` sits at 8.6%, essentially
+chance, so there is enormous headroom and part of +38.5 is a floor effect. The
+mixed condition is the check on that — 47.5% → 68.8% with far less room, still
+6/6 and d=1.80.
 
 ---
 
