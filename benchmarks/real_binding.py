@@ -24,10 +24,19 @@ Measured, all with the queries **held out**:
     concept cells       how many the layer recruited, and how purely each maps
                         to one category
 
-Two controls, because one is not enough:
+Three controls, and each answers a different objection:
 
-    shuffled    labels permuted pair by pair. Destroys the correspondence while
-                keeping every code and every count identical
+    shuffled    labels permuted pair by pair. The right control for the two
+                *label* read-outs -- and the wrong one for the cross-modal
+                paths, which is worth stating because the first version of this
+                benchmark used it for all four and got +0.000 on two of them.
+                Binding is unsupervised: shuffling labels changes the vote map
+                and leaves `Wv` and `Wa` bit-identical, so a read-out that never
+                consults a label cannot possibly move.
+    mismatched  the sight and the sound are re-paired at random *across*
+                categories -- a cat photo with an engine recording. This is the
+                control the cross-modal paths need, because it destroys the
+                correspondence itself rather than its name.
     unimodal    the same recall attempted from the raw sound code by nearest
                 prototype, with no concept layer at all -- so a gain over this
                 is a gain from *fusion*, not from the audio front end
@@ -69,18 +78,24 @@ def split(y, seed):
     return np.array(tr), np.array(te)
 
 
-def fit(V, A, y, tr, seed, shuffled, n_cls):
-    """Bind the training pairs; return the association area and its cell names."""
+def fit(V, A, y, tr, seed, mode, n_cls):
+    """Bind the training pairs; return the association area and its cell names.
+
+    ``mode`` is ``"real"``, ``"shuffled"`` (labels permuted) or ``"mismatched"``
+    (sight re-paired with the wrong sound)."""
     rng = np.random.default_rng(seed + 7)
     assoc = AssociationArea(n_vis=V.shape[1], n_aud=A.shape[1],
                             n_concept=N_CONCEPT, seed=seed)
     assoc.set_stats(V[tr], A[tr])
     labs = y[tr].copy()
-    if shuffled:
+    vis = tr.copy()
+    if mode == "shuffled":
         labs = rng.permutation(labs)
+    elif mode == "mismatched":
+        vis = rng.permutation(tr)          # this sound, someone else's sight
     votes = {}
-    for i, lab in zip(tr, labs):
-        win = assoc.bind(V[i], A[i])
+    for iv, ia, lab in zip(vis, tr, labs):
+        win = assoc.bind(V[iv], A[ia])
         votes.setdefault(win, {})
         votes[win][int(lab)] = votes[win].get(int(lab), 0) + 1
     name = {c: max(v.items(), key=lambda kv: kv[1])[0] for c, v in votes.items()}
@@ -111,8 +126,8 @@ def run_seed(V, A, y, names, seed):
     protoV = np.stack([_unit(V[tr][y[tr] == c].mean(0)) for c in range(n_cls)])
     protoA = np.stack([_unit(A[tr][y[tr] == c].mean(0)) for c in range(n_cls)])
 
-    for tag, shuf in (("real", False), ("shuffled", True)):
-        assoc, name, votes = fit(V, A, y, tr, seed, shuf, n_cls)
+    for tag in ("real", "shuffled", "mismatched"):
+        assoc, name, votes = fit(V, A, y, tr, seed, tag, n_cls)
         s2l = v2l = s2v = v2s = n = 0
         for i in te:
             n += 1
@@ -160,23 +175,31 @@ def main():
            "n_samples": int(len(images)), "per_seed": per_seed, "summary": {}}
     chance = 1.0 / n_cls
 
-    print(f"\n{'path':<18}{'real':>9}{'+/-':>8}{'shuffled':>11}{'spread':>9}"
-          f"{'d':>8}{'wins':>7}{'x chance':>10}")
-    for key in ("sound_to_label", "vision_to_label", "sound_to_vision",
-                "vision_to_sound"):
+    # each read-out is judged against the control that can actually move it
+    CONTROL = {"sound_to_label": "shuffled", "vision_to_label": "shuffled",
+               "sound_to_vision": "mismatched", "vision_to_sound": "mismatched"}
+    print(f"\n{'path':<18}{'real':>9}{'+/-':>8}{'control':>10}{'(which)':>13}"
+          f"{'spread':>9}{'d':>8}{'wins':>7}{'x chance':>10}")
+    for key, ctrl in CONTROL.items():
         r = np.array([s["real"][key] for s in per_seed])
-        c = np.array([s["shuffled"][key] for s in per_seed])
+        c = np.array([s[ctrl][key] for s in per_seed])
         d = r - c
         sd_ = float(d.std(ddof=1))
-        rec = dict(real=round(float(r.mean()), 4), real_sd=round(float(r.std(ddof=1)), 4),
-                   shuffled=round(float(c.mean()), 4),
+        rec = dict(real=round(float(r.mean()), 4),
+                   real_sd=round(float(r.std(ddof=1)), 4), control=ctrl,
+                   control_score=round(float(c.mean()), 4),
+                   shuffled=round(float(np.mean([s["shuffled"][key]
+                                                 for s in per_seed])), 4),
+                   mismatched=round(float(np.mean([s["mismatched"][key]
+                                                   for s in per_seed])), 4),
                    spread=round(float(d.mean()), 4),
                    cohens_d=round(float(d.mean() / (sd_ + 1e-12)), 3),
                    wins=int((d > 0).sum()), n=len(d),
                    over_chance=round(float(r.mean()) / chance, 2))
         res["summary"][key] = rec
         print(f"{key:<18}{rec['real']:>9.3f}{rec['real_sd']:>8.3f}"
-              f"{rec['shuffled']:>11.3f}{rec['spread']:>+9.3f}"
+              f"{rec['control_score']:>10.3f}{ctrl:>13}"
+              f"{rec['spread']:>+9.3f}"
               f"{rec['cohens_d']:>8.2f}{rec['wins']:>4}/{rec['n']}"
               f"{rec['over_chance']:>9.2f}x")
 
@@ -200,8 +223,8 @@ def main():
         ok = (rec["cohens_d"] >= 0.8 and rec["wins"] >= 4
               and rec["real"] > floor)
         print(f"  {nm:<17} {rec['real']:.3f} vs {floor:.3f} "
-              f"({rec['real']-floor:+.3f}), shuffled {rec['shuffled']:.3f} "
-              f"-> {'YES' if ok else 'no'}, {what}")
+              f"({rec['real']-floor:+.3f}), {rec['control']} control "
+              f"{rec['control_score']:.3f} -> {'YES' if ok else 'no'}, {what}")
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")
