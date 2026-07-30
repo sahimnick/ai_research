@@ -1273,6 +1273,36 @@ That is the seventh mechanism to fail, and it makes the shape of §7.8 hard to
 miss: **six mechanisms and one preprocessing step failed to move the eye, and a
 cropping decision inherited from MNIST was worth more than all of them.**
 
+### Looking transfers to photographs; recognising does not
+
+Every measurement above hands the mind a whole photograph at once, centred and
+static. The eye — a fovea at full resolution, a heavily blurred periphery,
+saliency-driven saccades, inhibition of return, fixational drift inside every
+50 ms window — is not used at all, and had only ever been pointed at scenes made
+of digits. So it was pointed at scenes made of CIFAR-10 photographs: twelve on a
+256×256 canvas, no positions given, nothing segmented.
+
+| | on-object (corrected) | ×chance | named |
+|---|---|---|---|
+| **CIFAR-10 photographs** | **0.883** | 6.2× | **0.134** |
+| MNIST digits (reference) | 0.830 | 5.8× | 0.559 |
+
+*chance of landing on an object by accident is 0.144; naming chance is 0.100.*
+
+**The eye finds photographs slightly better than it finds digits.** A saliency
+map built on local contrast, tuned entirely on high-contrast strokes against an
+empty field, transfers to natural images without modification — which was not
+obvious, since a photograph has no empty background and no single bright stroke.
+
+And then naming collapses to 0.134 against a chance of 0.100.
+
+This is the cleanest localisation in the section. The perception stack's failure
+on natural images is **entirely in recognition, not in attention**: the mind
+looks in the right place and cannot say what is there. Seven mechanisms inside
+the recognition path have now failed to move it and one cropping decision moved
+it more than all of them, and the faculty that every one of those experiments
+skipped turns out to be the one part that already works.
+
 ### The imagining has to be anchored to something real
 
 The goal asks for an *infinite* inner world — new percepts and concepts made
@@ -1412,12 +1442,13 @@ Ordered by what unblocks the goal, not by difficulty.
     eye depends on. Seven mechanisms have now failed and one cropping decision
     was worth more than all of them.
 
-    What that leaves is not a smarter layer but **more of the world**: 32×32 is
-    still a thumbnail, and the eye has a fovea, a periphery and saccades that
-    the audiovisual benchmarks never use — every image is handed over whole and
-    static. Letting the mind *look around* a photograph, which is the one
-    faculty this project built and then stopped pointing at real images, is the
-    experiment that has never been run.
+    That experiment has now been run, and it *removes* a candidate rather than
+    supplying one: on 256×256 scenes of scattered photographs the eye reaches an
+    on-object rate of **0.883, better than the 0.830 it manages on digits**, and
+    then names what it found at 0.134 against a chance of 0.100. Looking
+    transfers to the real world completely; recognising does not transfer at
+    all. Whatever fixes this is inside the recognition path, and it is not any
+    of the seven things tried.
 
 ### The perception gap (weeks)
 
