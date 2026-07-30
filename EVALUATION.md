@@ -944,7 +944,68 @@ its own. Fusion adds **+0.007** there, not the +0.40 a prototype baseline would
 have suggested. **The genuine result is `sound → vision` at 0.882**: there is no
 unimodal way to get a visual code from a recording at all.
 
-### While the layer stores exemplars, every sound→X probe is one probe
+### Concepts now form — and the parameter that was wrong was not a value
+
+The layer held **216 cells for 216 training pairs**. That was traced to
+something more interesting than a mistuned threshold: `match` was the *average*
+of the two senses' drive, which puts its scale at the mercy of the weaker one.
+On real pairs the visual code's between-exemplar similarity sits near 0 while
+audio reaches 0.95, so the averaged best match over a whole day peaked at
+**0.740** — a vigilance of 0.80 was *unreachable*, every pair recruited, and
+one cell per experience followed by construction. No value in (0.74, 1] could
+have worked.
+
+Taking the **max** instead — a cell is as awake as its best-driving sense, which
+is what multisensory neurons do (Stein & Meredith's inverse effectiveness) —
+fixes the real case and breaks the synthetic one, where both senses are strong,
+almost every match clears the bar, nothing recruits, and the layer collapses to
+**two cells**. Same code, same parameter, opposite failures. An absolute
+threshold on a similarity cannot survive a change of data, because the
+similarity *scale* is a property of the data.
+
+Two changes, and neither is a tuned constant:
+
+**Reliability-weighted combination.** Each sense is weighted by how *peaked* its
+drive is across cells — a modality that returns the same value for every concept
+has said nothing about which concept this is. That is reliability-weighted cue
+combination (Ernst & Banks 2002), and it makes one rule cover both worlds
+without being told which it is in.
+
+**Homeostatic vigilance.** The fixed parameter is no longer a similarity but
+`novelty_rate` — *what fraction of experience becomes something new* — with
+vigilance driven to achieve it by an integral controller. This is the same move
+`PredictiveA1` makes for sparsity and the belt makes for its per-band floor.
+(Written with the error term inverted first. It did not read as a bug: the
+synthetic bank *improved*, 16 cells → 32, because the sign happened to be
+positive there and drove vigilance up until the pool ran out. A runaway wearing
+the costume of a result; the giveaway was the other rule, frozen at two cells.)
+
+At `novelty_rate=0.5`, over 5 seeds:
+
+| rule | synthetic | real: cells/pair | s→label | s→vision |
+|---|---|---|---|---|
+| mean, fixed vigilance (as shipped) | 0.742 | **1.00** | 0.947 | 0.581 |
+| mean | 0.792 | 0.57 | 0.943 | 0.660 |
+| max | 0.458 | 0.48 | 0.942 | 0.681 |
+| **reliability** | **0.742** | **0.53** | **0.947** | **0.671** |
+
+`mean` is best on the synthetic bank and unusable on real data; `max` is the
+reverse. Reliability is within a few points of the better of the two in each
+world: it holds the synthetic number *exactly* (0.742), holds `sound → label`
+exactly (0.947), raises cross-modal retrieval **0.581 → 0.671**, and takes the
+layer from one cell per experience to roughly one per two. Below 1.0 there are
+concepts; at 1.0 there is only a list.
+
+**And consolidation finally merges something.** It had been merging exactly
+nothing at every threshold, because the joint criterion was limited by vision.
+With cells now grouping several exemplars each, a night at merge threshold 0.25
+compresses 78 → 69 cells at purity 0.982, `sound → label` 0.925 against a floor
+of 0.914, and `sound → vision` **unchanged at 0.696**. Merging harder does
+compress more — 1.83× at 0.15 — but purity falls to 0.842 and recall to 0.797,
+which is categories collapsing rather than forming, and the benchmark rejects it
+on those grounds rather than reporting the bigger number.
+
+### While the layer stored exemplars, every sound→X probe was one probe
 
 `sound_to_vision` scored with a 1-NN read-out came out at **0.947 — exactly
 `sound_to_label`**, to the last decimal. Not a coincidence, and worth stating
@@ -964,9 +1025,11 @@ category than any real photograph, because a concept cell's `Wv` is an average
 and a photograph is not. Recalling a better cat than you have ever seen is what
 having a concept is for.
 
-Until cells < pairs, that is the only cross-modal claim this architecture can
-support, and it is why concept formation (§8, step 14) is the gate on everything
-else.
+That was the state before the two changes above. It is why concept formation was
+the gate on everything else, and it is now cleared: at 0.32–0.53 cells per pair
+the layer no longer has a private cell for each experience, so replay and
+consolidation have something to act on and the cross-modal read-out is no longer
+a lookup in disguise.
 
 ### Vision is now the weak sense, and the reason is specific
 
@@ -1116,16 +1179,19 @@ Ordered by what unblocks the goal, not by difficulty.
     *learned* receptive fields (`selforganize.py` already has the machinery,
     and the project's own headline is that discovered fields beat designed
     ones) and keeping more than 28×28.
-14. **Make the concept layer form concepts.** It currently holds one cell per
-    experience — an exemplar memory with purity 1.00, which is why replay is a
-    structural no-op. `AssociationArea.consolidate` exists and merges almost
-    nothing while vision is this weak. Re-run it after step 13; the number to
-    watch is cells-per-training-pair falling below 1.0 without recall dropping.
-15. **Re-run the dream once concepts exist.** The sparse-day result already has
-    the right shape — imagination helps starved categories (+0.028) and hurts
-    rich ones (−0.096) — which is what prioritised replay is supposed to fix.
-    Prioritise by `AssociationArea.novelty` rather than uniformly and the two
-    halves should stop cancelling.
+14. ~~**Make the concept layer form concepts.**~~ — **done.** Reliability-weighted
+    combination plus a homeostatic vigilance took it from 1.00 cells per
+    experience to 0.32–0.53, purity ≥0.98, with cross-modal retrieval rising
+    0.581 → 0.671 and the synthetic bank unchanged. Consolidation now merges
+    (1.13× at no cross-modal cost) where it previously merged nothing.
+15. **Re-run the dream now that concepts exist.** Every dream result in §7.8 was
+    measured against a layer with one cell per experience, where replay is a
+    structural no-op — `stored` replay measured exactly +0.0000 for that reason.
+    That precondition is gone, so the whole table needs re-running before any
+    of it can be believed. The sparse-day result already has the right shape —
+    imagination helps starved categories (+0.028) and hurts rich ones (−0.096) —
+    and prioritising replay by `AssociationArea.novelty` rather than uniformly
+    is the obvious next move.
 
 ### The perception gap (weeks)
 

@@ -44,7 +44,10 @@ class AssociationArea:
 
     def __init__(self, n_vis: int, n_aud: int, n_concept: int,
                  lr: float = 0.15, vigilance: float = 0.80,
-                 conscience: float = 1.0, seed: int = 0):
+                 conscience: float = 1.0,
+                 match_rule: str = "reliability",
+                 novelty_rate: Optional[float] = 0.50,
+                 vigilance_lr: float = 0.02, seed: int = 0):
         rng = np.random.default_rng(seed)
         self.Wv = _rows_unit(rng.standard_normal((n_concept, n_vis)) * 0.1)
         self.Wa = _rows_unit(rng.standard_normal((n_concept, n_aud)) * 0.1)
@@ -52,6 +55,11 @@ class AssociationArea:
         self.lr = lr
         self.vigilance = float(vigilance)
         self.conscience = float(conscience)
+        self.match_rule = str(match_rule)
+        self.novelty_rate = (None if novelty_rate is None
+                             else float(novelty_rate))
+        self.vigilance_lr = float(vigilance_lr)
+        self._rel_v = self._rel_a = 0.0   # running per-sense precision
         self.wins = np.zeros(n_concept)
         self._rng = rng
         self.v_mu = self.v_sd = self.a_mu = self.a_sd = None
@@ -97,37 +105,46 @@ class AssociationArea:
         penalty of 0.1 cannot move an argmax whose winner leads by ~1.0, which
         is why the old homeostatic term was present and did nothing.
 
-        Both defaults are measured (``benchmarks/concept_cells.py``), on
-        cross-modal recall from sounds that were **never bound** -- 5 sounds per
-        class bound, 3 held out, over 5 seeds. Querying with a code that was
-        bound is a lookup and scores well even on shuffled labels; a held-out
-        query does not:
+        The conscience default is measured (``benchmarks/concept_cells.py``) on
+        cross-modal recall from sounds that were **never bound** -- 5 per class
+        bound, 3 held out, 5 seeds. Querying with a code that *was* bound is a
+        lookup and scores well even on shuffled labels; a held-out query does
+        not. The layer as it was scored **exactly** chance (0.125) with one
+        cell; with these guards it reaches 0.742 against a shuffled control at
+        0.058, d=10.8, 5 of 5 seeds.
 
-            vigilance  conscience   recall   shuffled   cells   spread
-              0.00        0.0        0.125    0.125       1.0   +0.000
-              0.50        2.0        0.325    0.133       3.0   +0.192
-              0.80        1.0        0.742    0.058      16.0   +0.683
-              0.90        0.0        0.825    0.108      32.0   +0.717
+        ``vigilance`` is a *starting point*, not a setting -- see
+        :meth:`_homeostasis`, which drives it to whatever value achieves
+        ``novelty_rate``. Fixing it does not survive a change of data, and this
+        layer failed at both ends of that (one cell per experience on real
+        photographs; two cells total on the synthetic bank).
 
-        0.125 is chance. The layer as it was scored **exactly** chance with one
-        cell; 0.80/1.0 reaches 0.742 against a shuffled control at 0.058, d=10.8
-        over 5 of 5 seeds.
+        Rule and rate together, on both worlds
+        ---------------------------------------
+        The two data sets disagree about which combination rule is right, which
+        is why the reliability weighting exists. At ``novelty_rate=0.5``:
 
-        0.90/0.0 scores a little higher but is not the default, because it was
-        *saturating the pool* -- it used 16 of 16, 32 of 32, and only became
-        selective at 40 cells once given 64. A parameter whose behaviour is set
-        by how many cells happen to be allocated will change silently the first
-        time the pool is resized. 0.80/1.0 recruits **15.3 cells whether the
-        pool is 16, 32, 64 or 128**, which means the number is a property of the
-        data rather than of the array, and that is the setting worth shipping.
+            rule           synthetic  |  real: cells/pair  s->label  s->vision
+            mean (as was)     0.742   |       1.00           0.947     0.581
+            mean               0.792   |       0.57           0.943     0.660
+            max                0.458   |       0.48           0.942     0.681
+            reliability        0.742   |       0.53           0.947     0.671
+
+        ``mean`` is best on the synthetic bank and unusable on real data without
+        homeostasis; ``max`` is the reverse. **reliability** is within a few
+        points of the better of the two in each world without being told which
+        world it is in -- and against the layer as shipped it holds the
+        synthetic number *exactly* (0.742), holds ``s->label`` exactly (0.947),
+        raises cross-modal retrieval 0.581 -> 0.671, and takes the layer from
+        one cell per experience to roughly one per two. That last number is the
+        point: below 1.0 there are concepts, at 1.0 there is only a list.
         """
         vn, an = self.prep_v(v), self.prep_a(a)
-        # a *mean* over the two senses, so match sits on the same [-1, 1] scale
-        # as vigilance no matter how many modalities are wired in
-        match = 0.5 * (self.Wv @ vn) + 0.5 * (self.Wa @ an)
+        match = self.match(vn, an)
         tot = max(float(self.wins.sum()), 1.0)
         bias = self.conscience * (self.wins / tot - 1.0 / self.n_concept)
         win = int(np.argmax(match - bias))
+        recruited = 0
         if match[win] < self.vigilance:
             free = np.flatnonzero(self.wins == 0)
             if len(free):
@@ -136,11 +153,123 @@ class AssociationArea:
                 win = int(free[0])
                 self.Wv[win], self.Wa[win] = vn.copy(), an.copy()
                 self.wins[win] += 1
-                return win
-        self.Wv[win] = _unit(self.Wv[win] + self.lr * (vn - self.Wv[win]))
-        self.Wa[win] = _unit(self.Wa[win] + self.lr * (an - self.Wa[win]))
-        self.wins[win] += 1
+                recruited = 1
+        if not recruited:
+            self.Wv[win] = _unit(self.Wv[win] + self.lr * (vn - self.Wv[win]))
+            self.Wa[win] = _unit(self.Wa[win] + self.lr * (an - self.Wa[win]))
+            self.wins[win] += 1
+        self._homeostasis(recruited)
         return win
+
+    def _homeostasis(self, recruited: int) -> None:
+        """Drift ``vigilance`` toward a target rate of category creation.
+
+        A fixed threshold on a similarity does not survive a change of data, and
+        this layer broke at *both* ends of that. On real CIFAR/ESC-50 pairs the
+        averaged match peaked at 0.740, so vigilance 0.80 was unreachable, every
+        pair recruited, and the layer ended with one cell per experience. On the
+        synthetic bank -- where both senses are strong -- the ``max`` rule put
+        almost every match above 0.65, nothing ever recruited, and it collapsed
+        to two cells. Same code, same parameter, opposite failures, because the
+        similarity *scale* is a property of the data and an absolute threshold
+        pretends it is not.
+
+        So the parameter that is held fixed is not a similarity at all: it is
+        **how much of experience becomes something new**. ``novelty_rate`` is
+        that fraction, and vigilance is driven to achieve it by a plain integral
+        controller -- threshold up when too little is being recruited, down when
+        too much.
+
+        This is the same homeostatic move the rest of the project already makes:
+        :class:`PredictiveA1` holds a target sparsity by biasing its own drive,
+        and the belt subtracts a running per-band floor. A cell that adjusts its
+        threshold to keep its own activity near a set-point is one of the
+        better-established pieces of cortical housekeeping (intrinsic
+        plasticity), and it is what makes a single default work on data whose
+        similarity distributions differ by half the scale.
+
+        ``novelty_rate=None`` freezes vigilance at whatever it was set to.
+        """
+        if self.novelty_rate is None:
+            return
+        # Recruitment fires when the best match falls BELOW vigilance, so a
+        # shortfall of new categories calls for a *higher* bar, not a lower one.
+        # Written the other way round first, and it did not read as a bug: the
+        # synthetic bank improved (16 cells -> 32) because the error term
+        # happened to be positive there and drove vigilance up until the pool
+        # ran out. That is a runaway wearing the costume of a result -- the
+        # giveaway was the other rule, where the same sign drove vigilance down
+        # and left the layer frozen at two cells.
+        self.vigilance += self.vigilance_lr * (self.novelty_rate - recruited)
+        self.vigilance = float(np.clip(self.vigilance, -1.0, 1.0))
+
+    def _reliability(self, mv: np.ndarray, ma: np.ndarray) -> Tuple[float, float]:
+        """How much each sense is worth listening to right now.
+
+        A modality that returns nearly the same drive for every concept cell has
+        told the layer nothing -- it cannot say *which* concept this is, only
+        that something arrived. So reliability is measured as how **peaked** the
+        drive is: the gap between the best-matching cell and the average one.
+
+        This is reliability-weighted cue combination (Ernst & Banks 2002), which
+        is the standard account of how the senses are actually combined --
+        weights proportional to precision, so a blurred visual cue loses
+        influence to a sharp haptic one without anything being switched off.
+        Here it is what lets one rule cover both worlds: on the synthetic bank
+        both senses are peaked and the weights come out near even, which is the
+        ``mean`` behaviour that works there; on real photographs and field
+        recordings the visual drive is nearly flat, its weight collapses, and
+        the match is carried by hearing -- the ``max`` behaviour that works
+        there. Neither is chosen by hand.
+
+        Kept as a running average so it is a property of the mind's experience
+        rather than of the current frame.
+        """
+        pv = float(mv.max() - mv.mean())
+        pa = float(ma.max() - ma.mean())
+        self._rel_v += 0.05 * (pv - self._rel_v)
+        self._rel_a += 0.05 * (pa - self._rel_a)
+        tot = self._rel_v + self._rel_a
+        if tot < 1e-6:
+            return 0.5, 0.5
+        return self._rel_v / tot, self._rel_a / tot
+
+    def match(self, vn: np.ndarray, an: np.ndarray) -> np.ndarray:
+        """How well each concept cell explains this pair, in [-1, 1].
+
+        ``match_rule="reliability"`` -- each sense weighted by how sharply it
+        discriminates, learned online. The default; see :meth:`_reliability`.
+        ``match_rule="max"`` -- a cell is as awake as its **best-driving** sense.
+        ``match_rule="mean"`` -- it must be driven by both at once.
+
+        The default is ``max`` and the reason is a hard failure of ``mean``.
+        Averaging puts the scale of ``match`` at the mercy of the *weaker*
+        modality: on real CIFAR/ESC-50 pairs, where the visual code's
+        between-exemplar similarity tops out near 0 while audio reaches 0.95,
+        the averaged best match over a whole day reached a median of 0.364 and a
+        maximum of **0.740** -- so a vigilance of 0.80 was simply unreachable,
+        every pair recruited an uncommitted cell, and the layer ended with
+        exactly one cell per experience. Not a tuning problem: no vigilance in
+        (0.74, 1] can ever be satisfied, and any lower value has to be
+        re-chosen the moment either sense changes quality.
+
+        Under ``max`` the same day spans 0.648 median to 0.954 maximum, which is
+        a range a threshold can actually sit inside.
+
+        It is also the better model. Multisensory neurons obey **inverse
+        effectiveness** (Stein & Meredith): a strong unimodal input drives the
+        cell on its own, and the superadditive gain from combining appears when
+        each input alone is weak. A concept cell for *dog* should wake to a dog
+        barking in the dark. Both synapse sets still learn on every bind, so the
+        cell remains bimodal -- only the recognition test is permissive.
+        """
+        mv, ma = self.Wv @ vn, self.Wa @ an
+        if self.match_rule == "max":
+            return np.maximum(mv, ma)
+        if self.match_rule == "mean":
+            return 0.5 * (mv + ma)
+        wv, wa = self._reliability(mv, ma)
+        return wv * mv + wa * ma
 
     def concept_from_vision(self, v: np.ndarray) -> int:
         return int(np.argmax(self.Wv @ self.prep_v(v)))
