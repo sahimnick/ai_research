@@ -53,6 +53,7 @@ class AssociationArea:
         self.vigilance = float(vigilance)
         self.conscience = float(conscience)
         self.wins = np.zeros(n_concept)
+        self._rng = rng
         self.v_mu = self.v_sd = self.a_mu = self.a_sd = None
 
     def set_stats(self, V: np.ndarray, A: np.ndarray) -> None:
@@ -180,6 +181,58 @@ class AssociationArea:
         self.wins = np.concatenate([self.wins, [1.0]])
         self.n_concept += 1
         return self.n_concept - 1
+
+    def consolidate(self, threshold: float = 0.75) -> Dict[int, int]:
+        """Merge concept cells that turned out to be the same thing.
+
+        Vigilance recruits eagerly, and on real data it recruits *very* eagerly:
+        76 training pairs of CIFAR photographs and ESC-50 recordings produced 77
+        concept cells -- one per example. That is a good exemplar memory and not
+        a set of concepts, and the difference matters for a mind that is meant
+        to imagine from its concepts rather than replay its examples.
+
+        Eager encoding followed by offline merging is how the biology is usually
+        described: the hippocampus takes a separate trace for nearly every
+        episode (pattern separation, which is what high vigilance is), and sleep
+        is where those traces are integrated into cortical structure that
+        generalises. So this belongs in a night rather than in the waking rule,
+        and lowering vigilance instead would lose the separation that makes
+        one-shot binding work at all.
+
+        Two cells merge when they agree in **both** senses -- a cat photo and a
+        cat recording must both be close, since agreeing on the sound alone is
+        how a dog and a cat recording of similar spectral shape would collapse
+        into one. The survivor is the win-weighted mean, so a cell that has seen
+        forty pairs is not dragged by one that has seen one.
+
+        Returns ``{old_cell: surviving_cell}`` for every cell that was absorbed,
+        so a caller holding a vote map or a name table can fold it accordingly.
+        """
+        order = np.argsort(-self.wins)                # the best-evidenced lead
+        alive = [int(c) for c in order if self.wins[c] > 0]
+        merged: Dict[int, int] = {}
+        for i, c in enumerate(alive):
+            if c in merged:
+                continue
+            for d in alive[i + 1:]:
+                if d in merged:
+                    continue
+                if (float(self.Wv[c] @ self.Wv[d]) >= threshold
+                        and float(self.Wa[c] @ self.Wa[d]) >= threshold):
+                    wc, wd = self.wins[c], self.wins[d]
+                    self.Wv[c] = _unit((wc * self.Wv[c] + wd * self.Wv[d]) / (wc + wd))
+                    self.Wa[c] = _unit((wc * self.Wa[c] + wd * self.Wa[d]) / (wc + wd))
+                    self.wins[c] = wc + wd
+                    # d becomes uncommitted, and is re-randomised rather than
+                    # left holding its old tuning or zeroed. A zeroed row has
+                    # cosine 0 to everything, which makes it a uniform attractor
+                    # the moment vigilance looks for a free cell; a random row
+                    # is what an unused cell actually looks like.
+                    self.wins[d] = 0.0
+                    self.Wv[d] = _unit(self._rng.standard_normal(self.Wv.shape[1]))
+                    self.Wa[d] = _unit(self._rng.standard_normal(self.Wa.shape[1]))
+                    merged[d] = c
+        return merged
 
     def expect_sound(self, v: np.ndarray) -> np.ndarray:
         """See -> imagine: the sound code the vision-evoked concept expects."""

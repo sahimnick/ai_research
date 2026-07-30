@@ -6,9 +6,17 @@ them — on real data, every number against a control. Reproduce with
 [`benchmarks/`](benchmarks/).
 
 **Environment.** Python 3.12, NumPy 2.4.6, no torch, no matplotlib, Linux.
-MNIST and Fashion-MNIST downloaded live. `import neurobrain` required a
-do-nothing torch shim throughout (defect A1); **A1 has since been fixed** and
-the shim is gone — every measurement here reproduces without it.
+MNIST, Fashion-MNIST, **CIFAR-10 and ESC-50** downloaded live. `import
+neurobrain` required a do-nothing torch shim throughout (defect A1); **A1 has
+since been fixed** and the shim is gone — every measurement here reproduces
+without it.
+
+**§7.8 is the real-world pass** — 600 ESC-50 field recordings and CIFAR-10
+photographs, two corpora that share real categories and nothing else. Read it
+first if you want to know what works outside the pre-segmented datasets: the ear
+does (50-way at 17.5× chance, cross-modal retrieval at 0.882 against a control
+at chance), the eye does not (1-NN 0.185 on photographs against 0.818 on
+digits), and the eye is what everything else is now waiting on.
 
 **Headline — the one result.** *Replay changes one of the three stores that hold
 what the mind knows, and the faculties expected to improve read the other two.*
@@ -801,6 +809,204 @@ mixed condition is the check on that — 47.5% → 68.8% with far less room, sti
 
 ---
 
+## 7.8 The real world: CIFAR-10 photographs and ESC-50 field recordings
+
+Everything above this point was measured on MNIST, Fashion-MNIST, and synthetic
+tones and chirps. Those are pre-segmented, contrast-normalised, single-object
+gifts, and the goal explicitly asks for the other thing. This section replaces
+them with **600 ESC-50 field recordings** (rain, sirens, engines, birds,
+thunderstorms) and **CIFAR-10 photographs**.
+
+### Three defects that were producing numbers rather than errors
+
+Real data broke three things, and each returned a plausible-looking result
+rather than an exception. That is the dangerous failure mode, so each is now
+locked or re-derived.
+
+**`_nearest_prototype` assumed labels were `0..n_class-1`.** ESC-50's *nature*
+classes are labelled 10–19 and *urban* 40–49, so it built ten all-zero
+prototypes and returned index 0 for every clip — **exactly 0.000**. The first
+version of this section therefore read "all five auditory front ends collapse on
+environmental sound", which is false. Two things gave it away: a linear probe on
+the *same* features reached 0.55, and *animals* — the one subset whose labels
+happen to fall inside the assumed range — worked normally. Fixed; pinned by
+`tests/test_readout_labels.py`.
+
+**`PredictiveA1.train` averaged per-frame `‖err‖/‖y‖`.** A field recording is
+mostly silence, so `‖y‖ ≈ 0` was divided by the 1e-9 guard and a handful of
+quiet frames set the epoch's figure: it reported **3,425,472 → 1,723,145**.
+Pooled over frames (the standard normalised RMSE) the same run reads
+**0.873 → 0.860**. Learning was never affected — the delta rule uses the raw
+error — only the number was.
+
+**`load_cifar10(grayscale=False)` cropped the channel axis.** Positional slicing
+from axis 1 is correct for a grayscale stack and cuts the colour axis for a
+colour one, silently returning a one-channel image of the wrong width.
+
+### The auditory front end does hear the real world
+
+Corrected, on 600 clips with stratified held-out splits (chance is 1/k):
+
+| subset | classes | best | ×chance |
+|---|---|---|---|
+| all | 50 | 0.350 | **17.5×** |
+| animals | 10 | 0.640 | 6.4× |
+| nature | 10 | 0.638 | 6.4× |
+| urban | 10 | 0.568 | 5.7× |
+| human | 10 | 0.634 | 6.3× |
+| interior | 10 | 0.655 | 6.6× |
+
+The uncomfortable part: **the raw pooled cochleagram was the best front end**,
+at 0.350 on the 50-way task, while the belt scored 0.198 — a 1024-cell spiking
+layer losing to the spectrum it is built on.
+
+### Why: the belt threw away frequency, and real sound *is* frequency
+
+`AuditoryBelt` pooled across frequency *and* time, keeping only which filter
+fired — a 36×497 cochleagram compressed to 38 numbers. That was measured and
+correct for the designed 8-class bank, where classes differ by pattern and
+absolute pitch is randomised across an octave and a half. Rain, wind, sea waves
+and crickets invert the premise: they are stationary textures whose **spectral
+profile is their identity**.
+
+Adding a tonotopic channel alongside the invariant one, and sweeping its gain
+over 8 paired splits (`benchmarks/belt_gain.py`):
+
+| tono_gain | real (5 categories) | synthetic 8-class | d(real) | wins |
+|---|---|---|---|---|
+| 0.00 | 0.452 ± .023 | 0.870 ± .030 | — | — |
+| **0.25** | **0.520 ± .036** | **0.879 ± .022** | +2.23 | 8/8 |
+| 0.50 | 0.551 ± .032 | 0.846 ± .036 | +4.65 | 8/8 |
+| 1.00 | 0.550 ± .021 | 0.778 ± .048 | +3.87 | 8/8 |
+
+The two curves cross in a place with no tradeoff: at 0.25 **both** improve. Past
+0.5 the designed bank's loss is geometric rather than informational — its linear
+probe holds at 0.828 while its prototype read-out falls to 0.711.
+
+### Cross-modal binding was collapsing to one concept cell
+
+`AssociationArea.bind` chose its winner by pure argmax over the summed drive.
+The first cell to win tuned toward the data, so it won the next pair too:
+binding 48 pairs from 8 well-separated classes woke **1 concept cell out of 32**
+and cross-modal recall sat at **exactly chance**, while the sound codes alone
+were 96% separable. The homeostatic term meant to prevent this was scaled at 0.1
+against a drive gap of ~1.0.
+
+Fixed with ART vigilance (a poor match recruits an uncommitted cell instead of
+dragging the incumbent) and a conscience term (DeSieno 1988) scaled to the
+drive. On queries **held out** from binding, 5 seeds:
+
+| vigilance | conscience | recall | shuffled | cells |
+|---|---|---|---|---|
+| 0.00 | 0.0 | 0.125 | 0.125 | 1.0 |
+| **0.80** | **1.0** | **0.742** | 0.058 | 16.0 |
+| 0.90 | 0.0 | 0.825 | 0.108 | 32.0 |
+
+0.90/0.0 scores higher and is *not* the default: it was saturating the pool — 16
+of 16, 32 of 32, becoming selective only at 40 cells once given 64. 0.80/1.0
+recruits **15.3 cells whether the pool is 16, 32, 64 or 128**, so the number is
+a property of the data rather than of the array.
+
+### Concepts from two corpora that share nothing but meaning
+
+CIFAR-10 and ESC-50 were built by different people for different tasks and
+happen to contain the same real categories — airplane, automobile, bird, cat,
+dog, frog. So the mind can be shown a *photograph* of a cat and played a *field
+recording* of a cat, and **the only thing the two signals share is what they are
+of**: no shared session, room, microphone or lighting, so no incidental
+correlation to learn instead of the semantics.
+
+360 pairs, 6 categories, 5 seeds, chance 0.167 (`benchmarks/real_binding.py`):
+
+| path | real | control | which | d |
+|---|---|---|---|---|
+| sound → label | 0.931 | 0.156 | shuffled | 28.5 |
+| **sound → vision** | **0.882** | 0.164 | mismatched | 16.1 |
+| vision → label | 0.275 | 0.151 | shuffled | 6.9 |
+| vision → sound | 0.236 | 0.143 | mismatched | 5.0 |
+
+Two notes on honesty, both of which changed the reading:
+
+*The controls had to be split.* Binding is unsupervised, so permuting labels
+leaves `Wv` and `Wa` bit-identical and the two cross-modal read-outs reported
+**+0.000** — correct by construction, and the same exact-zero signature as the
+real bugs above. A `mismatched` control that re-pairs each sound with a
+different category's sight is what actually moves them.
+
+*The label path is mostly a nearest-neighbour index.* With vigilance high the
+layer holds about one cell per training pair, so "hear a sound, find its cell,
+read its name" is structurally 1-NN over the audio codes — which scores 0.924 on
+its own. Fusion adds **+0.007** there, not the +0.40 a prototype baseline would
+have suggested. **The genuine result is `sound → vision` at 0.882**: there is no
+unimodal way to get a visual code from a recording at all.
+
+### Vision is now the weak sense, and the reason is specific
+
+Two recordings of the same source reach cosine 0.95; two photographs of the same
+category reach **≈0** (median −0.006). Measured directly: `WideV1` scores 1-NN
+**0.818 on MNIST and 0.185 on CIFAR-10**, where raw opponent pixels score 0.308.
+A 1024-cell spiking layer doing worse than its own input is a coding fault, not
+a hard-problem result.
+
+The cause is a **common component**: 63.5% of cells are silent for a typical
+photograph and the rest respond similarly to all of them, so cosine similarity
+is dominated by the part every code shares. MNIST never showed it because a
+digit is a high-contrast figure on an empty field — already mean-subtracted by
+construction.
+
+Two fixes, both things the biology has and this pipeline lacked:
+
+| | proto | 1-NN | 5-NN |
+|---|---|---|---|
+| grayscale, no adaptation | 0.288 | 0.185 | 0.200 |
+| colour opponency (L, R−G, B−Y) | 0.365 | 0.185 | 0.183 |
+| + running-mean adaptation | 0.340 | **0.285** | **0.307** |
+| + divisive as well | 0.358 | 0.260 | 0.298 |
+
+MNIST is unaffected (1-NN 0.830 → 0.840), which is why this never surfaced.
+`PopulationAdaptation` keeps the baseline **online** — a running mean updated per
+code, not batch statistics — because a mind meets its world one frame at a time.
+Together these took `sound → vision` from 0.707 to **0.882**.
+
+Spatial pooling, which was the belt's fix, is *not* the fix here: pooled-only
+falls to 0.183 on CIFAR and to 0.288 on MNIST. The two senses needed different
+repairs.
+
+### What a night does, and does not do, to concepts
+
+`benchmarks/cross_modal_dream.py` replays **only sound** and asks the
+association area what it expects to see, binding that imagined sight as if it
+had been experienced. Nothing visual enters from outside.
+
+| arm | sound → vision | vs no_dream | cells |
+|---|---|---|---|
+| no_dream | 0.714 | — | 216 |
+| stored replay | 0.714 | +0.0000 | 216 |
+| imagined | 0.721 | +0.0069 | 216 |
+| confabulated (random sight) | 0.571 | −0.1435 | 256 |
+
+Three findings, one of them structural:
+
+1. **Ordinary replay is a no-op by construction here** — exactly +0.0000, the
+   signature again, and this time it is real. With one cell per exemplar, a
+   replayed pair re-selects its own cell and the instar step moves it toward
+   where it already is.
+2. **Confabulation is clearly destructive** (−0.14) and expands the pool to its
+   limit, so the control behaves as a control should.
+3. **Imagination helps only where the day was thin.** On a sparse day —
+   categories given 3 waking examples — imagined replay moves the starved
+   categories 0.524 → 0.552 while costing the rich ones 0.613 → 0.517. That is
+   the generative-replay prediction (van de Ven et al. 2020) showing up with the
+   right sign in the right place, and it is *not* yet a net win.
+
+`AssociationArea.consolidate` was added to merge exemplars into concepts and
+currently merges almost nothing, for a reason the measurement names: the joint
+similarity criterion is limited by vision, whose between-exemplar similarity
+tops out at 0.42. **Concept formation is blocked behind the visual front end**,
+which is the same bottleneck as everything else in this section.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
@@ -849,6 +1055,27 @@ Ordered by what unblocks the goal, not by difficulty.
    replays prototypes. A mind that is *actually* imaginative should show entropy
    rising with the concept count while the round trip stays high — novelty
    without incoherence. That pair of numbers is the goal made falsifiable.
+
+### The real-world gap (now the critical path) — see §7.8
+
+13. **Fix the visual front end on natural images.** Everything downstream is
+    blocked behind it: concepts cannot consolidate because two photographs of
+    the same category sit at cosine ≈0, so nothing ever merges. Colour opponency
+    and online adaptation took 1-NN from 0.185 to 0.285 and are in; the gap to
+    the auditory side (0.924) is still enormous. The next candidates are
+    *learned* receptive fields (`selforganize.py` already has the machinery,
+    and the project's own headline is that discovered fields beat designed
+    ones) and keeping more than 28×28.
+14. **Make the concept layer form concepts.** It currently holds one cell per
+    experience — an exemplar memory with purity 1.00, which is why replay is a
+    structural no-op. `AssociationArea.consolidate` exists and merges almost
+    nothing while vision is this weak. Re-run it after step 13; the number to
+    watch is cells-per-training-pair falling below 1.0 without recall dropping.
+15. **Re-run the dream once concepts exist.** The sparse-day result already has
+    the right shape — imagination helps starved categories (+0.028) and hurts
+    rich ones (−0.096) — which is what prioritised replay is supposed to fix.
+    Prioritise by `AssociationArea.novelty` rather than uniformly and the two
+    halves should stop cancelling.
 
 ### The perception gap (weeks)
 

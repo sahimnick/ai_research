@@ -55,12 +55,49 @@ from neurobrain.vision.widev1 import _nearest_prototype
 
 SEEDS = (0, 1, 2, 3, 4)
 TRAIN_FRAC = 0.6
-N_CONCEPT = 64
+# Large enough that the number of concepts is set by the data. At 64 every seed
+# reported exactly 64 cells, which is the pool reporting its own size.
+N_CONCEPT = 256
 
 
-def encode(brain, images, waves):
-    """Both senses, through the same front ends the streaming path uses."""
-    V = np.array([_unit(brain.v1.rate(im)) for im in images], np.float32)
+def opponent(im):
+    """Retinal colour opponency: luminance, red-green, blue-yellow.
+
+    Photographs are in colour and these categories lean on it -- sky is blue,
+    frogs are green. Grayscale was a modelling choice, not a property of the
+    world, and it costs: the class-mean read-out goes 0.288 grayscale -> 0.365
+    with opponent channels. Primate retina builds exactly these three, so
+    keeping them is the less invented option, not the more."""
+    r, g, b = [im[i].astype(np.float32) for i in range(3)]
+
+    def n(c):
+        c = c - c.min()
+        m = c.max()
+        return (c / m * 255.0) if m > 1e-6 else c
+    return n((r + g + b) / 3.0), n(r - g), n(b - (r + g) / 2.0)
+
+
+def encode(brain, images, waves, colour=True, adapt=True):
+    """Both senses, through the same front ends the streaming path uses.
+
+    ``adapt`` subtracts each cell's running baseline before the code is read.
+    Without it the V1 code on photographs scores 1-NN 0.185 -- below raw pixels
+    at 0.308 -- because a large component is common to every image and the
+    cosine between any two codes is dominated by it. With it, 0.285. MNIST is
+    unaffected (0.830 -> 0.840), which is why it never surfaced before."""
+    from neurobrain.vision.widev1 import PopulationAdaptation
+
+    def rate(im):
+        if colour and im.ndim == 3:
+            return np.concatenate([brain.v1.rate(c) for c in opponent(im)])
+        return brain.v1.rate(im)
+
+    R = np.array([rate(im) for im in images], np.float32)
+    if adapt:
+        ad = PopulationAdaptation(R.shape[1])
+        V = np.array([_unit(ad(r)) for r in R], np.float32)
+    else:
+        V = np.array([_unit(r) for r in R], np.float32)
     A = np.array([brain.belt.code(brain.ear.coch.forward(w)[0])
                   for w in waves], np.float32)
     return V, A
@@ -116,11 +153,21 @@ def run_seed(V, A, y, names, seed):
     tr, te = split(y, seed)
     out = {"n_train": int(len(tr)), "n_test": int(len(te))}
 
-    # ---- unimodal control: the sound code alone, no concept layer ----------
+    # ---- unimodal controls: the sound code alone, no concept layer ---------
+    # Two of them, and the second is the one that matters. With vigilance high
+    # the association area recruits about one cell per training pair, so
+    # "hear a sound, find its concept cell, read its name" is structurally a
+    # nearest-neighbour lookup over the audio codes. Comparing that to a
+    # *prototype* baseline would credit fusion with a gain that is really
+    # exemplar-versus-centroid. The 1-NN control removes that confound.
     out["unimodal_sound"] = float(np.mean(
         _nearest_prototype(A[tr], y[tr], A[te], n_cls) == y[te]))
     out["unimodal_vision"] = float(np.mean(
         _nearest_prototype(V[tr], y[tr], V[te], n_cls) == y[te]))
+    S = A[te] @ A[tr].T
+    out["unimodal_sound_1nn"] = float(np.mean(y[tr][S.argmax(1)] == y[te]))
+    Sv = V[te] @ V[tr].T
+    out["unimodal_vision_1nn"] = float(np.mean(y[tr][Sv.argmax(1)] == y[te]))
 
     # visual prototypes, for scoring a retrieved visual CODE
     protoV = np.stack([_unit(V[tr][y[tr] == c].mean(0)) for c in range(n_cls)])
@@ -151,15 +198,16 @@ def main():
     out_path = sys.argv[1] if len(sys.argv) > 1 else "out_real_binding.json"
     n_per = int(sys.argv[2]) if len(sys.argv) > 2 else 60
 
-    images, waves, y, names = load_audiovisual(n_per_class=n_per, seed=0)
+    images, waves, y, names = load_audiovisual(n_per_class=n_per, seed=0,
+                                               grayscale=False)
     n_cls = len(names)
     print(f"{len(images)} audiovisual samples, {n_cls} shared categories: "
           f"{', '.join(names)}")
-    print(f"vision: CIFAR-10 photographs {images.shape[1:]}  "
+    print(f"vision: CIFAR-10 photographs {images.shape[1:]} in colour  "
           f"audio: ESC-50 field recordings\n", flush=True)
 
     brain = StreamingBrain(seed=0)
-    V, A = encode(brain, images, waves)
+    V, A = encode(brain, images, waves, colour=True, adapt=True)
     print(f"visual code {V.shape[1]}d, sound code {A.shape[1]}d  "
           f"(chance {1/n_cls:.3f})\n", flush=True)
 
@@ -205,20 +253,30 @@ def main():
 
     us = float(np.mean([s["unimodal_sound"] for s in per_seed]))
     uv = float(np.mean([s["unimodal_vision"] for s in per_seed]))
+    us1 = float(np.mean([s["unimodal_sound_1nn"] for s in per_seed]))
+    uv1 = float(np.mean([s["unimodal_vision_1nn"] for s in per_seed]))
     cells = float(np.mean([s["real"]["cells"] for s in per_seed]))
     pur = float(np.mean([s["real"]["purity"] for s in per_seed]))
-    res["unimodal_sound"] = round(us, 4)
-    res["unimodal_vision"] = round(uv, 4)
-    res["cells"] = cells
-    res["purity"] = round(pur, 4)
-    print(f"\nunimodal controls (no concept layer): sound {us:.3f}, "
-          f"vision {uv:.3f}   |   {cells:.1f} concept cells, purity {pur:.2f}")
+    n_tr = float(np.mean([s["n_train"] for s in per_seed]))
+    res.update(unimodal_sound=round(us, 4), unimodal_vision=round(uv, 4),
+               unimodal_sound_1nn=round(us1, 4),
+               unimodal_vision_1nn=round(uv1, 4),
+               cells=cells, purity=round(pur, 4), n_train=n_tr)
+    print(f"\nunimodal controls, no concept layer:")
+    print(f"   prototype   sound {us:.3f}   vision {uv:.3f}")
+    print(f"   1-NN        sound {us1:.3f}   vision {uv1:.3f}   <- the honest "
+          f"floor for a layer holding one cell per example")
+    print(f"   {cells:.1f} concept cells for {n_tr:.0f} training pairs "
+          f"({cells/max(n_tr,1):.2f} per pair), purity {pur:.2f}")
+    if cells > 0.8 * n_tr:
+        print("   NOTE: that is an exemplar memory, not a set of concepts. "
+              "Compare against 1-NN, not against the prototype.")
 
     print("\n=== does fusion build concepts on real data? ===")
     sl = res["summary"]["sound_to_label"]
     sv = res["summary"]["sound_to_vision"]
     for nm, rec, floor, what in (
-            ("sound -> label", sl, us, "beats hearing alone"),
+            ("sound -> label", sl, max(us, us1), "beats hearing alone"),
             ("sound -> vision", sv, chance, "retrieves the right SIGHT")):
         ok = (rec["cohens_d"] >= 0.8 and rec["wins"] >= 4
               and rec["real"] > floor)

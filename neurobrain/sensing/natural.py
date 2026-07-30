@@ -234,19 +234,26 @@ def load_cifar10(n_train: int = 5000, n_test: int = 1000, seed: int = 0,
     whole archive.
     """
     full = os.path.join(_cache_dir(), "cifar-10-binary.tar.gz")
-    path = full
-    if not (os.path.exists(full) and os.path.getsize(full) > 0):
-        part = full + ".part"
-        if allow_partial and os.path.exists(part) and os.path.getsize(part) > 4e7:
-            path = part                      # read what has landed so far
-        else:
-            path = _fetch(_CIFAR_URL, full)
-
     train, test = [], []
-    for nm, rec in _cifar_members(path):
-        (test if "test_batch" in nm else train).append(rec)
+
+    def read(p):
+        for nm, rec in _cifar_members(p):
+            (test if "test_batch" in nm else train).append(rec)
+
+    if os.path.exists(full) and os.path.getsize(full) > 0:
+        read(full)
+    else:
+        # Try whatever has landed. A byte threshold would be a guess -- the
+        # question is not how big the file is but whether a *batch* in it is
+        # complete, and the reader already answers that by stopping at the
+        # truncation point.
+        part = full + ".part"
+        if allow_partial and os.path.exists(part):
+            read(part)
+        if not train and not test:
+            read(_fetch(_CIFAR_URL, full))
     if not train and not test:
-        raise RuntimeError(f"no complete CIFAR-10 batch in {path}")
+        raise RuntimeError("no complete CIFAR-10 batch available")
     if not train:                            # only the test batch arrived
         train, test = test, []
 
@@ -265,10 +272,13 @@ def load_cifar10(n_train: int = 5000, n_test: int = 1000, seed: int = 0,
         train_x, train_y = train_x[cut:], train_y[cut:]
 
     def prep(a: np.ndarray) -> np.ndarray:
-        v = a.mean(1) if grayscale else a          # luminance
+        v = a.mean(1) if grayscale else a          # luminance, or (N, 3, H, W)
         if size != v.shape[-1]:
+            # crop the last two axes. Slicing positionally from axis 1 works
+            # only for grayscale; in colour it cuts the CHANNEL axis instead,
+            # which silently returned a 1-channel image of the wrong width.
             o = (v.shape[-1] - size) // 2
-            v = v[:, o:o + size, o:o + size]
+            v = v[..., o:o + size, o:o + size]
         return np.clip(v, 0, 255).astype(np.uint8)
 
     rng = np.random.default_rng(seed)
@@ -421,7 +431,8 @@ AV_SILENT: Tuple[str, ...] = ("deer", "horse", "ship", "truck")
 
 def load_audiovisual(n_per_class: int = 60, n_shards: int = 6, seed: int = 0,
                      sr: int = 8000, dur_s: float = 2.0, size: int = 28,
-                     classes: Optional[Tuple[str, ...]] = None
+                     classes: Optional[Tuple[str, ...]] = None,
+                     grayscale: bool = True
                      ) -> Tuple[np.ndarray, List[np.ndarray], np.ndarray,
                                 Tuple[str, ...]]:
     """A real audiovisual world: ``(images, waves, labels, names)``.
@@ -442,7 +453,7 @@ def load_audiovisual(n_per_class: int = 60, n_shards: int = 6, seed: int = 0,
             raise KeyError(f"{nm!r} is not an audiovisual class; have {tuple(AV_MAP)}")
 
     trX, trY, teX, teY = load_cifar10(n_train=50000, n_test=10000, seed=seed,
-                                      size=size)
+                                      size=size, grayscale=grayscale)
     X_all = np.concatenate([trX, teX])
     Y_all = np.concatenate([trY, teY])
 

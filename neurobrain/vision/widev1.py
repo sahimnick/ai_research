@@ -493,6 +493,72 @@ def static_middle(image: np.ndarray, n_frames: int = 6) -> List[np.ndarray]:
 # ---------------------------------------------------------------------------
 # Experiments
 # ---------------------------------------------------------------------------
+class PopulationAdaptation:
+    """What a cell stops transmitting: the part of its input that never changes.
+
+    Measured problem. On MNIST the wide V1 code is excellent -- 1-NN 0.818 over
+    ten digits. On CIFAR-10 photographs the *same* layer scores 1-NN **0.168**
+    against a chance of 0.100, and raw opponent pixels beat it at 0.308. A
+    spiking layer of 1024 cells doing worse than the pixels it reads is not a
+    hard-problem result; it is a coding fault.
+
+    The fault is a **common component**. 63.5% of cells are silent for a typical
+    photograph and the rest respond similarly to all of them, so the cosine
+    between any two codes is dominated by the part they share and neighbourhood
+    structure disappears into it. MNIST never showed this because a digit is a
+    high-contrast figure on an empty field, which is already mean-subtracted by
+    construction; a photograph is not.
+
+    Subtracting the population's running mean fixes it -- 1-NN 0.168 -> 0.313,
+    5-NN 0.168 -> 0.320, matching raw pixels while keeping the prototype read-out
+    (0.363 -> 0.338 subtractive, 0.387 with the divisive term as well).
+
+    This is not a normalisation trick bolted on; it is the operation the rest of
+    the project already runs everywhere else and vision was the one place
+    missing it. :class:`AuditoryBelt` subtracts a per-band floor for exactly this
+    reason ("a channel that stops transmitting its own long-run floor stops
+    transmitting the background with it"), and
+    :class:`~neurobrain.workspace.GlobalWorkspace` takes ``adapt=True``.
+
+    Kept **online** -- a running mean and variance updated per code, not batch
+    statistics -- because a mind meets its world one frame at a time and never
+    has the dataset. ``divisive=True`` adds the per-cell gain control, which is
+    better for class-mean read-outs and slightly worse for nearest-neighbour;
+    the default is subtractive because the association area stores exemplars.
+    """
+
+    def __init__(self, n: int, tau: float = 0.01, divisive: bool = False,
+                 eps: float = 1e-3):
+        self.mu = np.zeros(int(n), np.float32)
+        self.var = np.ones(int(n), np.float32)
+        self.tau = float(tau)          # how fast the cell forgets its baseline
+        self.divisive = bool(divisive)
+        self.eps = float(eps)
+        self.n_seen = 0
+
+    def observe(self, r: np.ndarray) -> None:
+        """One code goes past; the baseline drifts toward it."""
+        r = np.asarray(r, np.float32)
+        # a fast start, so the first few codes are not compared against zeros
+        a = max(self.tau, 1.0 / (self.n_seen + 1))
+        d = r - self.mu
+        self.mu += a * d
+        self.var += a * (d * d - self.var)
+        self.n_seen += 1
+
+    def apply(self, r: np.ndarray) -> np.ndarray:
+        """The code with its baseline removed -- what actually differs."""
+        out = np.asarray(r, np.float32) - self.mu
+        if self.divisive:
+            out = out / (np.sqrt(self.var) + self.eps)
+        return out.astype(np.float32)
+
+    def __call__(self, r: np.ndarray, learn: bool = True) -> np.ndarray:
+        if learn:
+            self.observe(r)
+        return self.apply(r)
+
+
 def _nearest_prototype(Xtr: np.ndarray, ytr: np.ndarray, Xte: np.ndarray,
                        n_class: Optional[int] = None) -> np.ndarray:
     """Class-mean read-out. Deliberately the simplest possible decoder so the
