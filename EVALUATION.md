@@ -14,9 +14,13 @@ without it.
 **§7.8 is the real-world pass** — 600 ESC-50 field recordings and CIFAR-10
 photographs, two corpora that share real categories and nothing else. Read it
 first if you want to know what works outside the pre-segmented datasets: the ear
-does (50-way at 17.5× chance, cross-modal retrieval at 0.882 against a control
-at chance), the eye does not (1-NN 0.185 on photographs against 0.818 on
-digits), and the eye is what everything else is now waiting on.
+does (50-way at 17.5× chance, 1-NN 0.914 on six real categories), the eye did
+not (1-NN 0.185 on photographs against 0.818 on digits) and is now roughly
+half-fixed (0.326, with digits improving to 0.920 in the process). Cross-modal
+retrieval works and *beats a real percept* at naming its own category — but
+while the concept layer stores one cell per experience, that is the only claim
+it can support. The eye, and concept formation behind it, are what everything
+else now waits on.
 
 **Headline — the one result.** *Replay changes one of the three stores that hold
 what the mind knows, and the faculties expected to improve read the other two.*
@@ -940,6 +944,30 @@ its own. Fusion adds **+0.007** there, not the +0.40 a prototype baseline would
 have suggested. **The genuine result is `sound → vision` at 0.882**: there is no
 unimodal way to get a visual code from a recording at all.
 
+### While the layer stores exemplars, every sound→X probe is one probe
+
+`sound_to_vision` scored with a 1-NN read-out came out at **0.947 — exactly
+`sound_to_label`**, to the last decimal. Not a coincidence, and worth stating
+because it bounds every cross-modal number above: recruitment sets
+`Wv[cell] = ` the pair's own visual code, so with one cell per pair the nearest
+training image to a recalled sight *is* that pair's image, and its label is the
+label the vote map holds. Every "hear a sound, get X" probe collapses to *find
+the nearest stored sound and read off whatever was stored beside it*.
+
+The one probe that does not collapse is the class-mean version, because it asks
+where the retrieved code sits relative to the category rather than which
+exemplar it is. That one reads 0.581–0.856 depending on the eye — and it beats
+the **reference** (what the *true* visual code of the held-out item scores under
+the identical probe, 0.333–0.367) by 174–233%. That is the one genuinely
+pleasing result in this section: the recalled sight is a *cleaner* member of its
+category than any real photograph, because a concept cell's `Wv` is an average
+and a photograph is not. Recalling a better cat than you have ever seen is what
+having a concept is for.
+
+Until cells < pairs, that is the only cross-modal claim this architecture can
+support, and it is why concept formation (§8, step 14) is the gate on everything
+else.
+
 ### Vision is now the weak sense, and the reason is specific
 
 Two recordings of the same source reach cosine 0.95; two photographs of the same
@@ -954,23 +982,45 @@ is dominated by the part every code shares. MNIST never showed it because a
 digit is a high-contrast figure on an empty field — already mean-subtracted by
 construction.
 
-Two fixes, both things the biology has and this pipeline lacked:
+Three fixes, all things the biology has and this pipeline lacked, measured
+cumulatively over 3 seeds (`benchmarks/natural_v1.py`):
 
-| | proto | 1-NN | 5-NN |
+| | CIFAR proto | CIFAR **1-NN** | MNIST 1-NN |
 |---|---|---|---|
-| grayscale, no adaptation | 0.288 | 0.185 | 0.200 |
-| colour opponency (L, R−G, B−Y) | 0.365 | 0.185 | 0.183 |
-| + running-mean adaptation | 0.340 | **0.285** | **0.307** |
-| + divisive as well | 0.358 | 0.260 | 0.298 |
+| grayscale, designed fields | 0.254 | 0.196 | 0.828 |
+| colour opponency (L, R−G, B−Y) | 0.294 | 0.181 | 0.830 |
+| + running-mean adaptation | 0.301 | 0.308 | 0.843 |
+| + **discovered** receptive fields | 0.264 | **0.326** | **0.920** |
 
-MNIST is unaffected (1-NN 0.830 → 0.840), which is why this never surfaced.
-`PopulationAdaptation` keeps the baseline **online** — a running mean updated per
-code, not batch statistics — because a mind meets its world one frame at a time.
-Together these took `sound → vision` from 0.707 to **0.882**.
+**1-NN on photographs 0.196 → 0.326, a 1.66× improvement, with no regression on
+digits — MNIST gains 0.092.** The receptive fields in the last row were grown on
+*CIFAR photographs* and applied to MNIST without retraining, so that row is
+transfer: natural-image statistics make a better general-purpose V1 than
+hand-written Gabors do, which is Olshausen & Field's result reproduced inside
+this project's own spiking layer and consistent with its standing claim that
+discovered fields beat designed ones.
 
-Spatial pooling, which was the belt's fix, is *not* the fix here: pooled-only
-falls to 0.183 on CIFAR and to 0.288 on MNIST. The two senses needed different
-repairs.
+Notes on what each part did, since they are not interchangeable:
+
+* **Adaptation is where the 1-NN repair comes from** (0.181 → 0.308). It is the
+  operation the belt and the workspace already had and vision did not, and it is
+  kept **online** — a running mean updated per code, not batch statistics —
+  because a mind meets its world one frame at a time.
+* **Colour helps the class-mean read-out and not the exemplar one** (proto
+  +0.040, 1-NN −0.015). Useful, but not the fix.
+* **Discovered fields trade class-mean structure for exemplar structure**
+  (proto 0.301 → 0.264, 1-NN 0.308 → 0.326). That trade is what made
+  `sound → vision` read 0.856 with designed fields and 0.581 with discovered
+  ones while vision itself got better by every other measure — the probe scores
+  against class means, so changing the eye changes the ruler. Reporting the
+  reference beside it is what makes the two comparable.
+* **Spatial pooling, which was the belt's fix, is not the fix here**: pooled-only
+  falls to 0.183 on CIFAR and 0.288 on MNIST. The two senses needed different
+  repairs, which is worth knowing before assuming a fix generalises across them.
+
+The eye is substantially better and **the gap to hearing is still open** — 0.326
+against 0.914 for the ear on six real ESC-50 categories. That is the honest
+statement; §8 step 13 is what remains.
 
 ### What a night does, and does not do, to concepts
 

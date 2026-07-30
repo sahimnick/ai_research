@@ -77,15 +77,25 @@ def opponent(im):
     return n((r + g + b) / 3.0), n(r - g), n(b - (r + g) / 2.0)
 
 
-def encode(brain, images, waves, colour=True, adapt=True):
+def encode(brain, images, waves, colour=True, adapt=True, develop=True):
     """Both senses, through the same front ends the streaming path uses.
 
     ``adapt`` subtracts each cell's running baseline before the code is read.
     Without it the V1 code on photographs scores 1-NN 0.185 -- below raw pixels
     at 0.308 -- because a large component is common to every image and the
     cosine between any two codes is dominated by it. With it, 0.285. MNIST is
-    unaffected (0.830 -> 0.840), which is why it never surfaced before."""
+    unaffected (0.830 -> 0.840), which is why it never surfaced before.
+
+    ``develop`` grows the receptive fields from these photographs instead of
+    using the hand-written Gabor-like defaults, which is the project's own
+    standing claim applied to real images: 1-NN 0.288 -> 0.362 on CIFAR, and the
+    fields transfer to MNIST and beat the designed ones there too."""
+    from neurobrain.learning.selforganize import develop_v1
     from neurobrain.vision.widev1 import PopulationAdaptation
+
+    if develop:
+        develop_v1(brain.v1, [opponent(im)[0] if im.ndim == 3 else im
+                              for im in images], epochs=3, seed=0)
 
     def rate(im):
         if colour and im.ndim == 3:
@@ -173,9 +183,30 @@ def run_seed(V, A, y, names, seed):
     protoV = np.stack([_unit(V[tr][y[tr] == c].mean(0)) for c in range(n_cls)])
     protoA = np.stack([_unit(A[tr][y[tr] == c].mean(0)) for c in range(n_cls)])
 
+    # A reference point for `sound_to_vision`, and it is not optional -- that
+    # read-out scores a *retrieved* visual code against these prototypes, so it
+    # inherits whatever the visual front end's class-mean geometry happens to
+    # be. Changing the eye changes the ruler: developing the receptive fields
+    # moved sound_to_vision 0.882 -> 0.581 while making vision better by every
+    # other measure, purely because discovered fields trade class-mean structure
+    # for exemplar structure. So the *true* visual code for each held-out item
+    # is scored under the identical probe.
+    #
+    # It is called a reference and not a ceiling because the retrieved code
+    # beats it -- 174% and 233% in the two configurations. That is not an error:
+    # a concept cell's `Wv` is an average over everything bound to it, so the
+    # recalled sight is *denoised toward the category* while a single real
+    # photograph is not. Recalling a cleaner cat than any cat you have seen is
+    # what having a concept means. It also means this probe is easy, which is
+    # why the 1-NN version below is reported beside it.
+    out["vision_reference"] = float(np.mean(
+        [int(np.argmax(protoV @ V[i])) == int(y[i]) for i in te]))
+    out["sound_reference"] = float(np.mean(
+        [int(np.argmax(protoA @ A[i])) == int(y[i]) for i in te]))
+
     for tag in ("real", "shuffled", "mismatched"):
         assoc, name, votes = fit(V, A, y, tr, seed, tag, n_cls)
-        s2l = v2l = s2v = v2s = n = 0
+        s2l = v2l = s2v = v2s = s2v1 = n = 0
         for i in te:
             n += 1
             cs = assoc.concept_from_sound(A[i])
@@ -185,9 +216,15 @@ def run_seed(V, A, y, names, seed):
             # the cross-modal paths: the ANSWER is in the other modality
             s2v += int(int(np.argmax(protoV @ _unit(assoc.Wv[cs]))) == int(y[i]))
             v2s += int(int(np.argmax(protoA @ _unit(assoc.Wa[cv]))) == int(y[i]))
+            # the harder version: does the imagined sight look like a SPECIFIC
+            # real photograph of the right thing, rather than like the average
+            # of that category? Nearest training image, not nearest class mean.
+            s2v1 += int(int(y[tr][np.argmax(V[tr] @ _unit(assoc.Wv[cs]))])
+                        == int(y[i]))
         out[tag] = dict(sound_to_label=round(s2l / n, 4),
                         vision_to_label=round(v2l / n, 4),
                         sound_to_vision=round(s2v / n, 4),
+                        sound_to_vision_1nn=round(s2v1 / n, 4),
                         vision_to_sound=round(v2s / n, 4),
                         cells=int((assoc.wins > 0).sum()),
                         purity=round(purity(votes), 4))
@@ -197,6 +234,7 @@ def run_seed(V, A, y, names, seed):
 def main():
     out_path = sys.argv[1] if len(sys.argv) > 1 else "out_real_binding.json"
     n_per = int(sys.argv[2]) if len(sys.argv) > 2 else 60
+    develop = "--no-develop" not in sys.argv
 
     images, waves, y, names = load_audiovisual(n_per_class=n_per, seed=0,
                                                grayscale=False)
@@ -207,7 +245,9 @@ def main():
           f"audio: ESC-50 field recordings\n", flush=True)
 
     brain = StreamingBrain(seed=0)
-    V, A = encode(brain, images, waves, colour=True, adapt=True)
+    V, A = encode(brain, images, waves, colour=True, adapt=True,
+                  develop=develop)
+    print(f"eye: colour + adaptation + {'DISCOVERED' if develop else 'designed'} fields", flush=True)
     print(f"visual code {V.shape[1]}d, sound code {A.shape[1]}d  "
           f"(chance {1/n_cls:.3f})\n", flush=True)
 
@@ -225,7 +265,9 @@ def main():
 
     # each read-out is judged against the control that can actually move it
     CONTROL = {"sound_to_label": "shuffled", "vision_to_label": "shuffled",
-               "sound_to_vision": "mismatched", "vision_to_sound": "mismatched"}
+               "sound_to_vision": "mismatched",
+               "sound_to_vision_1nn": "mismatched",
+               "vision_to_sound": "mismatched"}
     print(f"\n{'path':<18}{'real':>9}{'+/-':>8}{'control':>10}{'(which)':>13}"
           f"{'spread':>9}{'d':>8}{'wins':>7}{'x chance':>10}")
     for key, ctrl in CONTROL.items():
@@ -262,6 +304,31 @@ def main():
                unimodal_sound_1nn=round(us1, 4),
                unimodal_vision_1nn=round(uv1, 4),
                cells=cells, purity=round(pur, 4), n_train=n_tr)
+    vc = float(np.mean([s["vision_reference"] for s in per_seed]))
+    ac = float(np.mean([s["sound_reference"] for s in per_seed]))
+    sv_r = res["summary"]["sound_to_vision"]["real"]
+    sv1 = res["summary"]["sound_to_vision_1nn"]["real"]
+    res.update(vision_reference=round(vc, 4), sound_reference=round(ac, 4),
+               sound_to_vision_vs_reference=round(sv_r / max(vc, 1e-9), 4))
+    print(f"\nthe same probe applied to the TRUE visual code of each held-out "
+          f"item:")
+    print(f"   reference {vc:.3f}   |   recalled from sound {sv_r:.3f}  "
+          f"= {sv_r/max(vc,1e-9):.0%}")
+    if sv_r > vc:
+        print(f"   the recalled sight beats the real one, because a concept "
+              f"cell's Wv is an average and a photograph is not.")
+    sl_r = res["summary"]["sound_to_label"]["real"]
+    print(f"   the 1-NN version of the same probe reads {sv1:.3f}")
+    if abs(sv1 - sl_r) < 1e-6:
+        print(f"   -- and that is EXACTLY sound_to_label ({sl_r:.3f}), which "
+              f"is not a coincidence. Recruitment sets Wv[cell] = the pair's")
+        print(f"      own visual code, so with one cell per pair the nearest "
+              f"training image to a recalled sight IS that pair's image, and")
+        print(f"      every sound -> X probe collapses to 'find the nearest "
+              f"stored sound, read off what was stored beside it'.")
+        print(f"      Until cells < pairs, the prototype probe above is the "
+              f"only one measuring something a lookup cannot do.")
+
     print(f"\nunimodal controls, no concept layer:")
     print(f"   prototype   sound {us:.3f}   vision {uv:.3f}")
     print(f"   1-NN        sound {us1:.3f}   vision {uv1:.3f}   <- the honest "

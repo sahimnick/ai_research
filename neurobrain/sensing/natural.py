@@ -177,6 +177,15 @@ def _download(url: str, path: str, tmp: str, chunk: int, verbose: bool) -> str:
                           f"({100 * got / total:.0f}%)", end="", flush=True)
     if verbose and total:
         print(flush=True)
+    # An empty read means the socket closed, which is not the same as the file
+    # being finished. Renaming on that alone put a 137.5 MB archive into the
+    # cache under the name of a 170.1 MB one, where it looked complete and
+    # loaded as a short dataset -- the atomicity this function advertises,
+    # defeated by never checking the length. The partial file is *kept* so the
+    # next call resumes from it rather than starting over.
+    if total is not None and got < total:
+        raise IOError(f"{os.path.basename(path)}: got {got} of {total} bytes "
+                      f"({100 * got / total:.1f}%); {tmp} kept for resume")
     os.replace(tmp, path)          # only a complete file becomes the cache
     return path
 
