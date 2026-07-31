@@ -2318,6 +2318,55 @@ gains 5/5 at d=2.10. What is still missing is the merge: a layer that generalise
 would have more to be wrong about, and every number here says that is where the
 next gain is.
 
+### Phase 9.1 — forced consolidation, and what it costs
+
+The single fact behind most of the negatives above is that the concept layer
+**memorises**: 52% of its cells hold exactly one photograph, which is why 38.8%
+of what it "imagines" is that photograph byte for byte at every temperature.
+Vigilance says "if it is new, make a cell" and nothing ever says "these two were
+the same thing". So: a merger that runs after the day and is *forced*.
+
+**By rank, not by threshold — and that is not a detail.** Over 111 cells from
+216 real pairs, the visual similarity between concept cells has median −0.009
+and a 99th percentile of 0.206. A threshold of **0.85 merges zero pairs**; 0.75
+merges zero; 0.1 admits 189 at once. No setting merges the right amount, because
+the scale belongs to the code — distinct photographs are near-orthogonal in it —
+not to how alike two concepts are. The *ordering* is fine: the top 100 pairs by
+summed similarity are **82% same-category**. So the merger holds a rate, exactly
+the correction the vigilance controller needed.
+
+`benchmarks/merger.py`, 5 seeds, 360 real pairs:
+
+| | cells | singletons | **verbatim** | novelty | sound→vision | purity |
+|---|---|---|---|---|---|---|
+| no merging | 111.6 | 53.2% | **0.388** | 0.196 | 0.831 | 1.000 |
+| `keep=0.8` | 89.4 | 39.4% | 0.306 | 0.223 | 0.838 | 0.995 |
+| **`keep=0.6`** | 67.2 | 31.6% | **0.175** | 0.290 | **0.839** | 0.963 |
+| `keep=0.4` | 44.4 | 31.5% | 0.138 | 0.339 | 0.707 | 0.807 |
+| `absorb` (every singleton) | 52.2 | **0.0%** | **0.015** | 0.320 | 0.771 | 0.927 |
+| **`keep=0.6`+`absorb`** | 46.0 | **0.0%** | **0.010** | 0.346 | 0.799 | 0.917 |
+
+**The prediction holds and then some**: singletons 53.2% → **0.0%**, verbatim
+38.8% → **1.0%**, novelty 0.196 → 0.346. Panel 7 shows it — the same five
+photographs, two verbatim memories before and none after.
+
+**And it is not free, which the sweep is for.** Ranked merging alone buys
+verbatim 0.175 at *no* cost (recall +0.008); driving verbatim to zero costs
+0.032 of recall and 0.083 of purity. Compressing past `keep=0.4` collapses
+recall (0.707 → 0.543 → 0.426). Which point is right depends on what the layer
+is for, and that curve is the deliverable rather than any single setting.
+
+> **A bug this found, worth stating because it is the class that keeps
+> recurring.** The first run said merging *improved* recall (+0.026) while
+> barely touching verbatim. Both were artefacts. `concept_from_vision` takes an
+> `argmax` over **every** row, and my merge cleared a retired cell's `wins`
+> while leaving its `Wv` intact — so the read-out kept returning merged-away
+> cells still holding verbatim photographs, with `wins == 0`. The merger had
+> worked and nothing downstream could see it. The pre-existing `consolidate`
+> already handled this correctly (it re-randomises the retired row, with a
+> comment saying why zeroing would be wrong); the two new methods skipped it.
+> Fixed by a shared `_retire`, and the real numbers are above.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

@@ -267,6 +267,71 @@ def panel_yellow_bus(out, brain, ad, images, V, y, names, assoc, tr, res):
     return float(np.mean(cosines))
 
 
+def panel_merged(out, brain, images, V, y, names, assoc_raw, tr, te):
+    """Panel 2's claim, before and after forced consolidation.
+
+    The prediction was that merging removes the `cos = 1.000` columns. It does:
+    2 of these 5 are verbatim memories before and 0 after, and over 5 seeds the
+    rate falls 0.388 -> 0.010 with singletons at 0.0%.
+
+    It is not free, and the sweep in `benchmarks/merger.py` is the thing to read
+    rather than this picture. Ranked merging alone takes verbatim to 0.175 at no
+    cost to recall (+0.008); driving it to zero by absorbing every singleton
+    costs 0.032 of recall and 0.083 of purity. Which point on that curve is
+    right depends on what the layer is for."""
+    from neurobrain.cognition.multimodal import AssociationArea as _AA
+    import copy
+    merged = copy.deepcopy(assoc_raw)
+    merged.consolidate_ranked(keep=0.6)
+    merged.absorb_singletons()
+    Btr = np.stack([assoc_raw.prep_v(V[i]) for i in tr])
+    picks = _spread(y, te, 5)
+    fig, ax = plt.subplots(3, 5, figsize=(11, 7))
+    hits = {}
+    for tag, (row, ass) in enumerate((("before", (1, assoc_raw)),
+                                      ("after", (2, merged)))):
+        pass
+    for k, i in enumerate(picks):
+        ax[0, k].imshow(rgb(images[i]))
+        ax[0, k].set_title(names[int(y[i])], fontsize=9)
+        ax[0, k].set_xticks([]); ax[0, k].set_yticks([])
+    for row, (tag, ass) in enumerate((("before merging", assoc_raw),
+                                      ("after merging", merged)), start=1):
+        n_ver = 0
+        for k, i in enumerate(picks):
+            c = ass.concept_from_vision(V[i])
+            m = ass.imagine_vision(c, temperature=4.0,
+                                   rng=np.random.default_rng(SEED + k))
+            sim = Btr @ m
+            j = int(np.argmax(sim))
+            ver = sim[j] > 0.999
+            n_ver += int(ver)
+            ax[row, k].imshow(rgb(images[int(tr[j])]))
+            ax[row, k].set_title(f"nearest stored {sim[j]:.3f}"
+                                 + ("  ← A MEMORY" if ver else ""),
+                                 fontsize=6,
+                                 color=("crimson" if ver else "darkgreen"))
+            ax[row, k].set_xticks([]); ax[row, k].set_yticks([])
+        hits[tag] = n_ver
+        live = int((ass.wins > 0).sum())
+        sing = float(np.mean(ass.wins[ass.wins > 0] == 1))
+        ax[row, 0].set_ylabel(f"{tag}\n{live} cells, {sing:.0%} singleton",
+                              fontsize=8)
+    ax[0, 0].set_ylabel("held-out photo", fontsize=8)
+    fig.suptitle("7. Forced consolidation removes the memories\n"
+                 f"same five photographs, imagined at T=4, showing the nearest "
+                 f"stored thing: {hits['before merging']} of 5 are a verbatim "
+                 f"memory before, {hits['after merging']} after.\n"
+                 f"Over 5 seeds: 53.2% -> 0.0% singletons and verbatim "
+                 f"0.388 -> 0.010, at a cost of 0.032 in sound->vision recall "
+                 f"(0.831 -> 0.799).\n"
+                 f"Ranked merging alone buys verbatim 0.175 for free "
+                 f"(+0.008); driving it to zero is what costs.", fontsize=10)
+    plt.tight_layout(rect=(0, 0, 1, 0.90))
+    fig.savefig(os.path.join(out, "imag_07_merged.jpg"), dpi=110)
+    plt.close(fig)
+
+
 def panel_plane(out, comp):
     arms = comp.get("arms", {})
     if not arms:
@@ -405,6 +470,8 @@ def main():
     cs = panel_yellow_bus(args.outdir, brain, ad, images, V, y, names, assoc,
                           tr, fac.get("arms", {}))
     print(f"  panel 3 (pixel/code agreement {cs:.3f})", flush=True)
+    panel_merged(args.outdir, brain, images, V, y, names, assoc, tr, te)
+    print("  panel 7", flush=True)
     panel_plane(args.outdir, comp)
     print("  panel 4", flush=True)
     panel_ear(args.outdir, brain, waves, A, y, names, assoc, tr, te)

@@ -632,6 +632,131 @@ class AssociationArea:
             v[lo:hi] = seg
         return _unit(v)
 
+    def _retire(self, c: int) -> None:
+        """Return a merged-away cell to the uncommitted pool.
+
+        Clearing ``wins`` is not enough and the difference is a silent one.
+        :meth:`concept_from_vision` and :meth:`concept_from_sound` take an
+        ``argmax`` over **every** row, so a retired cell still holding its old
+        tuning keeps winning the read-out. Measured before this was fixed: after
+        a merge pass that left 0% singletons, the cells the read-out actually
+        returned had ``wins == 0`` and sat at cosine 1.0000 to a stored
+        photograph -- the merger had worked and nothing downstream could see it.
+
+        Re-randomising rather than zeroing, for the reason :meth:`consolidate`
+        gives: a zero row has cosine 0 to everything, which makes it a uniform
+        attractor the moment vigilance goes looking for a free cell.
+        """
+        c = int(c)
+        self.wins[c] = 0.0
+        self.mode_var[c] = 0.0
+        self.Wv[c] = _unit(self._rng.standard_normal(self.Wv.shape[1]))
+        self.Wa[c] = _unit(self._rng.standard_normal(self.Wa.shape[1]))
+
+    def absorb_singletons(self, both_senses: bool = True) -> Dict[int, int]:
+        """Force every cell that has seen exactly one thing into its best match.
+
+        :meth:`consolidate_ranked` merges the most similar pairs wherever they
+        are, and on real data the singleton fraction bottoms out near 31% under
+        it however hard the population is compressed -- once the good pairs are
+        used up the survivors are genuinely dissimilar, and merging them would
+        be arbitrary. But a singleton is exactly the cell that cannot imagine:
+        it holds one photograph verbatim, its ``mode_var`` is zero, and
+        :meth:`imagine_vision` returns that photograph at every temperature.
+
+        So this targets them by construction rather than by similarity: each
+        one-win cell is absorbed into whichever committed cell explains it best,
+        and afterwards **no cell holds a single experience**. That is a stronger
+        intervention than ranked merging and a blunter one -- it will put some
+        photographs in the wrong concept, which is why the benchmark reports
+        purity and recall beside the singleton count rather than the count
+        alone.
+        """
+        live = [int(c) for c in np.flatnonzero(self.wins > 0)]
+        singles = [c for c in live if self.wins[c] == 1]
+        hosts = [c for c in live if self.wins[c] > 1]
+        if not singles or not hosts:
+            return {}
+        merged: Dict[int, int] = {}
+        for c in singles:
+            idx = np.array([h for h in hosts if h not in merged] or hosts)
+            s = self.Wv[idx] @ self.Wv[c]
+            if both_senses:
+                s = 0.5 * (s + self.Wa[idx] @ self.Wa[c])
+            h = int(idx[int(np.argmax(s))])
+            while h in merged:
+                h = merged[h]
+            if h == c:
+                continue
+            wc, wh = self.wins[c], self.wins[h]
+            self.Wv[h] = _unit((wh * self.Wv[h] + wc * self.Wv[c]) / (wh + wc))
+            self.Wa[h] = _unit((wh * self.Wa[h] + wc * self.Wa[c]) / (wh + wc))
+            self.wins[h] = wh + wc
+            self._retire(c)
+            merged[c] = h
+        return merged
+
+    def consolidate_ranked(self, keep: float = 0.7, min_cells: int = 8,
+                           both_senses: bool = True) -> Dict[int, int]:
+        """Merge the most similar cells by **rank**, until a target count.
+
+        :meth:`consolidate` takes an absolute similarity threshold, and on real
+        data that threshold cannot be set. Measured over 111 concept cells from
+        216 CIFAR/ESC-50 pairs: the visual similarity between cells has a median
+        of −0.009 and a 99th percentile of **0.206**, so a threshold of 0.85
+        merges **zero** pairs and 0.75 merges zero, while dropping it far enough
+        to merge anything (0.1) admits 189 pairs at once. There is no value that
+        merges the right amount, because the scale is a property of the code --
+        distinct photographs are nearly orthogonal in it -- and not of how alike
+        two concepts are.
+
+        The ordering, however, is fine: the **top 100 pairs by summed similarity
+        are 82% same-category**. So this holds a *rate* rather than a
+        similarity, which is the same correction the vigilance controller
+        needed (see :meth:`_homeostasis`) -- merge the best-matching pairs in
+        order until the population has shrunk to ``keep`` of its size, whatever
+        the absolute numbers happen to be.
+
+        ``keep=0.7`` retires 30% of the cells per pass. ``both_senses`` keeps
+        :meth:`consolidate`'s requirement that the pair agree in vision *and*
+        hearing, which is what stops a dog and a cat collapsing on spectral
+        similarity alone; it is applied to the ordering rather than as a gate.
+
+        Returns ``{old_cell: surviving_cell}``, as :meth:`consolidate` does.
+        """
+        live = [int(c) for c in np.flatnonzero(self.wins > 0)]
+        target = max(int(round(len(live) * float(keep))), int(min_cells))
+        if len(live) <= target or len(live) < 2:
+            return {}
+        idx = np.array(live)
+        Sv = self.Wv[idx] @ self.Wv[idx].T
+        Sa = self.Wa[idx] @ self.Wa[idx].T
+        score = 0.5 * (Sv + Sa) if both_senses else Sv
+        iu = np.triu_indices(len(idx), 1)
+        order = np.argsort(-score[iu])
+        merged: Dict[int, int] = {}
+        n = len(live)
+        for k in order:
+            if n <= target:
+                break
+            c, d = int(idx[iu[0][k]]), int(idx[iu[1][k]])
+            # follow either side to whatever absorbed it, so a chain of merges
+            # accumulates into one survivor instead of being skipped
+            while c in merged:
+                c = merged[c]
+            while d in merged:
+                d = merged[d]
+            if c == d:
+                continue
+            wc, wd = self.wins[c], self.wins[d]
+            self.Wv[c] = _unit((wc * self.Wv[c] + wd * self.Wv[d]) / (wc + wd))
+            self.Wa[c] = _unit((wc * self.Wa[c] + wd * self.Wa[d]) / (wc + wd))
+            self.wins[c] = wc + wd
+            self._retire(d)
+            merged[d] = c
+            n -= 1
+        return merged
+
     def consolidate(self, threshold: float = 0.75) -> Dict[int, int]:
         """Merge concept cells that turned out to be the same thing.
 
