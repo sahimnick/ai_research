@@ -74,7 +74,7 @@ DREAM_NOVELTY_RATE = 0.02
 N_CAND = 12
 RANK = 256
 ARMS = ("no_dream", "stored", "crossed", "crossed_judged", "crossed_anti",
-        "reverse", "reverse_judged")
+        "reverse", "reverse_judged", "contrastive", "contrastive_x2")
 
 
 def auc(pos, neg):
@@ -122,16 +122,26 @@ def split(y, seed):
     return np.array(tr), np.array(te)
 
 
-def wake(E, T, y, tr, seed):
+def wake(E, T, y, tr, seed, rule="bind", passes=1, novelty_rate=None):
+    """Live the day. ``rule="contrastive"`` learns from the gap between what the
+    layer completes from one modality and what actually arrived, instead of from
+    co-occurrence alone -- the one mechanism the other arms turn out to lack."""
+    kw = {} if novelty_rate is None else {"novelty_rate": novelty_rate}
     a = AssociationArea(n_vis=E.shape[1], n_aud=T.shape[1],
-                        n_concept=N_CONCEPT, seed=seed)
+                        n_concept=N_CONCEPT, seed=seed, **kw)
     a.set_stats(E[tr], T[tr])
-    votes = {}
-    for i in tr:
-        w = a.bind(E[i], T[i])
-        votes.setdefault(w, {})
-        votes[w][int(y[i])] = votes[w].get(int(y[i]), 0) + 1
-    return a, votes
+    votes, errs = {}, []
+    rng = np.random.default_rng(seed + 3)
+    for _ in range(passes):
+        for i in tr:
+            if rule == "contrastive":
+                w, _, e = a.bind_contrastive(E[i], T[i], rng=rng)
+                errs.append(e)
+            else:
+                w = a.bind(E[i], T[i])
+            votes.setdefault(w, {})
+            votes[w][int(y[i])] = votes[w].get(int(y[i]), 0) + 1
+    return a, votes, (float(np.mean(errs)) if errs else 0.0)
 
 
 def probe(a, votes, E, T, y, te):
@@ -220,10 +230,38 @@ def run_seed(E, T, y, seed):
 
     # --- the night ---------------------------------------------------------
     for arm in ARMS:
-        a, votes = wake(E, T, y, tr, seed)
-        night(a, votes, E, T, y, tr, arm, fc, seed)
+        if arm.startswith("contrastive"):
+            # not a night at all: a different WAKING rule, which is where the
+            # diagnosis points. x2 gives it a second pass, since an
+            # error-driven rule has nothing to learn on the first presentation
+            # of anything (the model has made no prediction yet).
+            a, votes, err = wake(E, T, y, tr, seed, rule="contrastive",
+                                 passes=2 if arm.endswith("x2") else 1)
+            out[arm + "_error"] = err
+        else:
+            a, votes, _ = wake(E, T, y, tr, seed)
+            night(a, votes, E, T, y, tr, arm, fc, seed)
         out[arm] = probe(a, votes, E, T, y, te)
         out[arm + "_cells"] = int((a.wins > 0).sum())
+    # the fair reference for the two-pass arm: plain binding, two passes
+    a, votes, _ = wake(E, T, y, tr, seed, passes=2)
+    out["two_passes_plain"] = probe(a, votes, E, T, y, te)
+    out["two_passes_plain_cells"] = int((a.wins > 0).sum())
+
+    # Why the error-driven rule has nothing to do: a layer that MEMORISES
+    # always predicts its own training set correctly, so the prediction error
+    # it needs never arrives. Forcing fewer cells forces each to cover several
+    # experiences, which is the only way an error can exist -- so sweep it and
+    # watch the error and the rule's benefit together.
+    for nr in (0.50, 0.10, 0.02):
+        ac, vc, ec = wake(E, T, y, tr, seed, rule="contrastive", passes=2,
+                          novelty_rate=nr)
+        ab, vb, _ = wake(E, T, y, tr, seed, passes=2, novelty_rate=nr)
+        out[f"sweep_{nr}"] = dict(
+            error=ec, cells=int((ac.wins > 0).sum()),
+            pairs_per_cell=len(tr) / max(int((ac.wins > 0).sum()), 1),
+            contrastive=probe(ac, vc, E, T, y, te),
+            plain=probe(ab, vb, E, T, y, te))
     return out
 
 
@@ -281,6 +319,35 @@ def main():
     if not res["channel_open"]:
         print("  the night does not help even with real content, so the "
               "payback channel is INERT here and nothing below is readable.")
+
+    # --- the waking rule, which is where the diagnosis actually points -----
+    base2 = np.array([r["two_passes_plain"] for r in rows])
+    v2 = np.array([r["contrastive_x2"] for r in rows])
+    d2 = v2 - base2
+    sd2 = float(d2.std(ddof=1))
+    res["contrastive_vs_plain_2pass"] = dict(
+        delta=round(float(d2.mean()), 4), sd=round(sd2, 4),
+        cohens_d=round(float(d2.mean() / (sd2 + 1e-12)), 3),
+        wins=int((d2 > 0).sum()), n=len(d2))
+    p2 = res["contrastive_vs_plain_2pass"]
+    print("\n  === and the WAKING rule: prediction error instead of "
+          "co-occurrence? ===")
+    print(f"    plain binding, two passes    {base2.mean():.3f}")
+    print(f"    contrastive, two passes      {v2.mean():.3f}   "
+          f"{p2['delta']:+.4f}, d={p2['cohens_d']:+.2f}, "
+          f"{p2['wins']}/{p2['n']}")
+    print(f"    mean prediction error the rule saw: "
+          f"{float(np.mean([r['contrastive_x2_error'] for r in rows])):.3f}")
+    gate2 = p2["cohens_d"] >= 0.8 and p2["wins"] >= 0.75 * p2["n"]
+    res["contrastive_works"] = bool(gate2)
+    if gate2:
+        print("\n    -> learning from the gap between what the layer completed "
+              "and what arrived BEATS learning from co-occurrence.")
+        print("       The negative phase is the mind's own completion, so "
+              "imagination is what supplies it -- the consumer, at last.")
+    else:
+        print(f"\n    -> it does not ({p2['delta']:+.4f}, "
+              f"d={p2['cohens_d']:+.2f}, {p2['wins']}/{p2['n']}).")
 
     j, c, an = (res["arms"]["crossed_judged"], res["arms"]["crossed"],
                 res["arms"]["crossed_anti"])
@@ -355,6 +422,29 @@ def main():
               f"({s['delta']:+.4f}, d={s['cohens_d']:+.2f}). The judgement "
               f"discriminates at AUC {m('compat_auc'):.3f} and still does not "
               f"buy anything when used to choose.")
+
+    print("\n  === does an error-driven rule have anything to learn from? ===")
+    print(f"    {'novelty rate':>13}{'cells':>7}{'pairs/cell':>12}"
+          f"{'pred error':>12}{'plain':>8}{'contrastive':>13}")
+    for nr in (0.50, 0.10, 0.02):
+        k = f"sweep_{nr}"
+        e = float(np.mean([r[k]["error"] for r in rows]))
+        c = float(np.mean([r[k]["cells"] for r in rows]))
+        pc = float(np.mean([r[k]["pairs_per_cell"] for r in rows]))
+        pl = float(np.mean([r[k]["plain"] for r in rows]))
+        ct = float(np.mean([r[k]["contrastive"] for r in rows]))
+        res.setdefault("sweep", {})[str(nr)] = dict(
+            error=round(e, 4), cells=round(c, 1), pairs_per_cell=round(pc, 2),
+            plain=round(pl, 4), contrastive=round(ct, 4))
+        print(f"    {nr:>13.2f}{c:>7.1f}{pc:>12.2f}{e:>12.3f}{pl:>8.3f}"
+              f"{ct:>13.3f}")
+    lo = res["sweep"]["0.02"]["error"]
+    hi = res["sweep"]["0.5"]["error"]
+    print(f"\n    the layer's own completion is already right to within "
+          f"{hi:.3f} when it memorises ({res['sweep']['0.5']['pairs_per_cell']:.1f} "
+          f"pairs per cell).")
+    print(f"    forcing it to generalise ({res['sweep']['0.02']['pairs_per_cell']:.1f} "
+          f"pairs per cell) raises the error it can learn from to {lo:.3f}.")
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")

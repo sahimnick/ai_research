@@ -2207,9 +2207,64 @@ prediction to an outcome.
 That is the same conclusion §7.6 reached from the other end (replay into
 perception needs an external teaching signal), the same one step 15b asks for the
 world model (a learning rule, not a replay rule), and now the same one the
-imagination path arrives at. **Three independent routes, one missing mechanism**
-— which is a much better position than three separate gaps, and it is the thing
-to build next.
+imagination path arrives at. **Three independent routes, one missing mechanism.**
+
+#### So it was built — and the reason it is inert is the session's real finding
+
+`AssociationArea.bind_contrastive` is that rule: a positive phase on the real
+pair, and a negative phase on **the layer's own completion of one modality from
+the other**, sampled rather than averaged. When the completion matches what
+arrived the two phases land on the same cell and cancel — a well-predicted pair
+teaches nothing, which is the defining property instar lacks. That is
+Contrastive Hebbian Learning / wake-sleep (Hinton et al. 1995), local and
+gradient-free, and it is the version in which **imagination is the negative
+phase**: the mind's own generative samples are what the rule learns against.
+(It also explains why `unbind` on crossings was the wrong negative phase — a
+random crossing is not what the model believes, so unlearning it teaches nothing
+about the model.)
+
+It does not help either: −0.0046, d=−0.14. And the diagnostic beside it says why
+in one number. **The mean prediction error the rule ever saw was 0.054.** The
+layer's completion is already 95% correct, so the negative phase almost never
+fires and the rule degenerates into plain `bind` — 0.620 against 0.625 for plain
+binding over two passes.
+
+A layer that **memorises** always predicts its own experience correctly. Forcing
+it to generalise is exactly what creates something to learn from:
+
+| pairs per cell | prediction error | plain | contrastive |
+|---|---|---|---|
+| 1.03 — one cell per experience | **0.054** | 0.625 | 0.620 |
+| 1.81 | 0.221 | 0.602 | 0.574 |
+| 1.92 — forced to merge | **0.262** | 0.588 | 0.551 |
+
+The error signal rises **5×** when the layer is made to generalise, so the
+diagnosis is right. And accuracy falls when it does, for both rules — with 57
+training clips over 6 classes an exemplar store is simply the better recogniser,
+and there is not enough data for a generaliser to beat it. **That part is a
+scale problem, not an architecture problem**, and it is the honest limit on
+everything above.
+
+### One fact, seen from six angles
+
+Every negative in this section is the same property of the concept layer:
+
+| the finding | the fact underneath |
+|---|---|
+| 36.8% of imaginings are byte-identical memories | cells hold **single exemplars** |
+| composition's novelty is arithmetic, not conceptual | it mixes memorised points |
+| replay only ever sharpens, never learns | averaging is all there is to do |
+| a night of recombinations = a night of random sights | `bind` can only treat them as observations |
+| error-driven learning is inert (error 0.054) | a memoriser is never surprised |
+| forcing generalisation creates error (0.262) but costs accuracy | too little data to generalise |
+
+**The concept layer memorises instead of generalising, and that single fact
+produces all six.** It is a better position than six separate defects, and it
+names what to do rather than what to try: not a better imagination (built, and
+it works), not a better judge (built, 0.818 unsupervised), not a better eye
+(bounded, and it is not the blocker) — but a concept layer with enough data, and
+enough pressure to merge, that being wrong about the next thing becomes possible
+at all. Surprise is the prerequisite for learning from surprise.
 
 ---
 

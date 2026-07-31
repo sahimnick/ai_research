@@ -221,6 +221,63 @@ class AssociationArea:
         self.Wa[win] = _unit(self.Wa[win] - lr * (an - self.Wa[win]))
         return win
 
+    def bind_contrastive(self, v: np.ndarray, a: np.ndarray,
+                         temperature: float = 1.0,
+                         rng: Optional[np.random.Generator] = None
+                         ) -> Tuple[int, int, float]:
+        """Learn from the gap between what was predicted and what arrived.
+
+        :meth:`bind` compares an input to a weight. It never compares a
+        *prediction* to an *outcome*, and that is the mechanism seven arms
+        across two modalities turned out to be missing: with a front end that
+        clusters (0.788) and an unsupervised judge that discriminates (0.818),
+        no night of any content and no sign of plasticity beat doing nothing,
+        because consolidation can only sharpen the average of what it is handed.
+
+        This is the two-phase rule that does compare them, and it is the reason
+        to have an imagination at all:
+
+        * **positive phase** -- the real pair arrives, a cell wins, and it moves
+          toward the data. This is :meth:`bind`.
+        * **negative phase** -- the layer is given *one* modality and
+          **completes the other from its own model** (:meth:`imagine_from_sound`,
+          sampled rather than averaged). A cell wins on that fantasy, and it
+          moves *away* from it.
+
+        When the completion matches what really arrived, the two phases land on
+        the same cell and cancel: a well-predicted pair teaches nothing, which is
+        the defining property of an error-driven rule and the one instar does not
+        have. When they differ, the layer is pushed toward the world and away
+        from its own fantasy, by exactly the amount it was wrong.
+
+        That is Contrastive Hebbian Learning / the wake-sleep decomposition
+        (Hinton et al. 1995), which is local, needs no gradients, and is the
+        standard non-backprop account of error-driven cortical plasticity. The
+        negative sample has to come from **the model's own generative
+        distribution** -- this is why an earlier attempt with arbitrary
+        recombinations (:meth:`unbind` on crossings) was the wrong negative
+        phase and behaved like noise: a random crossing is not what the model
+        believes, so unlearning it teaches nothing about the model.
+
+        Returns ``(positive cell, negative cell, prediction error)``, the last
+        being ``1 - cos`` between the completion and what arrived, so a caller
+        can see how much was actually learned.
+        """
+        vn, an = self.prep_v(v), self.prep_a(a)
+        win_p = self.bind(v, a)                       # positive phase
+
+        v_hat = self.imagine_from_sound(a, temperature=temperature, rng=rng)
+        err = float(1.0 - float(v_hat @ vn))
+        win_n = int(np.argmax(self.match(v_hat, an)))
+        if win_n != win_p:
+            # only where the model disagrees with the world is there anything
+            # to unlearn; agreement cancels, which is the point of the rule
+            self.Wv[win_n] = _unit(self.Wv[win_n]
+                                   - self.lr * (v_hat - self.Wv[win_n]))
+            self.Wa[win_n] = _unit(self.Wa[win_n]
+                                   - self.lr * (an - self.Wa[win_n]))
+        return win_p, win_n, err
+
     def _homeostasis(self, recruited: int) -> None:
         """Drift ``vigilance`` toward a target rate of category creation.
 
