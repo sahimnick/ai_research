@@ -1556,6 +1556,76 @@ chance and the conclusion would have been "invariance is not the missing
 property". Giving the object a 48×48 frame to move in is what made it a
 translation test rather than an occlusion test.
 
+### The assembled mind, finally on photographs
+
+Ten benchmarks in this project use real photographs and recordings. Eleven use
+the assembled `UnifiedMind` — episodes, `watch`, `dream`, the transition model
+`_T`, the acceptance gate. **The overlap was zero.** Every conclusion about
+replay and the world model was drawn on handwriting; every conclusion about real
+sensation was drawn with none of that machinery attached.
+
+It was a wall rather than an oversight. `build_unified_mind` loaded MNIST inside
+itself, seeded a counting curriculum 0→1→…→9, hard-coded ten digit cues, and
+`perceive` reshaped its input to `(1, 28, 28)`. `build_mind_on` takes the data as
+an argument and drops the two digit-specific parts: the counting prior, because
+"after 3 comes 4" means nothing between a cat and an airplane, and the fixed ten
+cues.
+
+**Four hard-codings, each of which failed silently rather than raising.** They
+are worth listing because every one produced an exact zero that reads like a
+scientific result:
+
+* `perceive` reshaping to `(1, 28, 28)` — `contrast_normalise` flattens anyway,
+  so `(1, -1)` was always correct.
+* `perceive` returning `str(int(label))` while the pallium, workspace and world
+  model were keyed by *names*. A mind whose memory says "cat" and whose
+  perception says "3" scores **exactly 0.000** on every cross-store probe.
+* `_replay_into_perception` doing `int(label)` inside a `try` and returning on
+  failure. With named concepts that is a silent no-op: detection was frozen at
+  +0.0000 **at every learning rate**, including 20× the one §7.7 needed.
+* `p.size != 784`, and a `(2000, 28, 28)` noise batch in the recogniser's
+  don't-know calibration.
+
+And one measurement bug of mine: I reported `_T` as "100 of 100 entries before
+and after" and read it as saturation. `_grow_T` initialises every entry to 0.05,
+so the nonzero count is n² before any experience and cannot show learning at all.
+Mean normalised row-max does.
+
+With those fixed, the mind runs on photographs:
+
+| | value | reference |
+|---|---|---|
+| episodes laid down per day | 180 | — |
+| world-model sharpness | **0.393** | 0.100 if uniform |
+| distinct surprise values | 79 | 2 in the original defect |
+| detection | 0.129 | chance 0.100 |
+| recall (1-NN) | 0.196 | chance 0.100 |
+
+**What replay does here, against what it did on digits:**
+
+| metric | delta | d | wins |
+|---|---|---|---|
+| detection | +0.0087 | 0.25 | 2/4 |
+| world model | **+0.0000** | 0.00 | 0/4 |
+| recall 1-NN | +0.0030 | 0.63 | 3/4 |
+
+Detection now *moves* — the wire that the third hard-coding had cut is connected,
+and the exact zero is gone. It is small and unreliable, but it is no longer
+structural.
+
+The world model is the real result, and it is negative: **the +14.6 point gain
+§7 measured on digits does not transfer.** The obvious explanation — that MNIST's
+counting curriculum supplied a wrong prior for replay to correct, and this mind
+has none — was tested and **refuted**: giving the photograph mind an equally
+arbitrary prior makes replay *worse*, not better (−0.0101 at 10 repetitions,
+−0.0065 at 40).
+
+What is left is upstream. The world model is built out of percepts, and the eye
+names photographs at 0.129 against 0.559 for digits. Replaying a sequence of
+mostly-wrong percepts cannot sharpen anything, however good the replay
+machinery is. §7's world-model result was real and **conditional on perception
+working** — a condition digits met and photographs do not.
+
 ### The imagining has to be anchored to something real
 
 The goal asks for an *infinite* inner world — new percepts and concepts made

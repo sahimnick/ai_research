@@ -246,6 +246,26 @@ class DigitRecognizer:
     ood_thresh: float = 0.0
 
 
+def build_recognizer(trx: np.ndarray, trY: np.ndarray, tex: np.ndarray,
+                     teY: np.ndarray, vigilance: float = 0.65,
+                     epochs: int = 2, verbose: bool = False) -> DigitRecognizer:
+    """The same self-taught recogniser, on **whatever images it is given**.
+
+    :func:`build_digit_recognizer` loads MNIST itself, which made every mind
+    built on top of it a mind that could only see digits. Nothing in the
+    mechanism cares: `contrast_normalise` flattens, and `GrowingCategoryMap`
+    grows categories from whatever dimension arrives. Splitting the data out of
+    the builder is what lets the assembled mind meet a photograph.
+    """
+    def say(*a):
+        if verbose:
+            print(*a)
+
+    Xtr, Xte = contrast_normalise(trx), contrast_normalise(tex)
+    return _fit_recognizer(Xtr, trY, Xte, teY, vigilance, epochs, say,
+                           in_shape=trx.shape[1:])
+
+
 def build_digit_recognizer(n_train: int = 15000, vigilance: float = 0.65,
                            epochs: int = 2, verbose: bool = False
                            ) -> DigitRecognizer:
@@ -259,6 +279,12 @@ def build_digit_recognizer(n_train: int = 15000, vigilance: float = 0.65,
     trx, trY, tex, teY = load_mnist(n_train=n_train)
     Xtr, Xte = contrast_normalise(trx), contrast_normalise(tex)
 
+    return _fit_recognizer(Xtr, trY, Xte, teY, vigilance, epochs, say,
+                           in_shape=trx.shape[1:])
+
+
+def _fit_recognizer(Xtr, trY, Xte, teY, vigilance, epochs, say, in_shape):
+    """Shared body: grow categories, name them for scoring, set a don't-know."""
     say("growing categories with no labels (competitive Hebbian) ...")
     cortex = GrowingCategoryMap(Xtr.shape[1], vigilance=vigilance).train(
         Xtr, epochs=epochs)
@@ -274,7 +300,8 @@ def build_digit_recognizer(n_train: int = 15000, vigilance: float = 0.65,
     # "don't know": a threshold below the bulk of real-digit matches; non-digits
     # (random noise) should fall under it and be rejected
     thresh = float(np.percentile(sim_te, 5))
-    noise = np.random.default_rng(0).random((2000, 28, 28)).astype(np.float32) * 255
+    noise = np.random.default_rng(0).random(
+        (2000,) + tuple(in_shape)).astype(np.float32) * 255
     _, sim_noise = cortex.best(contrast_normalise(noise))
     ood_reject = float((sim_noise < thresh).mean())
 

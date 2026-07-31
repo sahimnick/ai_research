@@ -63,6 +63,13 @@ class UnifiedMind:
     attention_gain: float = 0.6
     last_percept: Optional[str] = None         # for the surprise signal
     learn_transitions: bool = True   # lived percept order writes the world model
+    # What the mind calls its categories. Empty means it calls them by index,
+    # which is what a digit mind does and what every version of this class did.
+    # It matters because the pallium, the workspace and the world model are all
+    # keyed by the SAME string `perceive` returns: build a mind whose memory
+    # says "cat" while its perception says "3" and every cross-store probe
+    # reads exactly 0.000 -- not a weak effect, a vocabulary mismatch.
+    concept_names: Optional[List[str]] = None
     # v0.17: the agent is not only a world model
     causal: object = None          # CausalWorldGraph -- objects, relations, causes
     self_model: object = None      # SelfModel -- body, capability, agency
@@ -76,6 +83,39 @@ class UnifiedMind:
     attention_benefit: float = 0.0
     causal_accuracy: float = 0.0       # effects predicted for UNSEEN objects
     self_accuracy: float = 0.0         # "can this body do it?" judgements
+
+    def concept_name(self, label: int) -> str:
+        """What this mind calls category ``label``.
+
+        Not ``name_of`` -- that name is already taken further down by a method
+        that maps a *code* to a concept, and defining a second one silently
+        replaced it, so ``perceive`` started calling the code-lookup with an
+        integer. A collision inside one class body raises nothing and shadows
+        quietly, which is why it is worth a sentence here."""
+        if self.concept_names and 0 <= label < len(self.concept_names):
+            return str(self.concept_names[label])
+        return str(int(label))
+
+    def label_index(self, name: object) -> Optional[int]:
+        """The integer category behind a concept name -- the inverse of
+        :meth:`concept_name`.
+
+        It exists because ``_replay_into_perception`` did ``int(label)`` inside
+        a ``try`` and returned silently on failure. That is correct for a mind
+        whose concepts are called "0".."9" and a silent no-op for one whose
+        concepts are called "cat" and "airplane": replay into perception did
+        nothing at all, at every learning rate, and reported exactly +0.0000
+        rather than an error."""
+        try:
+            return int(name)
+        except (TypeError, ValueError):
+            pass
+        if self.concept_names:
+            try:
+                return list(self.concept_names).index(str(name))
+            except ValueError:
+                return None
+        return None
 
     # -- attention: a standing part of the loop ------------------------------
     def attend(self, concept: Optional[str]) -> None:
@@ -95,9 +135,12 @@ class UnifiedMind:
         Pass ``remember=False`` for a probe you do not want the day to
         remember -- scoring a test set, or re-perceiving something the mind
         just imagined."""
+        # reshape(1, -1), not reshape(1, 28, 28): `contrast_normalise` flattens
+        # anyway, and the hard-coded 28x28 was the first of three places this
+        # mind was nailed to MNIST. A photograph is 32x32 and in colour.
         lab = self.vision.cortex.recognise(
-            image.reshape(1, 28, 28).astype(np.float32), 0.0)[0]
-        concept = str(int(lab))
+            np.asarray(image, np.float32).reshape(1, -1), 0.0)[0]
+        concept = self.concept_name(int(lab))
         if remember:
             self._record_episode(image, concept)
         return concept
@@ -425,9 +468,11 @@ class UnifiedMind:
             return
         from ..sensing.realworld import contrast_normalise
         p = np.asarray(pattern, np.float32).ravel()
-        if p.size != 784:
+        # against the cortex's own input width, not a hard-coded 784 -- the same
+        # MNIST assumption that made `perceive` reshape to (1, 28, 28)
+        if len(cx.W) and p.size != cx.W.shape[1]:
             return
-        xn = contrast_normalise((p * 255.0).reshape(1, 28, 28))[0]
+        xn = contrast_normalise((p * 255.0).reshape(1, -1))[0]
         n_before = len(cx.W)
         # Do the instar step here rather than calling cx.learn, because
         # cx.learn applies the WAKING rate (0.1). Consolidation is meant to be
@@ -446,9 +491,8 @@ class UnifiedMind:
         # produced the identical number: the label was never read. Restricting
         # the competition to cells of the taught class is what lets an outside
         # signal actually teach (LVQ-style, still a local instar step).
-        try:
-            lab = int(label)
-        except (TypeError, ValueError):
+        lab = self.label_index(label)
+        if lab is None:
             return
         own = np.where(cx.cell_label == lab)[0] if getattr(
             cx, "cell_label", None) is not None else np.arange(len(W))
@@ -504,6 +548,87 @@ class UnifiedMind:
                 self.space.experience(seq)
             except Exception:
                 return
+
+
+def build_mind_on(trx, trY, tex, teY, names=None, n_pallium: int = 2000,
+                  vigilance: float = 0.65, cue_dim: int = 256,
+                  verbose: bool = False, seed: int = 0):
+    """The same assembled mind, on **whatever world it is given**.
+
+    :func:`build_unified_mind` loads MNIST inside itself, seeds a counting
+    curriculum 0->1->...->9, and builds ten digit cues. Every one of those is a
+    fact about digits rather than about minds, and together they meant the
+    episodic buffer, `watch`, `dream` and the transition model `_T` had never
+    met anything but handwriting -- ten benchmarks in this project use real
+    photographs and recordings, eleven use the assembled mind, and until now the
+    overlap was **zero**.
+
+    Nothing in the mechanism needed digits. `contrast_normalise` flattens,
+    `GrowingCategoryMap` grows categories from any dimension, and the world
+    model learns transitions from whatever order the eye chose. So this takes
+    the data as an argument and drops the two things that were digit-specific:
+
+    * **no counting curriculum.** "After 3 comes 4" is a real relation between
+      digits and a meaningless one between a cat and an airplane. The world
+      model starts empty and is written only by lived transitions, which is what
+      `learn_transitions` was built for.
+    * **one cue per class, however many classes there are**, rather than ten.
+
+    What is deliberately kept is everything that makes it the same mind: the
+    pallium of exemplars, the shared workspace, the episodic buffer, the
+    surprise signal, and the relational and self models. A comparison against
+    the MNIST numbers is only meaningful if the machinery is identical.
+    """
+    from ..sensing.realworld import build_recognizer
+    from ..memory.psyche import MentalSpace
+    from ..cognition.analogy import RelationalMind
+    from ..world.objects import build_causal_world
+    from ..cognition.selfmodel import build_self_model
+    from ..memory.development import EpisodicBuffer
+    from ..workspace import GlobalWorkspace
+
+    def say(*a):
+        if verbose:
+            print(*a)
+
+    classes = sorted({int(v) for v in trY})
+    names = names or [str(c) for c in classes]
+    say(f"perception: growing categories on {len(trx)} real images, "
+        f"{len(classes)} classes ...")
+    recog = build_recognizer(trx, trY, tex, teY, vigilance=vigilance,
+                             verbose=verbose)
+
+    rng = np.random.default_rng(seed)
+    space = MentalSpace()
+    cue = {c: np.zeros(cue_dim, np.float32) for c in classes}
+    for c in classes:
+        cue[c][rng.choice(cue_dim, max(4, cue_dim // 11), replace=False)] = 1.0
+    flat = trx.reshape(len(trx), -1).astype(np.float32) / 255.0
+    for c in classes:                      # the concept memory: cue <-> mean look
+        m = flat[trY == c]
+        if len(m):
+            space.remember(names[c], image=m[:60].mean(0), cue=cue[c])
+    pick = rng.choice(len(flat), min(n_pallium, len(flat)), replace=False)
+    for i in pick:                         # and a store of individual exemplars
+        space.remember(names[int(trY[i])], image=flat[i], cue=cue[int(trY[i])])
+
+    reasoner = RelationalMind(seed=seed)
+    causal = build_causal_world()
+    self_model, _ = build_self_model()
+    ws = GlobalWorkspace(dim=512, vigilance=0.30, seed=seed)
+    for c in classes:
+        for i in np.where(trY == c)[0][:40]:
+            ws.bind(names[c], vision=flat[i], cue=cue[c])
+
+    mind = UnifiedMind(recog, space, reasoner, {c: cue[c] for c in classes},
+                       causal=causal, self_model=self_model,
+                       episodes=EpisodicBuffer(), ws=ws,
+                       learn_transitions=True, concept_names=list(names))
+    mind.perceive_accuracy = float(np.mean(
+        [mind.perceive(tex[i], remember=False) == names[int(teY[i])]
+         for i in range(min(400, len(tex)))]))
+    say(f"   perceive accuracy on held-out: {mind.perceive_accuracy:.3f}")
+    return mind
 
 
 def build_unified_mind(n_pallium: int = 4000, verbose: bool = False,
