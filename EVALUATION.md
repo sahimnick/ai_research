@@ -2074,6 +2074,24 @@ it cannot see clearly. **The eye is the whole project's critical path**, and
 §7.8's step 13 — which has been open the entire time — is not one item among
 several any more. It is the only one whose resolution unblocks the rest.
 
+**One candidate for that, tested and rejected.** The mind evidently *has* a
+clustered representation somewhere — `sound → vision` works at 0.775 while raw
+sight similarity sits at chance — and the obvious place to look is the
+population code over its own concept cells, which is what cortex would read
+rather than the 12288-d input. Measured (same-category vs different-category
+similarity, 3 seeds): raw code 0.497 / 0.592 / 0.609, concept profile 0.561 /
+0.547 / 0.612. A wash. Sharpening the profile with kWTA(8), which is the project's
+own move everywhere else, is **worse than chance** — 0.362 / 0.382 / 0.433.
+
+That last number is the informative one. Below chance means two photographs of
+the same category activate *more disjoint* concept sets than two photographs of
+different categories, which is what an exemplar-based layer does: the cells
+partition a category's members, so a fresh member matches one sub-cluster and a
+stored member of the same category usually belongs to another. It is the same
+fact as the 59 singleton cells, seen from the read-out side. The clustering that
+makes `sound → vision` work lives in the *averaging* inside `Wv`, not in any
+code the layer can hand to something else.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
