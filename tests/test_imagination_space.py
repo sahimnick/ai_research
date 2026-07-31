@@ -91,3 +91,48 @@ def test_composite_of_nothing_is_not_a_crash():
     out = a.imagine_composite([], temperature=1.0)
     assert out.shape == (a.Wv.shape[1],)
     assert not np.any(np.isnan(out))
+
+
+def _span_residual(q, B):
+    """How much of ``q`` the row space of ``B`` cannot explain."""
+    _, s, Vt = np.linalg.svd(B, full_matrices=False)
+    R = Vt[s > s.max() * 1e-6]
+    r = q - (q @ R.T) @ R
+    return float(np.linalg.norm(r) / max(np.linalg.norm(q), 1e-9))
+
+
+def test_mixing_whole_codes_cannot_leave_the_span():
+    """The ceiling `composition.py` measured, as the algebra it comes from.
+
+    Every mixing and sampling operation is a weighted sum of stored vectors, so
+    its output is in their span by construction and no temperature escapes it.
+    If this ever fails, a mechanism gained a source of variation that is not a
+    stored code -- which would be a real result, and should be a deliberate one.
+    """
+    a, V, A = _area(n_concept=16)
+    cells = [a.bind(V[i], A[i]) for i in range(10)]
+    B = np.stack([a.prep_v(v) for v in V])
+    rng = np.random.default_rng(3)
+    for q in (a.imagine_vision(cells[0], temperature=0.0),
+              a.imagine_vision(cells[0], temperature=16.0, rng=rng),
+              a.imagine_composite(cells[:3], temperature=8.0, rng=rng)):
+        assert _span_residual(q, B) < 1e-5
+
+
+def test_crossing_factors_does_leave_the_span():
+    """And the one operation that does -- because it is not a sum at all."""
+    a, V, A = _area(n_concept=16)
+    cells = [a.bind(V[i], A[i]) for i in range(10)]
+    assert len(set(cells)) > 1
+    B = np.stack([a.prep_v(v) for v in V])
+    d = a.Wv.shape[1]
+    blocks = [(0, d // 2), (d // 2, d)]
+    crossed = a.imagine_factored([cells[0], cells[1]], blocks, temperature=0.0)
+    assert _span_residual(crossed, B) > 1e-3, (
+        "crossing two concepts' blocks stayed inside the span of memory")
+    # and the control: the same slicing from ONE cell is just that cell again,
+    # so the escape has to be the crossing rather than the slicing
+    same = a.imagine_factored([cells[0], cells[0]], blocks, temperature=0.0)
+    assert _span_residual(same, B) < 1e-5
+    assert np.allclose(same, a.Wv[cells[0]] /
+                       np.linalg.norm(a.Wv[cells[0]]), atol=1e-5)

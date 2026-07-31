@@ -478,6 +478,53 @@ class AssociationArea:
             v = (1.0 - anchor_weight) * _unit(v) + anchor_weight * a
         return _unit(v)
 
+    def imagine_factored(self, cells: Sequence[int],
+                         bounds: Sequence[Tuple[int, int]],
+                         temperature: float = 0.0,
+                         rng: Optional[np.random.Generator] = None
+                         ) -> np.ndarray:
+        """Take each **factor** of the code from a different concept.
+
+        :meth:`imagine_composite` mixes whole codes, and that is why it cannot
+        invent: every output is a weighted sum of stored vectors, so it lies in
+        their span by construction and no temperature leaves it. Measured, the
+        novelty it reaches is the arithmetic of averaging *k* near-orthogonal
+        codes and nothing more.
+
+        Recombining *parts* is a different operation, and the difference is
+        algebraic rather than a matter of degree. With ``Wv[A] = [f_A, c_A]``
+        and ``Wv[B] = [f_B, c_B]``, the recombination ``[f_A, c_B]`` satisfies
+
+            alpha * [f_A, c_A] + beta * [f_B, c_B] = [f_A, c_B]
+
+        only if ``alpha = 1, beta = 0`` from the first block and
+        ``alpha = 0, beta = 1`` from the second -- a contradiction. **It is not
+        in the span of the concepts it was built from**, and generically not in
+        the span of the whole stored bank either. That is the one thing every
+        mixing and sampling operation in this class provably cannot do.
+
+        The factors have to be real ones for this to mean anything, and here
+        they are: the eye emits ``[luminance | red-green | blue-yellow]``
+        concatenated (see `benchmarks/real_binding.py:opponent`), so form and
+        colour already occupy disjoint blocks of the code. Taking the form of a
+        bus with the colour of something that was never bus-shaped is the
+        "yellow bus" case -- a combination the world never presented.
+
+        ``bounds[k]`` is the ``(start, stop)`` block that ``cells[k]`` supplies.
+        Blocks should tile the code; anything left uncovered stays zero.
+        """
+        v = np.zeros(self.Wv.shape[1], np.float32)
+        for c, (lo, hi) in zip(cells, bounds):
+            c = int(c)
+            seg = self.Wv[c, lo:hi].copy()
+            if temperature > 0 and self.n_modes > 0:
+                rng = rng or self._rng
+                z = rng.standard_normal(self.n_modes).astype(np.float32)
+                s = np.sqrt(np.maximum(self.mode_var[c], 0.0))
+                seg = seg + temperature * ((z * s) @ self.Pv[c])[lo:hi]
+            v[lo:hi] = seg
+        return _unit(v)
+
     def consolidate(self, threshold: float = 0.75) -> Dict[int, int]:
         """Merge concept cells that turned out to be the same thing.
 

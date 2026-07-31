@@ -117,8 +117,15 @@ def run_seed(V, A, y, n_cls, seed):
         fid_T = (M @ Btr.T).max(1)
         coh_T = np.array([int(np.argmax(protos_all @ M[k])) == int(y[i])
                           for k, i in enumerate(te)], float)
+        # The mean alone would say "almost verbatim" about a population that is
+        # really two populations. Split it: the fraction that is bit-identical
+        # to something stored, and where the rest actually sit.
+        ex = fid_T > 0.999
         per_temp[T] = dict(fidelity=float(fid_T.mean()),
-                           coherence=float(coh_T.mean()))
+                           coherence=float(coh_T.mean()),
+                           verbatim=float(ex.mean()),
+                           fidelity_rest=float(fid_T[~ex].mean())
+                           if (~ex).any() else float("nan"))
     imagined = np.asarray([assoc.imagine_vision(c, temperature=0.0)
                            for c in cells], np.float32)
 
@@ -186,15 +193,19 @@ def main():
           f"concept cells")
 
     # -- can sampling the concept's own variation make it novel AND right? --
-    print(f"\n{'temperature':<14}{'fidelity':>10}{'coherence':>11}   "
+    print(f"\n{'temperature':<12}{'fidelity':>10}{'coherence':>11}"
+          f"{'verbatim':>10}{'rest':>8}   "
           f"(real photograph: fidelity {m['real_fidelity']:.3f})")
     tt = {}
     for T in TEMPERATURES:
         f = float(np.mean([r["per_temp"][T]["fidelity"] for r in rows]))
         c = float(np.mean([r["per_temp"][T]["coherence"] for r in rows]))
-        tt[T] = dict(fidelity=round(f, 4), coherence=round(c, 4))
+        v = float(np.mean([r["per_temp"][T]["verbatim"] for r in rows]))
+        rst = float(np.mean([r["per_temp"][T]["fidelity_rest"] for r in rows]))
+        tt[T] = dict(fidelity=round(f, 4), coherence=round(c, 4),
+                     verbatim=round(v, 4), fidelity_rest=round(rst, 4))
         mark = "  <- novel as a real sight" if f <= m["real_fidelity"] else ""
-        print(f"{T:<14.1f}{f:>10.3f}{c:>11.3f}{mark}")
+        print(f"{T:<12.1f}{f:>10.3f}{c:>11.3f}{v:>10.3f}{rst:>8.3f}{mark}")
     res["temperature"] = tt
     ok = [T for T in TEMPERATURES
           if tt[T]["fidelity"] <= m["real_fidelity"] and tt[T]["coherence"] >= 0.5]
@@ -209,13 +220,27 @@ def main():
         print(f"\n  no temperature is both novel and coherent. The furthest "
               f"from memory is T={best} at {tt[best]['fidelity']:.3f}, "
               f"coherence {tt[best]['coherence']:.3f}.")
-        print("  Sampling the learned subspace does not escape the average.")
+        print("  Sampling the learned subspace does not escape the span of "
+              "what is stored.")
     res["imagination_passes"] = bool(ok)
 
     print("\n=== does it imagine? ===")
     verdicts = []
+    vb = float(np.mean([r["per_temp"][0.0]["verbatim"] for r in rows]))
+    rest = float(np.mean([r["per_temp"][0.0]["fidelity_rest"] for r in rows]))
+    res["verbatim_fraction"] = round(vb, 4)
+    res["fidelity_excluding_verbatim"] = round(rest, 4)
     if m["fidelity"] > 0.95:
-        verdicts.append("no -- it replays a stored sight almost verbatim")
+        # Not "it replays a stored sight almost verbatim" -- 0.979 is a mean
+        # over two populations and that phrasing overstates what it covers.
+        # Say which is which.
+        verdicts.append(
+            f"no -- {vb:.1%} of what it produces is bit-identical to a stored "
+            f"photograph (cosine > 0.999); the rest sits at {rest:.3f}. The "
+            f"mean {m['fidelity']:.3f} is that mixture, not a uniform near-copy. "
+            f"Either way the generated representation stays far closer to "
+            f"memory than a real unseen observation does "
+            f"({m['real_fidelity']:.3f}).")
     elif m["fidelity"] > m["real_fidelity"]:
         verdicts.append(
             f"no -- what it imagines is CLOSER to memory ({m['fidelity']:.3f}) "
@@ -227,10 +252,18 @@ def main():
             f"({m['fidelity']:.3f}) than a real photograph is "
             f"({m['real_fidelity']:.3f})")
     if m["to_prototype"] > m["real_to_prototype"] + 0.05:
+        # "is a class average" is one step further than the measurement goes.
+        # What is measured is that the output sits closer to the class centre
+        # than real members of the class do -- which a centroid, a manifold
+        # centre or a learned attractor all satisfy. And it cannot be an average
+        # for the cells that won once: those hold a single exemplar. So the
+        # population is prototype-LIKE in aggregate and literally bimodal
+        # underneath. Claim the behaviour, not the identity.
         verdicts.append(
-            f"what it produces is a class AVERAGE: closer to the prototype "
-            f"({m['to_prototype']:.3f}) than a real member of the class is "
-            f"({m['real_to_prototype']:.3f})")
+            f"it behaves like a learned class PROTOTYPE: {m['to_prototype']:.3f} "
+            f"to its class centre against {m['real_to_prototype']:.3f} for a "
+            f"real member -- prototype-like, though not necessarily an average "
+            f"(a cell that won once holds one exemplar, not a mean of several)")
     if m["hull_residual"] < 0.2:
         verdicts.append(
             f"it stays inside the convex hull of what it has seen "

@@ -47,6 +47,7 @@ PYTHONPATH=. python3 benchmarks/translation.py       out_translation.json
 PYTHONPATH=. python3 benchmarks/real_mind.py         out_real_mind.json
 PYTHONPATH=. python3 benchmarks/real_time.py         out_real_time.json
 PYTHONPATH=. python3 benchmarks/composition.py       out_composition.json
+PYTHONPATH=. python3 benchmarks/factored.py          out_factored.json
 ```
 
 | script | question | key control |
@@ -66,6 +67,7 @@ PYTHONPATH=. python3 benchmarks/composition.py       out_composition.json
 | `real_mind.py` | Does the assembled mind behave the same on photographs? | the same arms and probes as `acceptance.py`, so the two tables can be read against each other |
 | `real_time.py` | Is perception what gates the world model? | one **shared** day across all three arms; distinct-percept count beside every self-consistency score, since a collapsed perceiver predicts itself at 1.000 |
 | `composition.py` | Does combining concepts imagine? | *k* stored photographs averaged with **no concept layer** — mixing *k* near-orthogonal codes is 1/√k novel by arithmetic alone; plus a chimera arm that exists to catch the metric being gamed from below |
+| `factored.py` | Can it produce anything memory cannot assemble? | the **span residual**, not a cosine — exactly 0 means a linear combination of things already seen; plus a same-cell control proving the escape is the *crossing* and not the slicing |
 
 ## What each script measures
 

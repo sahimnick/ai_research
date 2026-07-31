@@ -1388,12 +1388,22 @@ held-out sounds, 5 seeds:
 
 **What it imagines is 4.8× closer to memory than opening its eyes is.** That is
 the decisive number. If perception is more novel than imagination, imagination
-is the wrong word: nothing is being invented, a stored average is being replayed.
-The second row says the same thing from the other side — the produced code sits
-3.6× closer to the class mean than a real member of that class does, which is
-what an average looks like and not what a cat looks like. The third says it stays
-further *inside* the convex hull of experience than a real photograph does, so
-it interpolates and never extrapolates.
+is the wrong word: nothing is being invented, something stored is being replayed.
+
+That first row is a **mean over two populations** and saying "almost verbatim"
+about it would overstate what it covers. Split: **36.8% is bit-identical** to a
+stored photograph (cosine > 0.999) and the rest sits at 0.967. Both halves are
+far closer to memory than a real unseen observation (0.203); they are not the
+same failure.
+
+The second row says the produced code sits 3.6× closer to the class centre than
+a real member of that class does. The defensible claim there is that it
+**behaves like a learned class prototype** — a centroid, a manifold centre and a
+learned attractor all produce that signature, and the measurement does not
+separate them. It is specifically *not* "a class average": a cell that won once
+holds one exemplar, not a mean of several, and that is a third of them. The
+third row says it stays further *inside* the convex hull of experience than a
+real photograph does, so it interpolates and never extrapolates.
 
 And the inner world is not infinite. Over 144 held-out sounds it produces **59
 effectively distinct imaginings — 5.88 bits** — from 112 concept cells. That is
@@ -1845,6 +1855,70 @@ code: composition over *parts* rather than whole codes, or a generative step
 that is not a weighted sum. That is the next thing to build, and it is now a
 specific requirement rather than a wish.
 
+### A yellow bus: the first thing this project builds that memory cannot assemble
+
+The ceiling above has an algebraic cause, and naming it supplies the way past it.
+Every way this architecture had of imagining — reading a concept's mean, sampling
+its subspace, mixing concepts, anchoring to a percept — is a **weighted sum of
+stored vectors**, and sums of stored vectors lie in the span of stored vectors.
+So the right instrument is not cosine to the nearest memory but the residual
+after projecting onto the span of everything stored: **exactly zero means the
+code is a linear combination of things already seen**, whatever the cosines say.
+
+`benchmarks/factored.py`, 5 seeds, same 360 real pairs. The stored bank spans a
+**215-dimensional** subspace of 12288.
+
+| arm | span residual | in span | whole-code reads | **form block reads** | took donor's colour |
+|---|---|---|---|---|---|
+| a stored code | 0.0000 | 1.000 | 0.135 | 0.135 | — |
+| the concept mean | **0.0000** | **1.000** | 0.831 | 0.660 | — |
+| sampled T=4 | **0.0000** | **1.000** | 0.571 | 0.465 | — |
+| composed T=4 | **0.0000** | **1.000** | 0.579 | 0.493 | — |
+| **factored (form + donor colour)** | **0.5287** | **0.000** | 0.261 | **0.660** | 1.000 |
+| *control:* both blocks, same cell | 0.0000 | 1.000 | 0.831 | 0.660 | 0.000 |
+| a real unseen photograph | 0.8298 | 0.000 | 0.361 | 0.361 | — |
+| gaussian noise | 0.9912 | 0.000 | 0.176 | 0.163 | — |
+
+**Every mixing and sampling arm scores exactly 0.000 and is in the span 100% of
+the time.** That is `composition.py`'s ceiling stated as what it actually is —
+not "hard to escape" but *provably impossible*, confirmed numerically to six
+decimal places. No parameter of those mechanisms was ever going to matter.
+
+#### What crossing factors does instead
+
+The eye's code was already factored and nobody had used it: `rate()` concatenates
+the three retinal opponent channels, so `V = [luminance | red-green | blue-yellow]`
+and **form and colour occupy disjoint blocks**. With `Wv[A] = [f_A, c_A]` and
+`Wv[B] = [f_B, c_B]`, the recombination `[f_A, c_B]` is in `span{A, B}` only if
+one scalar is both 1 and 0. It is not a sum, so the ceiling does not apply.
+
+Measured: **residual 0.5287, outside the span in 100% of cases**, at 64% of a
+real unseen photograph's residual. The control settles that this is the
+*crossing* and not the slicing — rebuilding both blocks from the **same** cell
+returns residual exactly 0.0000 and reproduces that cell bit for bit.
+
+And it is not damage. The whole-code read-out falls 0.831 → 0.261, but that
+read-out is looking at a code whose two chromatic blocks now belong to a
+different object, so it charges the recombination for its own confusion. Asked
+of the form block alone, the recombination reads **0.660 — identical to the
+concept mean's 0.660**. The form is untouched; only the colour changed, which
+is the entire intent. It clears the coherence floor `composition.py` imposed
+(0.660 against real data's 0.361), which the chimera arm did not.
+
+So: **a code the world never presented, that memory cannot assemble, that the
+mind still reads as its own object.** A bus that is yellow. It is the first
+construction in this project that is novel in the strong sense rather than the
+cosine sense, and the mechanism is four lines of slicing — the representation
+had been factored all along.
+
+What this does **not** yet do, stated so the claim stays the size of the
+evidence: the recombination is a *sight*, not a hypothesis. There is no causal
+model saying which crossings are possible, no constraint on the result, and
+nothing consumes it — a bus with a frog's colour and a bus with a bird's colour
+are equally available and equally unjudged. Leaving the span was the blocking
+problem, and it is solved; choosing *which* point outside the span is worth
+imagining is the next one, and it is what a world model would be for.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
@@ -1951,10 +2025,14 @@ Ordered by what unblocks the goal, not by difficulty.
     **Nothing self-generated exceeds novelty 0.389 against real data's 0.797**,
     because mixing and sampling are both linear operations on stored vectors.
 
-    So the next move is no longer a metric question, it is a mechanism
-    requirement: a source of variation that is **not a weighted sum of stored
-    codes** — composition over *parts* (a cell assembled from features that
-    never co-occurred) rather than over whole codes. Sampling the concept instead of the episode — the
+    That requirement — a source of variation that is **not a weighted sum of
+    stored codes** — has since been met. Recombining *factors* rather than whole
+    codes (the eye already emits form and colour in disjoint blocks) produces a
+    span residual of 0.5287 where every mixing arm produces exactly 0.000, at
+    64% of a real photograph's residual, with the form block reading identically
+    to the concept mean. See "A yellow bus" above. What remains open is not
+    novelty any more but *selection*: nothing yet says which of the available
+    crossings is worth imagining. Sampling the concept instead of the episode — the
     "infinite inner world" version — was tried and *degrades* the concepts
     (`dreamt` −0.0301, the worst arm measured), because nothing real is holding
     the categories apart. The direction that survives is a night that is
