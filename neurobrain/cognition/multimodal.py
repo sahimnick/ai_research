@@ -171,6 +171,56 @@ class AssociationArea:
         self._homeostasis(recruited)
         return win
 
+    def unbind(self, v: np.ndarray, a: np.ndarray,
+               lr: Optional[float] = None) -> int:
+        """Push the winning concept **away** from a pairing that should not be.
+
+        Everything else in this class treats what it is handed as an
+        observation, and that is the whole reason imagination pays nothing back:
+        measured, a night of recombinations bound as fact is indistinguishable
+        from a night of random sights (`inner_world.py`, 72.3% against 72.5%),
+        and it stays that way with a front end that clusters and a judge that
+        discriminates at 0.818 (`heard_world.py`). The route in is a
+        consolidator; it sharpens the average of what it is given, so an
+        imagining is either absorbed as a false observation or is noise.
+
+        An implausible crossing is neither. It is a **negative example** -- a
+        combination the world does not present, generated for free and in
+        unlimited supply by :meth:`imagine_factored`, and identifiable by
+        :class:`FactorCompatibility` without any label. What is missing is only
+        the ability to learn from one, and that is this method: the same
+        competition, the same local rule, the sign reversed.
+
+        This is the standard account of what a night is for. Crick & Mitchison
+        (1983) proposed dreaming as **reverse learning** -- REM replay that
+        weakens spurious attractors rather than strengthening real ones -- and
+        the same two-phase structure is what makes contrastive Hebbian learning
+        and wake-sleep work: a positive phase on data, a negative phase on what
+        the model generates. Nothing here is a gradient; it is
+        :meth:`bind`'s update with a minus sign, driven by a sample the mind
+        made up.
+
+        **A geometric no-op to know about, and it bites in practice.** The
+        anti-instar step is ``w - lr*(x - w)``, which is exactly zero when
+        ``w == x`` -- there is no direction in which to push a unit vector away
+        from itself, and rescaling does not change a direction. So a cell that
+        sits *on* the code being unlearned does not move. That is not rare here:
+        vigilance recruits by copying, and a crossing is normally built from one
+        real code and one foreign one, so the half taken from the cell's own
+        memory is frozen while only the foreign half moves. Measured on a
+        crossing, the auditory half went -0.284 -> -0.397 while the visual half
+        stayed at 1.0000. `heard_world.py`'s `reverse` arm is therefore
+        unlearning **half of each crossing**, which is the likeliest reason it
+        damages (-0.0509) rather than helps, and it is a property of this rule
+        rather than of reverse learning as such.
+        """
+        vn, an = self.prep_v(v), self.prep_a(a)
+        win = int(np.argmax(self.match(vn, an)))
+        lr = self.lr if lr is None else float(lr)
+        self.Wv[win] = _unit(self.Wv[win] - lr * (vn - self.Wv[win]))
+        self.Wa[win] = _unit(self.Wa[win] - lr * (an - self.Wa[win]))
+        return win
+
     def _homeostasis(self, recruited: int) -> None:
         """Drift ``vigilance`` toward a target rate of category creation.
 

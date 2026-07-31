@@ -93,6 +93,32 @@ def test_composite_of_nothing_is_not_a_crash():
     assert not np.any(np.isnan(out))
 
 
+def test_unbind_moves_away_but_not_from_a_point_it_sits_on():
+    """Reverse learning, and the geometric no-op inside it.
+
+    ``w - lr*(x - w)`` is exactly zero when ``w == x``: there is no direction in
+    which to push a unit vector away from itself. A cell recruited by copying
+    therefore cannot be moved off the code it holds, so a crossing built from
+    one real code and one foreign one has only its foreign half unlearned. That
+    is a property of this rule and it is what `heard_world.py`'s `reverse` arm
+    is actually doing."""
+    a, V, A = _area()
+    for i in range(6):
+        a.bind(V[i], A[i])
+    e, t = V[0], A[3]                      # a crossing: real sight, foreign sound
+    w = int(np.argmax(a.match(a.prep_v(e), a.prep_a(t))))
+    before = float(a.Wv[w] @ a.prep_v(e)), float(a.Wa[w] @ a.prep_a(t))
+    a.unbind(e, t)
+    after = float(a.Wv[w] @ a.prep_v(e)), float(a.Wa[w] @ a.prep_a(t))
+    assert after[1] < before[1] - 1e-6, "the foreign half did not move away"
+    assert np.isclose(before[0], 1.0, atol=1e-5)
+    assert np.isclose(after[0], before[0], atol=1e-6), (
+        "a cell sitting exactly on the code moved; if the rule now handles "
+        "that case, this test should be updated deliberately")
+    assert np.isclose(np.linalg.norm(a.Wv[w]), 1.0, atol=1e-5)
+    assert np.isclose(np.linalg.norm(a.Wa[w]), 1.0, atol=1e-5)
+
+
 def _span_residual(q, B):
     """How much of ``q`` the row space of ``B`` cannot explain."""
     _, s, Vt = np.linalg.svd(B, full_matrices=False)

@@ -73,7 +73,8 @@ REPLAYS = 400
 DREAM_NOVELTY_RATE = 0.02
 N_CAND = 12
 RANK = 256
-ARMS = ("no_dream", "stored", "crossed", "crossed_judged", "crossed_anti")
+ARMS = ("no_dream", "stored", "crossed", "crossed_judged", "crossed_anti",
+        "reverse", "reverse_judged")
 
 
 def auc(pos, neg):
@@ -152,14 +153,21 @@ def night(a, votes, E, T, y, tr, arm, fc, seed):
         i = int(rng.choice(tr))
         if arm == "stored":
             e, t = E[i], T[i]
-        elif arm == "crossed":
+        elif arm in ("crossed", "reverse"):
             e, t = E[i], T[int(rng.choice(tr))]
         else:
             cand = [int(rng.choice(tr)) for _ in range(N_CAND)]
             s = [fc.score(np.concatenate([E[i], T[j]])) for j in cand]
+            # the judged arms keep the MOST plausible; the anti and reverse
+            # arms keep the LEAST, because an implausible crossing is what a
+            # negative example is
             pick = cand[int(np.argmax(s) if arm == "crossed_judged"
                             else np.argmin(s))]
             e, t = E[i], T[pick]
+        if arm.startswith("reverse"):
+            # a combination the world does not present, learned as such
+            a.unbind(e, t)
+            continue
         w = a.bind(e, t)
         votes.setdefault(w, {})
         votes[w][int(y[i])] = votes[w].get(int(y[i]), 0) + 1
@@ -296,6 +304,45 @@ def main():
           f"{s['delta']:+.4f}, d={s['cohens_d']:+.2f}, {s['wins']}/{s['n']}")
     ok = s["cohens_d"] >= 0.8 and s["wins"] >= 0.75 * s["n"]
     res["selection_works"] = bool(ok)
+
+    # --- and the arm that does not bind at all ------------------------------
+    rv, rj = res["arms"]["reverse"], res["arms"]["reverse_judged"]
+    print("\n  === and if an implausible crossing is learned as a NEGATIVE? ===")
+    print(f"    reverse, random crossing      {rv['delta']:+.4f} "
+          f"(d={rv['cohens_d']:+.2f}, {rv['wins']}/{rv['n']})")
+    print(f"    reverse, JUDGED least likely  {rj['delta']:+.4f} "
+          f"(d={rj['cohens_d']:+.2f}, {rj['wins']}/{rj['n']})")
+    # The one place the judge demonstrably does work. Unlearning a *random*
+    # crossing is dangerous -- a random crossing is often a perfectly valid
+    # pairing, and weakening it damages a real concept. Unlearning one the judge
+    # calls implausible should be safe. Paired, same seeds, same operation.
+    rsel = (np.array([r["reverse_judged"] for r in rows])
+            - np.array([r["reverse"] for r in rows]))
+    rsd = float(rsel.std(ddof=1))
+    res["reverse_selection"] = dict(
+        delta=round(float(rsel.mean()), 4), sd=round(rsd, 4),
+        cohens_d=round(float(rsel.mean() / (rsd + 1e-12)), 3),
+        wins=int((rsel > 0).sum()), n=len(rsel))
+    q = res["reverse_selection"]
+    print(f"    judging, in the reverse direction: {q['delta']:+.4f}, "
+          f"d={q['cohens_d']:+.2f}, {q['wins']}/{q['n']}")
+    if q["cohens_d"] >= 0.8 and q["wins"] >= 0.75 * q["n"]:
+        print("       -- the judge does not make unlearning pay, but it does "
+              "decide what is SAFE to unlearn, which is the only place in this")
+        print("          benchmark where an unsupervised judgement changes an "
+              "outcome at all.")
+
+    gate = rj["cohens_d"] >= 0.8 and rj["wins"] >= 0.75 * rj["n"]
+    res["reverse_works"] = bool(gate)
+    if gate:
+        print("\n    -> unlearning what the world does not present IMPROVES "
+              "recognition, where binding it as fact does not.")
+        print("       The imagination finally has a consumer: it supplies the "
+              "negative examples, and the judge picks them out unsupervised.")
+    else:
+        print(f"\n    -> it does not ({rj['delta']:+.4f}, "
+              f"d={rj['cohens_d']:+.2f}). Reversing the sign is not enough "
+              f"either.")
     if ok:
         print("\n  -> judging an imagining changes what it is worth. The two "
               "arms draw the SAME candidates and differ only in which one is")

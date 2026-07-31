@@ -2130,8 +2130,36 @@ them is selection and nothing else.
 | `crossed` — unjudged | 0.597 | −0.0231 | −0.48 |
 | `crossed_judged` — most plausible | 0.593 | −0.0278 | −0.44 |
 | `crossed_anti` — least plausible | 0.602 | −0.0185 | −0.29 |
+| `reverse` — **un**learn a random crossing | 0.569 | −0.0509 | −0.49 |
+| `reverse_judged` — unlearn a judged-implausible one | 0.611 | −0.0093 | −0.11 |
 
-**The positive control fails.** Replaying a real recording does not help either,
+The last two arms test the one mechanism the diagnosis actually calls for. Every
+arm before them binds an imagining as **fact**, which is why they cannot help. An
+implausible crossing is not a fact — it is a **negative example**, generated free
+and in unlimited supply by `imagine_factored` and identified without labels by
+the compatibility. `AssociationArea.unbind` is `bind`'s update with the sign
+reversed, which is Crick & Mitchison's (1983) account of REM as reverse learning
+and the negative phase that makes contrastive Hebbian learning and wake-sleep
+work. It does not help either (−0.0093, d=−0.11) — and the rule has a geometric
+no-op inside it that explains the shape of the failure. The anti-instar step
+`w − lr(x − w)` is exactly zero when `w == x`: there is no direction in which to
+push a unit vector away from itself. Vigilance recruits by copying, and a
+crossing is built from one real code and one foreign one, so **the half taken
+from the cell's own memory is frozen and only the foreign half is unlearned**
+(measured on a crossing: the auditory half moved −0.284 → −0.397, the visual
+half stayed at 1.0000). `reverse` is unlearning half of each crossing, which is
+the likeliest reason it damages rather than helps, and it is a property of this
+rule rather than of reverse learning as such.
+
+It does show the judge doing something real, and this is the only place in the
+run where an unsupervised judgement changes an outcome at all: unlearning a
+**random** crossing costs −0.0509, unlearning a **judged-implausible** one costs
+−0.0093. Paired, that is **+0.0417 (d=+0.51, 3/6)** — the right sign and the
+right size, below the gate. A random crossing is often a perfectly valid pairing
+and weakening it damages a real concept; the judge mostly avoids those. It
+decides what is *safe* to unlearn without making unlearning pay.
+
+**And the positive control fails.** Replaying a real recording does not help either,
 so the route from a night into perception is inert here and the null for
 selection is a null for the *channel*, not for judging. (This was caught by
 running the 50-way task first, where every arm including `stored` lost; the
@@ -2164,12 +2192,24 @@ So the standing conclusion, at the width the measurements support: **this projec
 can now imagine — provably, outside the span of memory, coherently — and can
 judge what it imagines, unsupervised, at 0.818. What it cannot do is learn from
 either.** A generative model and a constraint solver both exist and both are
-wired into a consolidator. The missing piece is not a better imagination, a
-better judge or a better eye: it is a plasticity rule that can be driven by a
-*prediction error* rather than by a co-occurrence — which is exactly what §7.6
-concluded from the other end when it found replay into perception needs an
-external teaching signal, and what step 15b asks for the world model. Three
-independent routes have now arrived at the same missing mechanism.
+wired into a consolidator. Seven arms across two modalities, with plasticity of
+*both* signs, and none of them beats doing nothing.
+
+The missing piece is not a better imagination, a better judge, or a better eye —
+all three were built or bounded here. It is a plasticity rule driven by a
+*prediction error* rather than by a co-occurrence. Note what reversing the sign
+established: an error-driven rule is not merely "Hebbian with a minus", or
+`reverse_judged` would have worked. What is absent is a **teaching signal
+computed from the mind's own failure to predict**, which nothing in this
+architecture currently produces — `bind` compares an input to a weight, never a
+prediction to an outcome.
+
+That is the same conclusion §7.6 reached from the other end (replay into
+perception needs an external teaching signal), the same one step 15b asks for the
+world model (a learning rule, not a replay rule), and now the same one the
+imagination path arrives at. **Three independent routes, one missing mechanism**
+— which is a much better position than three separate gaps, and it is the thing
+to build next.
 
 ---
 
