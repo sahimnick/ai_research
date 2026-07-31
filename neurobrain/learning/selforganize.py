@@ -565,3 +565,86 @@ def self_organized_audio(n_per_class: int = 6, epochs: int = 4, seed: int = 0,
               f"(freq-tuned {l_tune['frequency_tuned_fraction']:.0%}, "
               f"sweep-tuned {l_tune['sweep_tuned_fraction']:.0%})")
     return out
+
+
+def align_v1(layer: WideV1, images: Sequence[np.ndarray],
+             targets: Sequence[np.ndarray], epochs: int = 2,
+             lr: float = 0.02, rectify: bool = True,
+             verbose: bool = False) -> WideV1:
+    """Re-tune V1 toward what the concept layer *expects*, not what it was shown.
+
+    ``develop_v1`` grows receptive fields by competition on patches, so every
+    filter ends up tuned to whatever the pixels in front of it looked like.
+    Nothing above it ever speaks back. Measured consequence: two photographs of
+    the same category are near-orthogonal in the resulting code (cluster AUC
+    0.573 against the ear's 0.788), and every downstream mechanism in this
+    project is then measured against a world it cannot see clearly.
+
+    The concept layer, once :meth:`AssociationArea.consolidate_ranked` has made
+    it generalise, holds something V1 does not: the *average* of everything that
+    turned out to be the same thing. That average is a teaching signal, and it
+    costs no labels -- it is the mind's own opinion about what it is looking at.
+
+    So: for each image, the caller supplies the rate vector its concept expects
+    (``targets``), and each cell moves its filter by the local delta rule
+
+        dWt[c] = lr * (target[c] - rate[c]) * patch[position of c]
+
+    which is two factors both available at the synapse -- a presynaptic patch
+    and a postsynaptic error -- and is the standard predictive-coding /
+    Widrow-Hoff form. No gradient is propagated anywhere: the error at each cell
+    is supplied by feedback from the area above, which is what cortical feedback
+    is generally taken to do. A cell that already predicts its concept's
+    expectation moves not at all, which is the property ``develop_v1``'s purely
+    Hebbian rule does not have.
+
+    ``targets`` must be in the **same raw rate space** as :meth:`WideV1.rate`
+    returns -- not the association area's ``prep_v`` space. Mixing those two is
+    the error that produced a fidelity of 0.886 where the truth was 0.979; the
+    caller builds targets by averaging raw rates over each concept's members.
+
+    Measured, and it does not work -- for a structural reason
+    ---------------------------------------------------------
+    `benchmarks/align.py`, 4 seeds on real photographs: cluster AUC 0.577 with
+    no alignment, **0.565** aligned to the concept mean. And the controls are
+    what settle it: aligning to the image's **own** rate gives 0.562, and
+    aligning to a **deliberately wrong** concept gives 0.566. A correct teacher,
+    an uninformative teacher and a misleading teacher all produce the same
+    result, so no teaching signal is reaching the filters at all.
+
+    The cause is in the rule's shape rather than in the teacher. This bank is
+    retinotopic: **8 cells share each of the 64 positions**, and every cell at a
+    position is handed the same patch. So ``dWt[c] = lr * e[c] * patch[pos_c]``
+    gives all 8 an update along **one shared direction**, differing only in a
+    scalar. Verified directly -- the update vectors for two cells at the same
+    position are identical up to that scalar. A target code differs across those
+    8 cells; the update has one direction available to it and cannot.
+
+    What would be needed is an error that is a **vector over the patch** rather
+    than a scalar per cell -- reconstruct the patch from the code and use the
+    residual in pixel space, weighted by each cell's own activity
+    (``dWt[c] = lr * r[c] * (patch - Wt.T @ r)``). That is the sparse-coding
+    dictionary update, equally local and equally gradient-free, and it gives
+    each cell a different effective direction because each is weighted by how
+    much *it* contributed to the error. Kept here as the measured negative and
+    the specific next thing to try, rather than deleted.
+    """
+    if len(images) != len(targets):
+        raise ValueError("one target per image")
+    for ep in range(int(epochs)):
+        moved = 0.0
+        for im, tgt in zip(images, targets):
+            r = layer.rate(im)
+            e = np.asarray(tgt, np.float32) - r
+            P = layer.patches(im)
+            X = P[layer.cell_pos]                      # (n_cells, rf*rf)
+            layer.Wt += lr * e[:, None] * X
+            if rectify:
+                np.maximum(layer.Wt, 0.0, out=layer.Wt)
+            layer.Wt /= np.maximum(
+                np.linalg.norm(layer.Wt, axis=1, keepdims=True), 1e-6)
+            moved += float(np.abs(e).mean())
+        if verbose:
+            print(f"    align epoch {ep + 1}: mean |error| "
+                  f"{moved / max(len(images), 1):.4f}")
+    return layer

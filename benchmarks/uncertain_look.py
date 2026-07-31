@@ -43,6 +43,7 @@ was written to correct.
 
 Usage:  python3 benchmarks/uncertain_look.py out_uncertain_look.json
 """
+import hashlib
 import json
 import sys
 
@@ -55,7 +56,7 @@ from neurobrain.vision.widev1 import WideV1, _unit, _nearest_prototype
 sys.path.insert(0, "benchmarks")
 from translation import FRAME, luminance, place                # noqa: E402
 
-SEEDS = (0, 1, 2, 3)
+SEEDS = (0, 1, 2, 3, 4, 5, 6, 7)
 N_TRAIN, N_TEST, N_DEV = 1200, 300, 400
 KS = (1, 2, 3, 5)
 N_CAND = 6            # candidates the oracle may try per glance
@@ -80,6 +81,27 @@ def margin(code, protos):
     conceivable."""
     s = np.sort(protos @ code)
     return float(s[-1] - s[-2]) if len(s) > 1 else 0.0
+
+
+def diversity(kept, g, protos):
+    """How much a candidate glance would CHALLENGE the current belief.
+
+    Phase 10.3. `margin` -- keep whatever most sharpens the belief -- was
+    measured to reverse at k=5 (-0.0225, d=-1.09, 0/4) because it is
+    confirmation bias: the glance kept is the one that most agrees with what is
+    already believed, so each look makes the next more likely to agree, and by
+    five the pooled code is a fixed point.
+
+    This scores the opposite thing: how far the candidate's own read-out is from
+    the read-out the mind currently holds. A glance that says something new
+    changes the class profile; one that merely confirms leaves it where it was.
+    Formally the L2 distance between the softmax-free class-drive vectors, which
+    is the spread of the evidence rather than its agreement -- and it needs no
+    label, only the mind's own two opinions.
+    """
+    cur = protos @ _unit(np.mean(kept, 0))
+    new = protos @ g
+    return float(np.linalg.norm(new - cur))
 
 
 def run_seed(X, y, Xt, yt, seed):
@@ -109,6 +131,17 @@ def run_seed(X, y, Xt, yt, seed):
         return float(np.mean(_nearest_prototype(B, ytr, np.stack(Q),
                                                 len(classes)) == yte))
 
+    def arm_rng(tag):
+        """One generator per ARM, not one shared stream.
+
+        Sharing a stream makes every arm's glance locations depend on which
+        arms ran before it. Measured the hard way: adding one arm moved the
+        k=5 result from -0.0225 (0/4 seeds) to +0.0100 (3/4), and the reversal
+        this benchmark reported as "the signature of the rule" moved from k=5
+        to k=3. It was the rng, not the rule."""
+        h = int(hashlib.md5(f"{seed}:{tag}".encode()).hexdigest()[:8], 16)
+        return np.random.default_rng(h)
+
     out = {}
     # ---- one glance ------------------------------------------------------
     out["one glance"] = score([glance(v1, f, 0, 0) for f in tframes])
@@ -117,20 +150,22 @@ def run_seed(X, y, Xt, yt, seed):
         if k == 1:
             continue
         # ---- k random glances --------------------------------------------
+        g = arm_rng(f"random{k}")
         Q = []
         for f in tframes:
-            offs = rng.integers(-JITTER, JITTER + 1, size=(k, 2))
+            offs = g.integers(-JITTER, JITTER + 1, size=(k, 2))
             Q.append(_unit(np.mean([glance(v1, f, a, b) for a, b in offs], 0)))
         out[f"random k={k}"] = score(Q)
 
         # ---- k glances chosen by the margin, with M tries each ------------
         # The ceiling. It spends N_CAND glances per glance kept and is allowed
         # to test each before committing, which no real eye can do.
+        g = arm_rng(f"greedy{k}")
         Q = []
         for f in tframes:
             kept = [glance(v1, f, 0, 0)]
             for _ in range(k - 1):
-                cands = rng.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
+                cands = g.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
                 best, best_m = None, -np.inf
                 for a, b in cands:
                     g = glance(v1, f, a, b)
@@ -141,15 +176,34 @@ def run_seed(X, y, Xt, yt, seed):
             Q.append(_unit(np.mean(kept, 0)))
         out[f"oracle-greedy k={k}"] = score(Q)
 
-        # ---- the control that separates CHOOSING from TRYING MORE ---------
-        # same N_CAND glances drawn, one kept at random. If this matches the
-        # oracle, the gain was extra sampling and not the choice.
+        # ---- phase 10.3: keep the glance that DISAGREES most ---------------
+        # Same oracle budget, same candidates, opposite criterion.
+        g = arm_rng(f"diverse{k}")
         Q = []
         for f in tframes:
             kept = [glance(v1, f, 0, 0)]
             for _ in range(k - 1):
-                cands = rng.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
-                a, b = cands[int(rng.integers(N_CAND))]
+                cands = g.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
+                best, best_d = None, -np.inf
+                for a, b in cands:
+                    g = glance(v1, f, a, b)
+                    dv = diversity(kept, g, protos)
+                    if dv > best_d:
+                        best, best_d = g, dv
+                kept.append(best)
+            Q.append(_unit(np.mean(kept, 0)))
+        out[f"oracle-diverse k={k}"] = score(Q)
+
+        # ---- the control that separates CHOOSING from TRYING MORE ---------
+        # same N_CAND glances drawn, one kept at random. If this matches the
+        # oracle, the gain was extra sampling and not the choice.
+        g = arm_rng(f"drew{k}")
+        Q = []
+        for f in tframes:
+            kept = [glance(v1, f, 0, 0)]
+            for _ in range(k - 1):
+                cands = g.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
+                a, b = cands[int(g.integers(N_CAND))]
                 kept.append(glance(v1, f, a, b))
             Q.append(_unit(np.mean(kept, 0)))
         out[f"drew {N_CAND}, kept one at random k={k}"] = score(Q)
@@ -192,6 +246,14 @@ def main():
         o = res["mean"][f"oracle-greedy k={k}"]
         r = res["mean"][f"random k={k}"]
         c = res["mean"][f"drew {N_CAND}, kept one at random k={k}"]
+        dd = np.array([s[f"oracle-diverse k={k}"] -
+                       s[f"drew {N_CAND}, kept one at random k={k}"]
+                       for s in rows])
+        sdd = float(dd.std(ddof=1))
+        res.setdefault("diverse_gain", {})[k] = dict(
+            delta=round(float(dd.mean()), 4),
+            cohens_d=round(float(dd.mean() / (sdd + 1e-12)), 3),
+            wins=int((dd > 0).sum()), n=len(dd))
         d = np.array([s[f"oracle-greedy k={k}"] -
                       s[f"drew {N_CAND}, kept one at random k={k}"]
                       for s in rows])
@@ -200,9 +262,11 @@ def main():
         res.setdefault("choice_gain", {})[k] = dict(
             delta=round(float(d.mean()), 4), cohens_d=round(cd, 3),
             wins=int((d > 0).sum()), n=len(d))
-        print(f"  k={k}: pooling {r - base:+.4f} | choosing "
-              f"{d.mean():+.4f} over the same draws "
-              f"(d={cd:+.2f}, {int((d > 0).sum())}/{len(d)})")
+        dg = res["diverse_gain"][k]
+        print(f"  k={k}: pooling {r - base:+.4f} | agree-greedy "
+              f"{d.mean():+.4f} (d={cd:+.2f}, {int((d > 0).sum())}/{len(d)})"
+              f" | DISAGREE-greedy {dg['delta']:+.4f} "
+              f"(d={dg['cohens_d']:+.2f}, {dg['wins']}/{dg['n']})")
         verdicts.append(cd >= 0.8 and (d > 0).sum() >= 0.75 * len(d))
 
     # `any` would call this a win on an effect that changes sign. It has to

@@ -2482,6 +2482,84 @@ improves its cross-modal grip on the real world by more than replaying reality
 does.** Not because the imagining is true, but because being wrong about it is
 informative.
 
+## 9.5 Real sensors, and Phase 10
+
+### The mind on cameras that are showing something right now
+
+Every measurement above ran on an archive. `neurobrain/sensing/live.py` points
+the same machinery at live public traffic cameras, and reports honestly what
+this host can reach:
+
+| sensor | here | why |
+|---|---|---|
+| webcam | unavailable | no `/dev/video0` in this container |
+| microphone | unavailable | no `/dev/snd` |
+| **CCTV** | **LIVE** | 511ny.org, 24 of 25 ids returning real scenes |
+| text | available | always |
+
+The webcam and microphone paths are written and take the same route downstream —
+on a laptop they work with no change to anything else — but they cannot be
+*exercised* here and the report says so rather than substituting something.
+
+**The placeholder guard is the part worth keeping.** Ten different camera ids
+returned **byte-identical 15136-byte images** with identical statistics: HTTP
+200, a valid image, a plausible mean and variance, no information. A status
+check passes it and a size check passes it. Only hashing the content against
+what *other* cameras returned catches it, and 1 of 25 ids is rejected that way.
+
+Measured on 24 live cameras, no labels available:
+
+| | cosine |
+|---|---|
+| the same pixels encoded twice (**the noise floor**) | 0.870 |
+| the same camera, 20 s later | 0.867 |
+| a different camera, same moment | 0.033 |
+| **identity AUC** | **0.974** |
+
+**The code separates places on live input it was never tuned for** — 0.867
+against 0.033. But the temporal claim has to be stated with its floor: 0 of 24
+cameras changed their pixels in 20 s (they refresh slower than the survey), and
+same-camera-later sits *at* the encode-twice floor. So this shows the code is
+stable and cameras are distinguishable — **not** that it tracks a place through
+change. A longer gap is needed for that.
+
+Forced consolidation groups 24 live scenes into 14 concepts, and the imagination
+result reproduces on live data: **span residual 0.610 for a factored
+recombination against 0.000 for sampling one concept.** The street it imagines —
+the form of one camera's scene carrying another's colour — is not a linear
+combination of anything it saw.
+
+### Phase 10.1 — concept feedback to V1 does not work, and the rule is why
+
+`align_v1` moves each filter by `ΔWt[c] = lr · (target[c] − rate[c]) ·
+patch[pos_c]` with the target supplied by the merged concept layer — no labels,
+the mind's own opinion as teacher. `benchmarks/align.py`, 4 seeds:
+
+| target | cluster AUC | Δ |
+|---|---|---|
+| no alignment | 0.577 | — |
+| the correct concept mean | 0.565 | −0.0121 |
+| the image's **own** rate | 0.562 | −0.0148 |
+| a **deliberately wrong** concept | 0.566 | −0.0116 |
+
+**A correct teacher, an uninformative teacher and a misleading teacher all give
+the same answer.** No teaching signal is reaching the filters at all, and the
+cause is the rule's shape rather than the teacher's quality:
+
+> This bank is retinotopic — **8 cells share each of the 64 positions**, and
+> every cell at a position is handed the same patch. So `ΔWt[c] = lr · e[c] ·
+> patch[pos_c]` gives all 8 an update along **one shared direction**, differing
+> only by a scalar. Verified directly: the update vectors for two cells at the
+> same position are identical up to that scalar. A target code differs across
+> those 8 cells; the update has one direction available and cannot.
+
+What would be needed is an error that is a **vector over the patch** rather than
+a scalar per cell — reconstruct the patch from the code and use the pixel-space
+residual weighted by each cell's own activity, `ΔWt[c] = lr · r[c] · (patch −
+Wtᵀr)`. That is the sparse-coding dictionary update, equally local and equally
+gradient-free, and it gives each cell a different effective direction. Recorded
+as the specific next thing to try.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
