@@ -11,6 +11,15 @@ neurobrain` required a do-nothing torch shim throughout (defect A1); **A1 has
 since been fixed** and the shim is gone — every measurement here reproduces
 without it.
 
+**A correction to §7's headline, from §7.8.** The world-model gain reported
+there — +14.6 points from replaying the day's order — is **repair, not
+learning**. Replaying transitions adds a scaled copy of what `_T` already holds,
+and a scaled copy cannot move an argmax; the gain existed only because
+`build_unified_mind` seeds a counting curriculum that replay then dilutes.
+Measured on real sound with the same machinery: no prior, +0.0000; a strong
+wrong prior, +0.3464 — restoring exactly the value the model has with no prior
+at all.
+
 **§7.8 is the real-world pass** — 600 ESC-50 field recordings and CIFAR-10
 photographs, two corpora that share real categories and nothing else, so any
 association between them has to be semantic. Read it first if you want to know
@@ -1626,6 +1635,69 @@ mostly-wrong percepts cannot sharpen anything, however good the replay
 machinery is. §7's world-model result was real and **conditional on perception
 working** — a condition digits met and photographs do not.
 
+### Replaying transitions does not learn. It undoes a prior.
+
+`real_mind.py` left the world-model result unexplained: §7's +14.6 points from
+replaying the day's order does not transfer to photographs, and the reason
+looked upstream — the eye names photographs at 0.129, and replaying
+mostly-wrong percepts cannot sharpen anything.
+
+That story makes a prediction, and hearing is the test of it: 1-NN 0.914 on six
+real ESC-50 categories. `real_time.py` builds the same mind on **belt codes
+instead of pixels** — `build_mind_on` only flattens, so sound codes work where a
+digit mind takes images — and walks it down an imposed street of real urban
+recordings (car horn → engine → train …; the sounds are real, the succession is
+designed, because ESC-50 clips have no natural succession).
+
+Two of my own faults had to be removed first, and both would have produced a
+publishable-looking wrong answer:
+
+* **The three arms lived three different days.** The day was generated inside
+  the arm loop, so the generator advanced between arms and the comparison was
+  across days, not across nights. That artefact alone produced a clean-looking
+  "+0.0405, d=1.84, 4/4".
+* **Perception collapsed to one class.** Belt codes are non-negative and share a
+  large component across every clip; `contrast_normalise` removes each sample's
+  *own* mean and does nothing to a component common to all of them. Same-class
+  cosine 0.986, different-class 0.976 — a separation of 0.010 — and
+  `GrowingCategoryMap` grew **one** category at every vigilance from 0.3 to 0.9.
+  The mind named all 60 sounds "engine", so `world_self` read a perfect 1.000.
+  `PopulationAdaptation`, the fix already measured for vision, takes the
+  separation to **+0.390**, 31 categories, and accuracy 0.221 → 0.750. The same
+  defect in the other sense.
+
+With perception working — the ear names its own clips at **0.818** over 4.2
+distinct percepts, against 0.129 for the eye — and the world model genuinely
+learning the street (0.480 against a chance of 0.167):
+
+**replay changes it by exactly +0.0000.**
+
+So the upstream story is wrong. Good percepts are not what was missing. Sweeping
+the strength of a competing prior says what is:
+
+| prior repetitions | before | after | delta | wins |
+|---|---|---|---|---|
+| 0 | 0.480 | 0.480 | **+0.0000** | 0/4 |
+| 5 | 0.472 | 0.476 | +0.0042 | 1/4 |
+| 20 | 0.472 | 0.472 | +0.0000 | 0/4 |
+| **60** | **0.126** | **0.472** | **+0.3464** | **4/4** |
+
+A strong prior *destroys* the world model, 0.480 → 0.126, and replay restores it
+to **0.472 — the value it has with no prior at all**. Replaying transitions is
+not learning. It is **undoing self-inflicted damage**, and it cannot do more than
+return the model to what the day already said.
+
+That is also the retrospective explanation of §7's +14.6. `build_unified_mind`
+seeds a counting curriculum, 0→1→…→9, twenty times. Counting is a wrong prior
+about which digit follows which, replay diluted it back toward the lived order,
+and the gain was repair rather than acquisition. The mechanism was never adding
+knowledge; it was removing a curriculum.
+
+Arithmetically it could not have been otherwise: `predict_next` is an argmax over
+a row of `_T`, and replaying the day's transitions in proportion adds a scaled
+copy of what is already there. A scaled copy cannot move an argmax. Only a
+*competing* distribution can be tipped.
+
 ### The imagining has to be anchored to something real
 
 The goal asks for an *infinite* inner world — new percepts and concepts made
@@ -1727,6 +1799,14 @@ Ordered by what unblocks the goal, not by difficulty.
     experience to 0.32–0.53, purity ≥0.98, with cross-modal retrieval rising
     0.581 → 0.671 and the synthetic bank unchanged. Consolidation now merges
     (1.13× at no cross-modal cost) where it previously merged nothing.
+15b. **The world model needs a learning rule, not a replay rule.** §7.8 shows
+    transition replay can only undo a prior -- with none it is arithmetically a
+    no-op (+0.0000 on real sound with perception at 0.818), with a strong wrong
+    one it restores exactly the no-prior value. Anything that genuinely improves
+    the model has to add information the day did not already contain: predicting
+    *n* steps ahead, learning transitions between concept cells rather than
+    between names, or replaying counterfactual orders rather than lived ones.
+
 15. ~~**Re-run the dream now that concepts exist.**~~ — **done**, and it is the
     section's headline: imagining a sight the mind never saw improves real
     cross-modal recall in 6 of 6 seeds (d=1.79), worth 74% of replaying the real
