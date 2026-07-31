@@ -76,6 +76,8 @@ PYTHONPATH=. python3 benchmarks/scale.py             out_scale.json
 | `scale.py` | Is the exemplar store caused by the rule or by too little data? | 30x the data with everything else held fixed — pairs-per-cell answers it directly; the two rules see identical data in identical order and differ only in whether the negative phase runs |
 | `heard_world.py` | Does judging an imagining pay back, where perception works? | `crossed_judged` and `crossed_anti` draw the **same** candidates and invert only which is kept, so their gap is selection alone — and `stored` is the positive control that decides whether the payback channel is open at all |
 | `merger.py` | Does forcing the layer to generalise stop it returning memories? | a **sweep** over compression, not one setting — recall and purity reported at every level, because merging 82%-pure pairs still merges 18% wrong ones |
+| `prior.py` | Does censoring implausible crossings help? | keep the **least** plausible of the same draws, which inverts only the selection; plus keep one at random, which separates choosing from drawing more |
+| `uncertain_look.py` | Is it worth choosing where to look next? | an **oracle** that tries 6 candidates per glance and keeps the best — the ceiling any cheap rule could reach; against drawing the same 6 and keeping one at random |
 | `constraint.py` | Can a plausibility model judge an imagined crossing? | the **ceiling** — how much colour a category determines at all — reported beside every model, so a weak world is not read as a weak rule; plus the same rule handed a visual code that clusters, which separates "weak rule" from "weak representation" |
 
 ## What each script measures

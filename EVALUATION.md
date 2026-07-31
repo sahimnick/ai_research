@@ -2367,6 +2367,61 @@ is for, and that curve is the deliverable rather than any single setting.
 > comment saying why zeroing would be wrong); the two new methods skipped it.
 > Fixed by a shared `_retire`, and the real numbers are above.
 
+### Phase 9.2 — the prior ranks, and makes the imagining safer rather than more real
+
+The proposal was a prior that censors meaningless crossings — "if form = bus,
+yellow is likely". `benchmarks/prior.py` draws 8 candidate crossings per
+imagining and keeps one by four rules, so *selection* is the only thing that
+varies.
+
+| selection rule | novelty | coherence | gap to real |
+|---|---|---|---|
+| unjudged (first draw) | 0.355 | 0.269 | 0.452 |
+| **most plausible** | 0.330 | **0.321** | **0.469** |
+| least plausible | 0.377 | 0.257 | 0.433 |
+| random of the same draws | 0.356 | 0.261 | 0.453 |
+| a real unseen photograph | 0.797 | 0.361 | 0.000 |
+
+**The prior really does rank**: best-minus-worst on coherence is **+0.0639
+(d=1.52, 5/5)**, and +0.0597 against keeping one of the *same* draws at random,
+which is the control that separates choosing from merely drawing more.
+
+**And censoring moves the output the wrong way.** The gap to real data gets
+*worse*, 0.452 → 0.469 — a gap is a distance, so up is away. It buys coherence
+by spending novelty (0.355 → 0.330), and real data needs both. Censoring makes
+the imagining **safer, not more real**, which is what a prior over factors this
+weakly coupled can do: AUC 0.524 over form × colour, 0.564 over sight × sound,
+both near the 0.500 of ranking nothing. `constraint.py` already said that is the
+world and not the rule.
+
+### Phase 9.3 — choosing where to look, and why greedy choosing turns on itself
+
+The ceiling was measured before building the mechanism, as `constraint.py` did:
+an **oracle** that glances at 6 candidate locations and keeps whichever most
+sharpens its own belief — spending 6 glances per glance kept, which no real eye
+can do. If the oracle does not beat drawing the same glances and keeping one at
+random, no cheap peripheral approximation will.
+
+| | k=2 | k=3 | k=5 |
+|---|---|---|---|
+| pooling more glances (vs one) | +0.0008 | +0.0133 | +0.0158 |
+| **choosing, over the same draws** | **+0.0225** (d=1.01, 3/4) | **+0.0233** (d=1.87, 4/4) | **−0.0225** (d=−1.09, **0/4**) |
+
+**It reverses**, consistently across every seed, and that is the signature of
+the rule rather than noise. Greedy margin-maximisation is **confirmation bias**:
+it keeps the glance that best agrees with what the mind already believes, so
+each look makes the next more likely to agree too. At two or three glances that
+reads as sharpening; by five the pooled code is a fixed point and has stopped
+gathering evidence — exactly where keeping a glance at *random* overtakes it
+(0.164 against 0.142).
+
+So the thing to build is not "look where you are least sure" as a greedy rule.
+An uncertainty-driven eye needs a criterion that rewards **disagreeing**
+evidence — looking where the current belief would be *tested* rather than
+confirmed. (Every number here sits between 0.14 and 0.16 against a chance of
+0.100, so these are small effects on a perceiver that is barely working, which
+is the standing caveat on all of §9.)
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
