@@ -215,6 +215,49 @@ class WideV1:
         return Wt
 
     # -- the forward path ---------------------------------------------------
+    def reconstruct(self, rate: np.ndarray) -> np.ndarray:
+        """Turn a population code back into a picture, so it can be looked at.
+
+        The transpose decoder: each cell votes for its own receptive field
+        weighted by how hard it fired, votes are summed at the pixels each field
+        covers, and overlaps are averaged. That is ``W^T r`` with the retinotopy
+        put back, and it is the natural inverse of ``r = W x`` for a bank whose
+        rows are unit-norm -- no fitting, no gradients, nothing learned here.
+
+        It is a **linear** read-out of a non-linear code and it is weak:
+        decode-to-input correlation is **0.339** over 50 photographs, and what
+        comes back is a blurred mass map rather than a picture. The reason is
+        structural rather than fixable by tuning -- the filters are non-negative
+        and :meth:`_normalise` throws away the DC within each hypercolumn, so
+        the information a linear decoder would need is not in the code.
+        (Centring the rates per column first, which is what the code already
+        means, is *worse*: 0.227, and it prints the receptive-field grid,
+        because pixels are covered by different numbers of overlapping fields.)
+
+        So this is offered for looking at relative structure and for nothing
+        else. It is **not** a claim that the code is invertible, and any figure
+        built on it has to show a real photograph decoded the same way beside
+        the imagined one, so the reader can see how much of the blur is the
+        decoder. Where a factor is invertible at the image level -- retinal
+        opponency is -- recombining *there* and encoding the result is the
+        honest way to show what a recombination looks like.
+        """
+        r = np.asarray(rate, np.float32).reshape(-1)
+        if r.size != self.n_cells:                    # e.g. one opponent channel
+            r = r[:self.n_cells]
+        acc = np.zeros((self.H, self.W_img), np.float32)
+        cnt = np.zeros((self.H, self.W_img), np.float32)
+        rf = self.rf
+        contrib = r[:, None] * self.Wt                # (n_cells, rf*rf)
+        for p in range(self.n_pos):
+            cells = np.flatnonzero(self.cell_pos == p)
+            if not len(cells):
+                continue
+            y, x = self.anchors[p]
+            acc[y:y + rf, x:x + rf] += contrib[cells].sum(0).reshape(rf, rf)
+            cnt[y:y + rf, x:x + rf] += 1.0
+        return acc / np.maximum(cnt, 1.0)
+
     def patches(self, image: np.ndarray) -> np.ndarray:
         """(n_pos, rf*rf) -- what each location sees."""
         img = np.asarray(image, np.float32)

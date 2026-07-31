@@ -93,3 +93,22 @@ and the old code could not express it at all.
 
 `03_concept_cells`: 13 of 32 cells were ever used, 10 of them pure (one class
 only).
+
+## The imagination panels
+
+`python3 benchmarks/report_imagination.py --outdir reports` — six panels on real
+CIFAR-10 photographs and ESC-50 recordings, written to be checkable rather than
+flattering.
+
+| file | what it shows |
+|---|---|
+| `imag_01_recall.jpg` | a held-out photograph and the stored photographs the concept it wakes is made of. 52% of concepts hold exactly **one** photograph, and a held-out photograph wakes the right category only **35%** of the time — the eye's failure, visible |
+| `imag_02_temperature.jpg` | imagining one concept at T = 0, 1, 4, 16, each beside the nearest thing ever stored. Where the caption reads **← A MEMORY** the cosine is 1.000 and the "imagining" *is* that photograph — at every temperature, for the singleton concepts |
+| `imag_03_yellow_bus.jpg` | factored recombination in pixels: the luminance of one photograph carrying the chroma of another. Span residual **0.5287** against **0.000000** for every mixing operation. The picture is an *illustration* — cos to the code-space output is 0.351, and the caption says why |
+| `imag_04_plane.jpg` | every arm on the (novelty, coherence) plane. The target is where real held-out data sits, not a corner |
+| `imag_05_ear.jpg` | the sense that works: cluster AUC 0.788 against the eye's 0.573 |
+| `imag_06_scale.jpg` | the error-driven rule overtaking plain binding as the world grows (+0.0240, d=2.10, 5/5), and the prediction error that makes it possible |
+
+The V1 decoder used in panels 2, 3 and 5 is a transpose decode with a
+correlation of **0.339** to its input. Every panel that uses it says so, and
+panels 1 and 3 work in image space where they can.
