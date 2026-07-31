@@ -592,6 +592,75 @@ def _rows_unit(W: np.ndarray) -> np.ndarray:
     return (W / n).astype(np.float32)
 
 
+class FactorCompatibility:
+    """Which combinations of parts the world actually presents.
+
+    :meth:`AssociationArea.imagine_factored` can build any crossing of any two
+    concepts, and that is exactly its problem: a bus with a frog's colour and a
+    bus with a bird's colour are equally available and equally unjudged. Measured
+    (`benchmarks/inner_world.py`), replaying unjudged crossings into the layer is
+    indistinguishable from replaying *random* sights -- 72.3% against 72.5% on
+    the probe the recombination is evidence for. The gap there was never novelty;
+    it was that every route from an imagining back into the mind runs through
+    :meth:`AssociationArea.bind`, which treats what it is handed as an
+    observation. Something has to **judge** a crossing before the concepts absorb
+    it.
+
+    This is that judgement at its smallest: a Hebbian association between the
+    two factors, learned from the pairs the world actually presented. Blocks
+    that co-occurred drive each other; blocks that never did, do not. Nothing
+    here is trained -- it is one outer product accumulated online, the same
+    associative rule the rest of the project runs on, and it is read as a
+    compatibility rather than as a recall.
+
+    The outer product is taken in a **randomly projected** space (``rank``
+    dimensions per factor) for the ordinary reason that the full one would be
+    4096 x 8192 floats for a code this size. Random projection before an
+    associative matrix is not a compromise borrowed from engineering either:
+    sparse random connectivity feeding an associative layer is the cerebellar
+    and mushroom-body plan, and it preserves inner products in expectation
+    (Johnson-Lindenstrauss), which is all a compatibility score needs.
+    """
+
+    def __init__(self, bounds: Sequence[Tuple[int, int]], rank: int = 64,
+                 seed: int = 0):
+        if len(bounds) != 2:
+            raise ValueError("compatibility is between exactly two factors")
+        self.bounds = [(int(a), int(b)) for a, b in bounds]
+        self.rank = int(rank)
+        rng = np.random.default_rng(seed)
+        self.P = [_rows_unit(rng.standard_normal((self.rank, hi - lo))
+                             ).astype(np.float32) for lo, hi in self.bounds]
+        self.M = np.zeros((self.rank, self.rank), np.float32)
+        self.n = 0
+
+    def _parts(self, v: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        return tuple(_unit(self.P[k] @ v[lo:hi])
+                     for k, (lo, hi) in enumerate(self.bounds))
+
+    def observe(self, v: np.ndarray) -> None:
+        """One real thing, seen whole: its parts learn that they go together."""
+        f, c = self._parts(np.asarray(v, np.float32))
+        self.M += np.outer(f, c)
+        self.n += 1
+
+    def score(self, v: np.ndarray) -> float:
+        """How much this combination of parts looks like one the world presents.
+
+        Not a probability and not calibrated -- a relative score, meaningful
+        only against other candidates, which is all a selection rule needs."""
+        if self.n == 0:
+            return 0.0
+        f, c = self._parts(np.asarray(v, np.float32))
+        return float(f @ (self.M / self.n) @ c)
+
+    def select(self, candidates: Sequence[np.ndarray], keep: int = 1
+               ) -> List[int]:
+        """The indices of the ``keep`` most plausible candidates, best first."""
+        s = np.array([self.score(v) for v in candidates])
+        return [int(i) for i in np.argsort(-s)[:max(keep, 0)]]
+
+
 @dataclass
 class MultisensoryBrain:
     """Vision + hearing + the association area that binds them."""

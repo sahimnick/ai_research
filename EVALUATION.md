@@ -1988,6 +1988,67 @@ causal model and a constraint on the result would be for, and it is now the
 blocking problem rather than a wish — demonstrated by three arms that leave the
 span and none that gains from having left it.
 
+### The constraint, not the solver, is the weak part
+
+The gap above says an imagined thing has to be *evaluated* rather than
+memorised, so the next piece is the judgement: something that asks whether a
+crossing is possible before the concepts absorb it. Built the project's way —
+`FactorCompatibility`, a Hebbian outer product between the two factors
+accumulated online from the pairs the world presented, no gradients, read as a
+compatibility rather than a recall.
+
+It barely works, and `benchmarks/constraint.py` measures why before the blame
+lands on the rule. A compatibility over (form, colour) can only work if **form
+constrains colour**, and the only route from one to the other is through the
+category — so the most any such model could know is how much colour a category
+determines. That is the ceiling, and reporting a score without it would make a
+weak *world* look like a weak *model*.
+
+| | AUC | sd | share of the available signal |
+|---|---|---|---|
+| **the ceiling** — how much colour a category determines | **0.545** | 0.027 | — |
+| Hebbian, random projection rank 64 | 0.541 | 0.024 | **92%** |
+| Hebbian, random projection rank 256 | 0.536 | 0.024 | 81% |
+| Hebbian, projected on the mind's own concept cells | 0.528 | 0.045 | 62% |
+| Hebbian, random projection rank 16 | 0.509 | 0.025 | 21% |
+
+**The rule captures 92% of what is there to capture. There is almost nothing
+there.** Form carries 0.045 of AUC above chance about colour, so a plausibility
+model over these two factors has nothing to say — and it is right not to: in a
+world of cars and buses of every colour, *a yellow bus is not implausible*.
+
+(The concept-cell projection was the obvious improvement and it is **worse**
+than random directions at rank 64 — 62% against 92%. The concept basis is tuned
+for discriminating categories, not for spanning within-category variation, so
+projecting onto it discards exactly the variation a compatibility needs.)
+
+#### The finding, which is about the factorisation and not the rule
+
+The eye handed form and colour over already separated, and they are close to
+independent. That independence is not incidental to either result — **it is the
+same property twice**:
+
+- it is *why crossing them works*: the form block is untouched by a change of
+  colour, so a recombination is coherent (form reads 0.660, identical to the
+  concept mean)
+- it is *why nothing objects to the crossing*: independent factors carry no
+  information about each other, so no compatibility over them can say a
+  crossing is wrong
+
+**The same independence that makes factored recombination work makes it
+unconstrainable.** A constraint solver needs factors that constrain each other,
+and these were chosen — by the retina, for good reasons of its own — for
+precisely the opposite property.
+
+So the third component is not blocked on a rule that has yet to be invented; the
+Hebbian one is adequate. It is blocked on a factorisation over which
+plausibility is a real question. Form × colour is not one. Form × *support*
+(a bus is on a road), object × *scene*, sound × *sight* at a given moment — those
+are dependencies a world actually has, and the last of them is already in this
+architecture, unexamined from this angle: `Wv` and `Wa` are two factors of one
+concept, and whether a sight goes with a sound is a question the world genuinely
+answers.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
