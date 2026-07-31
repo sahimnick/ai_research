@@ -112,3 +112,19 @@ flattering.
 The V1 decoder used in panels 2, 3 and 5 is a transpose decode with a
 correlation of **0.339** to its input. Every panel that uses it says so, and
 panels 1 and 3 work in image space where they can.
+
+## Live sensors
+
+`PYTHONPATH=. python3 benchmarks/live_world.py out_live_world.json 2` — the same
+machinery on public traffic cameras that are showing something right now.
+
+| file | what it shows |
+|---|---|
+| `live_01_cameras.jpg` | 24 live New York traffic cameras as served, and the 32x32 frames the eye actually receives. 1 of 25 ids rejected as a "no signal" card served with HTTP 200 |
+
+Two things the panel makes visible and the benchmark measures. The cameras burn
+their **own name** into the frame, which could hand an identity measurement its
+answer — checked, and identity AUC is 0.981 with the caption against **0.979**
+with it cropped, so the scenes are doing the work. And the 32x32 input the eye
+takes is far smaller than a traffic scene needs, which is the same aperture
+limit §7.8 records, now visible rather than tabulated.

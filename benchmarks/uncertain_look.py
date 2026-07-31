@@ -150,22 +150,22 @@ def run_seed(X, y, Xt, yt, seed):
         if k == 1:
             continue
         # ---- k random glances --------------------------------------------
-        g = arm_rng(f"random{k}")
+        arng = arm_rng(f"random{k}")
         Q = []
         for f in tframes:
-            offs = g.integers(-JITTER, JITTER + 1, size=(k, 2))
+            offs = arng.integers(-JITTER, JITTER + 1, size=(k, 2))
             Q.append(_unit(np.mean([glance(v1, f, a, b) for a, b in offs], 0)))
         out[f"random k={k}"] = score(Q)
 
         # ---- k glances chosen by the margin, with M tries each ------------
         # The ceiling. It spends N_CAND glances per glance kept and is allowed
         # to test each before committing, which no real eye can do.
-        g = arm_rng(f"greedy{k}")
+        arng = arm_rng(f"greedy{k}")
         Q = []
         for f in tframes:
             kept = [glance(v1, f, 0, 0)]
             for _ in range(k - 1):
-                cands = g.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
+                cands = arng.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
                 best, best_m = None, -np.inf
                 for a, b in cands:
                     g = glance(v1, f, a, b)
@@ -178,12 +178,12 @@ def run_seed(X, y, Xt, yt, seed):
 
         # ---- phase 10.3: keep the glance that DISAGREES most ---------------
         # Same oracle budget, same candidates, opposite criterion.
-        g = arm_rng(f"diverse{k}")
+        arng = arm_rng(f"diverse{k}")
         Q = []
         for f in tframes:
             kept = [glance(v1, f, 0, 0)]
             for _ in range(k - 1):
-                cands = g.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
+                cands = arng.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
                 best, best_d = None, -np.inf
                 for a, b in cands:
                     g = glance(v1, f, a, b)
@@ -197,13 +197,13 @@ def run_seed(X, y, Xt, yt, seed):
         # ---- the control that separates CHOOSING from TRYING MORE ---------
         # same N_CAND glances drawn, one kept at random. If this matches the
         # oracle, the gain was extra sampling and not the choice.
-        g = arm_rng(f"drew{k}")
+        arng = arm_rng(f"drew{k}")
         Q = []
         for f in tframes:
             kept = [glance(v1, f, 0, 0)]
             for _ in range(k - 1):
-                cands = g.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
-                a, b = cands[int(g.integers(N_CAND))]
+                cands = arng.integers(-JITTER, JITTER + 1, size=(N_CAND, 2))
+                a, b = cands[int(arng.integers(N_CAND))]
                 kept.append(glance(v1, f, a, b))
             Q.append(_unit(np.mean(kept, 0)))
         out[f"drew {N_CAND}, kept one at random k={k}"] = score(Q)
