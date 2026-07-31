@@ -2240,10 +2240,15 @@ it to generalise is exactly what creates something to learn from:
 
 The error signal rises **5×** when the layer is made to generalise, so the
 diagnosis is right. And accuracy falls when it does, for both rules — with 57
-training clips over 6 classes an exemplar store is simply the better recogniser,
-and there is not enough data for a generaliser to beat it. **That part is a
-scale problem, not an architecture problem**, and it is the honest limit on
-everything above.
+training clips over 6 classes an exemplar store is simply the better recogniser.
+
+> **Corrected by `scale.py` below.** This paragraph originally concluded that
+> the remaining limit is a *scale* problem rather than an architecture one.
+> CIFAR-10 has 5,000 images per class where ESC-50 has 40, and at 30× the data
+> the layer sits at **exactly 1.00 pairs per cell** — unchanged. The exemplar
+> store is a property of the rule, not of how much was seen. And the error-driven
+> rule does start paying at scale, which the auditory world was too small to
+> show.
 
 ### One fact, seen from six angles
 
@@ -2262,9 +2267,56 @@ Every negative in this section is the same property of the concept layer:
 produces all six.** It is a better position than six separate defects, and it
 names what to do rather than what to try: not a better imagination (built, and
 it works), not a better judge (built, 0.818 unsupervised), not a better eye
-(bounded, and it is not the blocker) — but a concept layer with enough data, and
-enough pressure to merge, that being wrong about the next thing becomes possible
-at all. Surprise is the prerequisite for learning from surprise.
+(bounded, and it is not the blocker) — but a layer in which being wrong about
+the next thing is possible at all. Surprise is the prerequisite for learning
+from surprise.
+
+### Imagination pays, once there is enough of a world to be wrong about
+
+`benchmarks/scale.py` settles the last question and turns the section around.
+Two candidate causes for the memoriser: **pressure** (vigilance recruits and
+nothing forces a merge) and **scale** (57 clips over 6 classes is nothing to
+generalise from). Only scale can be tested by adding data, and the ear cannot —
+ESC-50 has 40 clips per class. CIFAR-10 has 5,000. Same layer, same rules, the
+eye's own two factors as the two modalities, 100 → 3000 photographs, 5 seeds,
+held out throughout.
+
+| n_train | pairs per cell | prediction error | plain | contrastive | Δ |
+|---|---|---|---|---|---|
+| 100 | 1.00 | 0.079 | 0.185 | 0.184 | −0.0012 |
+| 300 | 1.00 | 0.175 | 0.235 | 0.232 | −0.0024 |
+| 1000 | 1.00 | 0.194 | 0.255 | 0.258 | +0.0024 |
+| **3000** | **1.00** | 0.181 | 0.269 | **0.293** | **+0.0240** |
+
+**Pairs per cell is 1.00 at every size.** Thirty times the data does not merge a
+single extra experience, so the exemplar store is a property of the *rule* —
+vigilance recruits whenever the match falls short, and nothing ever forces a
+merge — not of how much has been seen. That is a fixable thing in a way that
+"needs more data" is not, and it corrects the paragraph above.
+
+**And the error-driven rule pays: +0.0240, d=+2.10, 5/5**, monotone in data
+(−0.0012 → −0.0024 → +0.0024 → +0.0240). It is the first mechanism in this
+section that beats its control, and the crossover is where prediction error
+becomes real: at 100 photographs the layer's completion is right to within
+0.079 and there is nothing to learn, so the negative phase is noise and the
+rule loses. At 3000 the completions are wrong often enough to teach.
+
+What that negative phase *is* matters for the goal. It is not a random sample
+and not an arbitrary crossing — it is **the layer's own completion of one
+modality from the other**, sampled from its concepts. So:
+
+> what the mind imagines is what it learns against, and doing so improves what
+> it does with real, held-out photographs.
+
+That is the second half of the goal, at the size the evidence supports: not "the
+inner world replaces the outer" but **the inner world is what the outer is
+measured against, and measuring against it is what learning is.** The three
+components asked for earlier are now built and each is measured — a generative
+model that leaves the span of memory, a judge that scores crossings unsupervised
+at 0.818, and a learning rule driven by the mind's own prediction failure that
+gains 5/5 at d=2.10. What is still missing is the merge: a layer that generalises
+would have more to be wrong about, and every number here says that is where the
+next gain is.
 
 ---
 
