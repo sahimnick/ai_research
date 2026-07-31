@@ -33,6 +33,18 @@ inside the hull. If all four come out that way, what the dream benchmark
 measured was consolidation toward class means -- useful, real, and not
 imagination.
 
+Corrected after the fact
+------------------------
+The first version of this benchmark compared imagined codes against the stored
+bank in **raw code space**, while `Wv` and everything `imagine_vision` returns
+live in ``prep_v`` space. The same photograph sits at cosine 0.899 to itself
+across those two representations, so every fidelity here was understated. The
+reported 0.886 is really **0.979**, and `composition.py` found why: of ~112
+concept cells recruited from 216 pairs, 59 win exactly once, and a cell that
+wins once holds its training photograph verbatim with `mode_var` exactly zero.
+For those cells this file's temperature sweep is measuring a constant. The
+conclusion below did not change -- it got stronger.
+
 Usage:  python3 benchmarks/imagination_shape.py out_imagination_shape.json
 """
 import json
@@ -81,7 +93,16 @@ def run_seed(V, A, y, n_cls, seed):
     for i in tr:
         assoc.bind(V[i], A[i])
 
-    Btr = V[tr]                                   # everything it has ever seen
+    # Everything it has ever seen -- in ``prep_v`` space, which is where `Wv`
+    # and everything `imagine_vision` returns actually live. Comparing an
+    # imagined code against the *raw* bank was this benchmark's original error:
+    # the same photograph sits at cosine 0.899 to itself across the two
+    # representations, so every distance was read through a 0.1 fog and the
+    # headline fidelity came out 0.886 when the truth is 0.979. See
+    # `composition.py`, which found it -- most of that 0.979 is cells that hold
+    # a stored photograph verbatim.
+    Btr = np.stack([assoc.prep_v(V[i]) for i in tr])
+    Bte = np.stack([assoc.prep_v(V[i]) for i in te])
     protos = np.stack([_unit(Btr[y[tr] == c].mean(0)) for c in range(n_cls)])
 
     rng = np.random.default_rng(seed + 31)
@@ -104,17 +125,18 @@ def run_seed(V, A, y, n_cls, seed):
     # -- fidelity: how close is the imagined sight to a remembered one? -----
     fid = (imagined @ Btr.T).max(1)
     # -- the same question asked of REAL unseen photographs ----------------
-    real = (V[te] @ Btr.T).max(1)
+    real = (Bte @ Btr.T).max(1)
     # -- is it a prototype or an exemplar? ---------------------------------
     to_proto = np.array([float(imagined[k] @ protos[int(y[i])])
                          for k, i in enumerate(te)])
-    real_to_proto = np.array([float(V[i] @ protos[int(y[i])]) for i in te])
+    real_to_proto = np.array([float(Bte[k] @ protos[int(y[i])])
+                              for k, i in enumerate(te)])
     # -- could interpolation alone have produced it? -----------------------
     sub = np.random.default_rng(seed).permutation(len(Btr))[:120]
     hull = np.array([hull_residual(imagined[k], Btr[sub])
                      for k in range(0, len(imagined), 5)])
-    hull_real = np.array([hull_residual(V[i], Btr[sub])
-                          for i in te[::5]])
+    hull_real = np.array([hull_residual(Bte[k], Btr[sub])
+                          for k in range(0, len(Bte), 5)])
 
     uniq = len(set(cells))
     p = np.bincount(cells, minlength=N_CONCEPT).astype(np.float64)

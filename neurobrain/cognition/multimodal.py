@@ -22,7 +22,7 @@ competitive-Hebbian way the sensory areas learned their features.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -381,6 +381,24 @@ class AssociationArea:
         ``temperature=0`` this is exactly :meth:`vision_from_sound`'s answer, so
         the old behaviour is the zero-temperature limit of the new one and the
         two can be compared on the same axis.
+
+        **Two cells this cannot help**, both measured in
+        `benchmarks/composition.py` and locked in `tests/test_imagination_space.py`:
+
+        * A cell that **won exactly once** holds its training pair verbatim
+          (:meth:`bind` recruits by copying) and never reached
+          :meth:`_grow_subspace`, so ``mode_var`` is exactly zero and this
+          returns the stored photograph at *every* temperature. 59 of 112 cells
+          on real data; 36.8% of held-out sounds wake one. This is not a defect
+          to patch -- one observation carries no variation -- but it means the
+          temperature sweep is a constant for a third of the population.
+        * A cell that **won exactly twice** learns one mode, and that mode is
+          necessarily the line joining its two members -- so sampling along it
+          interpolates between two memorised photographs and at high temperature
+          lands on one (verbatim 0.000 -> 0.044 as T goes 0 -> 4).
+
+        :meth:`imagine_composite` is what reaches past both: a singleton has no
+        spread, but the category it belongs to does.
         """
         v = self.Wv[cell].copy()
         if self.n_modes > 0 and temperature > 0:
@@ -395,6 +413,70 @@ class AssociationArea:
                            ) -> np.ndarray:
         """Hear a sound; imagine *a* sight it could go with, not *the* sight."""
         return self.imagine_vision(self.concept_from_sound(a), temperature, rng)
+
+    def imagine_composite(self, cells: Sequence[int],
+                          weights: Optional[Sequence[float]] = None,
+                          temperature: float = 1.0,
+                          anchor: Optional[np.ndarray] = None,
+                          anchor_weight: float = 0.5,
+                          rng: Optional[np.random.Generator] = None
+                          ) -> np.ndarray:
+        """Imagine from **several** concepts at once, optionally around a real one.
+
+        :meth:`imagine_vision` perturbs a single cell inside its own subspace,
+        which bounds what it can produce to a disc around one average. Two things
+        widen that, and both are ordinary operations on the same weights:
+
+        * **composition** -- mix several concepts' means *and* draw variation
+          from each of their subspaces, so the sample lives in the span of all of
+          them rather than one.
+        * **an anchor** -- blend toward a real code that is actually present now.
+          This is the "combine what is real with what is imagined" case: the
+          imagining is pulled toward something the senses are delivering rather
+          than floating free, which is the condition under which imagination was
+          measured to help at all (a fully self-generated night is the worst arm
+          in `cross_modal_dream.py`, -0.0301).
+
+        ``anchor_weight`` is how much of the result is the real code. At 1.0 it
+        is perception with no imagining; at 0.0 it is imagination with nothing
+        real in it, and both extremes are worth having as the ends of one axis.
+
+        Measured (`benchmarks/composition.py`), and both halves are worth
+        knowing before relying on this:
+
+        * it **ends verbatim recall**. Composing three concepts takes the
+          fraction of outputs that are bit-identical to a stored photograph from
+          0.397 to 0.001, which single-concept sampling cannot do at any
+          temperature -- see :meth:`imagine_vision`.
+        * the **novelty it creates is arithmetic, not conceptual**. Averaging
+          *k* near-orthogonal unit codes sits 1/sqrt(k) from each of them for
+          free; at k=3 that is 0.42, and the measured novelty is 0.389 against
+          0.362 for three *stored photographs* averaged with no concept layer at
+          all (paired +0.0276, d=2.76, 5/5 -- consistent and negligible).
+
+        So this widens the output distribution and stops the layer parroting
+        memories, and it does not make the mind inventive. Nothing assembled
+        here exceeds novelty 0.389 where real held-out data sits at 0.797,
+        because every operation in this method is a weighted sum of stored
+        vectors.
+        """
+        cells = [int(c) for c in cells]
+        if not cells:
+            return np.zeros(self.Wv.shape[1], np.float32)
+        w = (np.ones(len(cells), np.float32) if weights is None
+             else np.asarray(weights, np.float32))
+        w = w / max(float(w.sum()), 1e-9)
+        v = (w[:, None] * self.Wv[cells]).sum(0)
+        if self.n_modes > 0 and temperature > 0:
+            rng = rng or self._rng
+            for wi, c in zip(w, cells):
+                z = rng.standard_normal(self.n_modes).astype(np.float32)
+                s = np.sqrt(np.maximum(self.mode_var[c], 0.0))
+                v = v + temperature * float(wi) * ((z * s) @ self.Pv[c])
+        if anchor is not None and anchor_weight > 0:
+            a = self.prep_v(anchor)
+            v = (1.0 - anchor_weight) * _unit(v) + anchor_weight * a
+        return _unit(v)
 
     def consolidate(self, threshold: float = 0.75) -> Dict[int, int]:
         """Merge concept cells that turned out to be the same thing.

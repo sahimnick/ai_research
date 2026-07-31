@@ -34,10 +34,22 @@ control is what makes it readable: the gain is the content, not the plasticity
 events.
 
 An earlier version of this line said the mind *imagines* a sight it has never
-seen. That was measured and it is wrong: what it produces is **3.2× closer to
+seen. That was measured and it is wrong: what it produces is **4.8× closer to
 memory than a real unseen photograph is**, and closer to its class average than
 a real member of the class. It recalls an average. The effect is real and the
 word was not.
+
+**A correction to that correction, from `composition.py`.** The ratio above
+first read 3.2×, measured against the stored bank in raw code space while the
+imagined codes live in `prep_v` space — the same photograph sits at cosine 0.899
+to itself across the two, so every distance in that comparison was understated.
+Corrected, it is worse than reported: **a third of what the mind "imagines" is a
+stored photograph byte for byte**, because vigilance recruits by copying a pair
+into a cell verbatim and 59 of 112 cells never win again. Composing several
+concepts ends that (verbatim 0.397 → 0.001), but the novelty it creates is the
+arithmetic of averaging near-orthogonal vectors, not the concepts: three stored
+photographs averaged with no concept layer at all score 0.362 against
+composition's 0.389.
 
 Getting there meant repairing three things that had each produced a confident
 wrong answer: the ear's read-out (a label-range bug reading as "the front end
@@ -1361,15 +1373,24 @@ held-out sounds, 5 seeds:
 
 | | imagined | a real unseen photograph |
 |---|---|---|
-| closeness to a **remembered** sight | **0.886** | 0.277 |
-| closeness to its **class prototype** | **0.186** | 0.074 |
-| residual outside the hull of experience | 0.725 | 0.908 |
+| closeness to a **remembered** sight | **0.979** | 0.203 |
+| closeness to its **class prototype** | **0.214** | 0.060 |
+| residual outside the hull of experience | 0.706 | 0.940 |
 
-**What it imagines is 3.2× closer to memory than opening its eyes is.** That is
+> **Corrected.** This table first read 0.886 / 0.277 / 0.186 / 0.074 / 0.725 /
+> 0.908. Those numbers compared imagined codes against the stored bank in **raw
+> code space**, while `Wv` and everything `imagine_vision` returns live in
+> `prep_v` space — the same photograph sits at cosine 0.899 to itself across the
+> two, so every distance was read through a 0.1 fog. Found by
+> `benchmarks/composition.py` and locked by `tests/test_imagination_space.py`.
+> Every conclusion below survives the correction and several get sharper: at
+> 0.979 the produced code is not "close to" a memory, it is *often a memory*.
+
+**What it imagines is 4.8× closer to memory than opening its eyes is.** That is
 the decisive number. If perception is more novel than imagination, imagination
 is the wrong word: nothing is being invented, a stored average is being replayed.
 The second row says the same thing from the other side — the produced code sits
-2.5× closer to the class mean than a real member of that class does, which is
+3.6× closer to the class mean than a real member of that class does, which is
 what an average looks like and not what a cat looks like. The third says it stays
 further *inside* the convex hull of experience than a real photograph does, so
 it interpolates and never extrapolates.
@@ -1733,6 +1754,97 @@ sight it never saw, provided something it really heard is holding that sight in
 place.** An entirely self-generated inner world, in this architecture, degrades
 the concepts it is made of.
 
+### A third of what it "imagines" is a memory, byte for byte
+
+`benchmarks/composition.py`, 5 seeds, 360 real CIFAR-10 / ESC-50 pairs over six
+shared categories. It set out to test *combining* concepts and to replace a
+metric I had got wrong, and on the way it found something worse than the thing
+it was built to fix.
+
+Measured in the space the concept cells actually live in, the imagined sight is
+not 0.886 from the nearest memory. It is **0.979**, and the reason is
+structural rather than a matter of degree:
+
+> of **112** concept cells recruited from 216 pairs, **59 won exactly once**.
+> Vigilance recruits by copying the pair into an uncommitted cell *verbatim*,
+> and `_grow_subspace` is only reached on the non-recruiting path — so a
+> once-winning cell's `Wv` row **is** a stored photograph and its `mode_var` is
+> exactly zero.
+
+For those cells `imagine_vision` returns the exemplar unchanged at **every
+temperature**. **36.8% of held-out sounds wake one.** That is what the 0.70
+saturation in the earlier temperature sweep was made of: it was never a weak
+generative model, it was a third of the population that cannot move at all,
+averaged against two thirds that can.
+
+The two-thirds that can move do something almost as awkward. A cell that won
+exactly twice learns one mode, and that mode is necessarily the line joining its
+two members — so sampling along it interpolates between two memorised
+photographs and at high temperature lands on one. On the cells that *do* have a
+subspace, the verbatim rate climbs 0.000 → 0.044 as temperature goes 0 → 4.
+**Turning up the noise on a single concept walks toward memory, not away.**
+
+#### A metric that is about imagining, and its two failure modes
+
+The old bar — "further from memory than a real photograph is" — was
+unpassable by construction: this eye makes distinct photographs nearly
+orthogonal, so anything assembled from stored parts is inside the span of memory
+and can never clear it. The replacement is a *pair*, since neither half means
+anything alone: **novelty** (1 − cos to the nearest stored thing) and
+**coherence** (does it still read as its own category). The target is where real
+held-out data sits, not an unreachable corner.
+
+Two arms exist purely to attack that metric, and both landed:
+
+- **`crossed`** — chimeras from concepts the mind grouped *differently* — reached
+  a scalar gap of 0.423, the best in the table, by driving coherence to 0.275,
+  *below* real data's 0.361. A plain distance is gameable from the low side, so
+  ranking now requires an arm to be **at least as coherent as real data** and
+  scores it on novelty. `crossed` is disqualified by its own result.
+- **`real+imagined`** — the goal's own phrasing — reached gap 0.165 at
+  `anchor=0.75`, and sits at cosine **0.949 to the very photograph it is
+  supposed to be imagining about**. Its gap measures how much of the answer was
+  copied from the question. It is reported with that cosine printed beside it
+  and excluded from the ranking.
+
+#### What composition actually buys
+
+| arm | novelty | coherence | verbatim |
+|---|---|---|---|
+| a stored exemplar | 0.000 | 0.790 | 1.000 |
+| **sampled T=0** (the mean — behaviour before any of this) | 0.021 | 0.831 | **0.368** |
+| sampled T=8 (best single concept) | 0.208 | 0.557 | **0.397** |
+| **composed T=1** (best ranked arm) | **0.389** | 0.843 | **0.001** |
+| *control:* 3 stored photographs averaged, no concept layer | 0.362 | 0.915 | 0.001 |
+| crossed T=4 *(disqualified — coherence below real)* | 0.383 | 0.275 | 0.000 |
+| **a real unseen photograph** ← the target | **0.797** | **0.361** | 0.000 |
+| gaussian noise | 0.975 | 0.178 | 0.000 |
+
+**One real win: composition ends verbatim recall.** 0.397 → 0.001. A singleton
+concept has no spread of its own — one observation carries no variation, which
+is not a bug to patch — but the *category* it belongs to does, and composing
+three siblings reaches it. That is worth having and it is the mechanism's own
+result.
+
+**And one honest negative, which is the finding.** The control decides it:
+averaging three stored photographs *with no concept layer at all* reaches
+novelty 0.362 against composition's 0.389. Paired over 5 seeds that margin is
++0.0276 (sd 0.0100, d = +2.76, 5/5) — consistent, and negligible. Averaging *k*
+near-orthogonal unit codes sits 1/√k from each of them by arithmetic alone;
+at k=3 that is 0.42 of novelty for free, which is essentially all of what the
+composed arm scores. **The novelty of a composition is that arithmetic.** The
+concept cells contribute the coherence (0.843 vs the control's 0.915 — they
+contribute slightly *less*), and temperature spends it.
+
+So the ceiling stands and is now quantified: **nothing self-generated exceeds
+novelty 0.389 against real data's 0.797.** Everything this architecture can
+assemble stays in the span of memory, and no amount of mixing or sampling
+changes that — because mixing and sampling are both linear operations on stored
+vectors. Getting past it requires a source of variation that is not a stored
+code: composition over *parts* rather than whole codes, or a generative step
+that is not a weighted sum. That is the next thing to build, and it is now a
+specific requirement rather than a wish.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
@@ -1813,23 +1925,36 @@ Ordered by what unblocks the goal, not by difficulty.
     sights, against a confabulation control at exactly +0.0000. Novelty-
     prioritised replay came out *below* uniform (+0.016 vs +0.023) — the
     opposite of the prediction, and cheap to re-test once the sparse case works.
-16. **Build something that actually imagines.** Half-done. Concept cells now
-    learn the directions they vary in (Oja + Sanger, local and gradient-free)
-    and sample members rather than returning one mean: fidelity to memory falls
-    0.886 -> 0.700 as temperature rises, trading monotonically against coherence
-    0.775 -> 0.479. That is controllable novelty where there was one fixed
-    output per concept.
+16. **Build something that actually imagines.** The bar has now been fixed and
+    the mechanism measured against it, and the answer is sharper than
+    "half-done".
 
-    What it does not do is reach the novelty of real perception (0.277), and
-    **more directions do not help** (4/16/64/128 modes all land near 0.70), so
-    the limit is not dimensional. It is that anything assembled from stored
-    components lies in the span of memory while a fresh photograph does not.
-    That also indicts the bar: "further from memory than a real photograph"
-    may be unpassable by any recombination in a code where distinct photographs
-    are nearly orthogonal. The next move is therefore to fix the *bar* as much
-    as the mechanism — a novelty measure that asks whether the imagined lands on
-    the data manifold in a place no training example occupies, rather than
-    whether it is decorrelated from all of them. Sampling the concept instead of the episode — the
+    Concept cells learn the directions they vary in (Oja + Sanger, local and
+    gradient-free) and sample members rather than returning one mean. But
+    measured in the space those weights actually live in, a third of what the
+    mind produces is a **stored photograph byte for byte** — 59 of 112 cells win
+    exactly once, hold their training pair verbatim, and have no subspace at
+    all, so no temperature moves them. Composing several concepts is what ends
+    that: verbatim 0.397 → 0.001.
+
+    The replacement bar is the pair (novelty, coherence) against where real
+    held-out data sits, with a coherence floor — added because the chimera arm
+    won the naive scalar version by *degrading* below real data, and the anchored
+    arm won it by copying 0.949 of the answer from the question. Both are now
+    reported with the artefact printed beside them.
+
+    Against that bar the honest result is a negative with a number on it:
+    averaging three stored photographs **with no concept layer at all** reaches
+    novelty 0.362 where composing three concepts reaches 0.389 — a paired
+    +0.0276 (d = 2.76, 5/5), consistent and negligible. Mixing *k* near-orthogonal
+    codes is 1/√k novel by arithmetic; that arithmetic is the whole effect.
+    **Nothing self-generated exceeds novelty 0.389 against real data's 0.797**,
+    because mixing and sampling are both linear operations on stored vectors.
+
+    So the next move is no longer a metric question, it is a mechanism
+    requirement: a source of variation that is **not a weighted sum of stored
+    codes** — composition over *parts* (a cell assembled from features that
+    never co-occurred) rather than over whole codes. Sampling the concept instead of the episode — the
     "infinite inner world" version — was tried and *degrades* the concepts
     (`dreamt` −0.0301, the worst arm measured), because nothing real is holding
     the categories apart. The direction that survives is a night that is

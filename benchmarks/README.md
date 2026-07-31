@@ -41,6 +41,12 @@ PYTHONPATH=. python3 benchmarks/natural_v1.py        out_natural_v1.json
 PYTHONPATH=. python3 benchmarks/vision_ceiling.py    out_vision_ceiling.json
 PYTHONPATH=. python3 benchmarks/second_stage.py      out_second_stage.json
 PYTHONPATH=. python3 benchmarks/natural_scene.py     out_natural_scene.json
+PYTHONPATH=. python3 benchmarks/imagination_shape.py out_imagination_shape.json
+PYTHONPATH=. python3 benchmarks/multi_fixation.py    out_multi_fixation.json
+PYTHONPATH=. python3 benchmarks/translation.py       out_translation.json
+PYTHONPATH=. python3 benchmarks/real_mind.py         out_real_mind.json
+PYTHONPATH=. python3 benchmarks/real_time.py         out_real_time.json
+PYTHONPATH=. python3 benchmarks/composition.py       out_composition.json
 ```
 
 | script | question | key control |
@@ -54,6 +60,12 @@ PYTHONPATH=. python3 benchmarks/natural_scene.py     out_natural_scene.json
 | `vision_ceiling.py` | Which part of the eye is the limit? | width, aperture, spike noise and integration window, each against a control |
 | `second_stage.py` | Does depth help where width did not? | two learning rules for V2, and a concatenated arm that can only fail by V2 adding nothing |
 | `natural_scene.py` | Does the saccadic eye work on scenes of photographs? | on-object rate against the chance of landing on one, with digit scenes as reference |
+| `imagination_shape.py` | Does it imagine, or recall an average? | the same distances asked of a **real unseen photograph**, so "novel" has a scale; measured in `prep_v` space, which the first version got wrong |
+| `multi_fixation.py` | Does aggregating glances beat one look? | pooling codes and pooling scores are the *same* operation (`unit(mean(C)) ∝ sum(C)`) — counted once, not twice |
+| `translation.py` | Is the code translation-invariant? | a 48-px frame, because a 28-px object in a 28-px frame tests occlusion, not translation |
+| `real_mind.py` | Does the assembled mind behave the same on photographs? | the same arms and probes as `acceptance.py`, so the two tables can be read against each other |
+| `real_time.py` | Is perception what gates the world model? | one **shared** day across all three arms; distinct-percept count beside every self-consistency score, since a collapsed perceiver predicts itself at 1.000 |
+| `composition.py` | Does combining concepts imagine? | *k* stored photographs averaged with **no concept layer** — mixing *k* near-orthogonal codes is 1/√k novel by arithmetic alone; plus a chimera arm that exists to catch the metric being gamed from below |
 
 ## What each script measures
 
