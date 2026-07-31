@@ -50,6 +50,7 @@ PYTHONPATH=. python3 benchmarks/composition.py       out_composition.json
 PYTHONPATH=. python3 benchmarks/factored.py          out_factored.json
 PYTHONPATH=. python3 benchmarks/inner_world.py       out_inner_world.json
 PYTHONPATH=. python3 benchmarks/constraint.py        out_constraint.json
+PYTHONPATH=. python3 benchmarks/heard_world.py       out_heard_world.json
 ```
 
 | script | question | key control |
@@ -71,6 +72,7 @@ PYTHONPATH=. python3 benchmarks/constraint.py        out_constraint.json
 | `composition.py` | Does combining concepts imagine? | *k* stored photographs averaged with **no concept layer** — mixing *k* near-orthogonal codes is 1/√k novel by arithmetic alone; plus a chimera arm that exists to catch the metric being gamed from below |
 | `factored.py` | Can it produce anything memory cannot assemble? | the **span residual**, not a cosine — exactly 0 means a linear combination of things already seen; plus a same-cell control proving the escape is the *crossing* and not the slicing |
 | `inner_world.py` | Does out-of-span imagining pay back into the waking world? | a night of **random sights** at the same span residual — if the recombination matches it, the structure is not what is working; plus an R↔B swap that leaves luminance exactly unchanged |
+| `heard_world.py` | Does judging an imagining pay back, where perception works? | `crossed_judged` and `crossed_anti` draw the **same** candidates and invert only which is kept, so their gap is selection alone — and `stored` is the positive control that decides whether the payback channel is open at all |
 | `constraint.py` | Can a plausibility model judge an imagined crossing? | the **ceiling** — how much colour a category determines at all — reported beside every model, so a weak world is not read as a weak rule; plus the same rule handed a visual code that clusters, which separates "weak rule" from "weak representation" |
 
 ## What each script measures

@@ -2070,9 +2070,13 @@ This also settles what to do next, and it is not more imagination machinery.
 Every mechanism built in this section works as specified: recombination leaves
 the span, the compatibility captures ~92% of the constraint available to it,
 replay sharpens what it replays. Each of them is then measured against a world
-it cannot see clearly. **The eye is the whole project's critical path**, and
-§7.8's step 13 — which has been open the entire time — is not one item among
-several any more. It is the only one whose resolution unblocks the rest.
+it cannot see clearly.
+
+> **Corrected below.** This paragraph originally concluded that the eye is the
+> whole project's critical path and the only thing whose resolution unblocks the
+> rest. Running the same machinery in the modality where perception *works*
+> shows that is not right — the payback failure survives a front end that
+> clusters. The eye is a real limit and it is not this one.
 
 **One candidate for that, tested and rejected.** The mind evidently *has* a
 clustered representation somewhere — `sound → vision` works at 0.775 while raw
@@ -2091,6 +2095,81 @@ stored member of the same category usually belongs to another. It is the same
 fact as the 59 singleton cells, seen from the read-out side. The clustering that
 makes `sound → vision` work lives in the *averaging* inside `Wv`, not in any
 code the layer can hand to something else.
+
+### The same machinery in the ear, and what it corrects
+
+The oracle above used class prototypes built from labels, so it shows the rule
+is adequate rather than that a code good enough for it is reachable. The ear
+settles that without supervision. Hearing works here — 1-NN 0.914 over six real
+ESC-50 categories — and the belt already emits two factors,
+`[spectral envelope | tonotopic profile]`, exactly as the eye emits form and
+colour. `benchmarks/heard_world.py`: same rule, same code path, real field
+recordings, nothing supervised.
+
+| | the eye | **the ear** | labelled oracle |
+|---|---|---|---|
+| does the front end cluster? | 0.573 | **0.788** | — |
+| can the two factors be judged? | 0.541 | **0.818** | 0.879 |
+
+**AUC 0.818 unsupervised, essentially at the labelled oracle.** So the
+judgement is buildable and the representation was genuinely what blocked it on
+vision. That much of the previous section holds.
+
+#### And then the positive control failed, which is the finding
+
+With a front end that clusters, a judgement that discriminates, and
+recombinations that leave the span (residual 0.4976 against 0.0000 for a stored
+code), the night was run five ways — and `crossed_judged` versus `crossed_anti`
+draws the *same* candidates and inverts only which is kept, so the gap between
+them is selection and nothing else.
+
+| arm | names it | Δ | d |
+|---|---|---|---|
+| `no_dream` | 0.620 | — | — |
+| **`stored`** — replaying a **real** recording | 0.616 | **−0.0046** | −0.14 |
+| `crossed` — unjudged | 0.597 | −0.0231 | −0.48 |
+| `crossed_judged` — most plausible | 0.593 | −0.0278 | −0.44 |
+| `crossed_anti` — least plausible | 0.602 | −0.0185 | −0.29 |
+
+**The positive control fails.** Replaying a real recording does not help either,
+so the route from a night into perception is inert here and the null for
+selection is a null for the *channel*, not for judging. (This was caught by
+running the 50-way task first, where every arm including `stored` lost; the
+6-class world was chosen so replay would have something to sharpen, and it still
+lost. A benchmark whose positive control fails cannot answer its own question,
+and saying so is the result.)
+
+#### What that corrects, and what it leaves
+
+The previous section concluded the eye is the critical path and the only thing
+whose resolution unblocks the rest. **That is too strong.** The payback failure
+reproduces with a front end that clusters at 0.788 and a judgement at 0.818, so
+it is not downstream of the eye. What all of it is downstream of is narrower and
+more structural:
+
+> the architecture has exactly **one** route from an imagining back into the
+> mind — `bind` — and that route implements **consolidation**, not learning. It
+> sharpens the average of what it is given. An imagining is therefore either
+> absorbed as a false observation or it is noise, and in both cases the best it
+> can do is leave the concepts where they were.
+
+That is why `stored` helps in `inner_world.py` (+0.0336) and not here: there the
+probe is cross-modal retrieval, which reads the averaged `Wv` weights that
+consolidation sharpens; here it is direct recognition, which the waking day
+already saturates. Replay only ever moved the numbers that averaging moves. It
+was never learning, which §7's correction said in one place and this now says
+generally.
+
+So the standing conclusion, at the width the measurements support: **this project
+can now imagine — provably, outside the span of memory, coherently — and can
+judge what it imagines, unsupervised, at 0.818. What it cannot do is learn from
+either.** A generative model and a constraint solver both exist and both are
+wired into a consolidator. The missing piece is not a better imagination, a
+better judge or a better eye: it is a plasticity rule that can be driven by a
+*prediction error* rather than by a co-occurrence — which is exactly what §7.6
+concluded from the other end when it found replay into perception needs an
+external teaching signal, and what step 15b asks for the world model. Three
+independent routes have now arrived at the same missing mechanism.
 
 ---
 
