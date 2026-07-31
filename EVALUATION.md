@@ -1488,6 +1488,74 @@ rule, pooling, width — every one of them is blocked by the same missing proper
 The eye's problem has one name, and it is not depth or capacity: it is that
 nothing in this visual pathway is invariant to where the thing is.
 
+### The invariant code was not invariant — a contract violated by the learning rule
+
+The section above ended by naming translation invariance as the missing
+property. Testing that named something more specific and more fixable.
+
+`WideV1.pooling_index` promises a shift-invariant code by grouping cells that
+"share a filter but sit at different locations", and it identifies those cells
+**purely by index**, `arange(n_cells) // n_pos`. That is a filter identity only
+if every hypercolumn holds the same bank. Measured, by the cosine between filter
+*k* at different positions:
+
+| | filter-index cosine across positions |
+|---|---|
+| untrained `WideV1` | **0.977** — tied |
+| after `develop_v1` | **0.454** — against 0.319 for random pairs |
+| `AuditoryBelt`'s layer (never developed) | **0.978** |
+
+`develop_v1` lets each column drift independently, so after development "filter
+k" means a different pattern at every position and pooling by filter index sums
+**unrelated cells**. The code was not invariant, and the giveaway had been
+sitting in the data: a fully pooled code fell from 0.382 to chance over a 10 px
+offset, which a code that discards position cannot do unless the grouping is
+wrong.
+
+The other sense is the control that confirms it. `AuditoryBelt` builds a
+`WideV1` and never develops it, so its bank stays tied at 0.978 — which is why
+the identical pooling operation genuinely works there, and is part of why
+hearing outperforms vision in this project.
+
+**The fix is weight tying** (`develop_v1(..., tie=True)`), which is also the
+standard assumption about V1 rather than a convenience: an orientation channel
+is repeated across the retinotopic map, and that repetition is what makes the
+map a map. It restores the cosine to 1.000, and with it the invariance:
+
+| MNIST, accuracy vs offset | 0 px | 4 px | 8 px | 10 px | fall |
+|---|---|---|---|---|---|
+| `pooled both`, untied | 0.382 | 0.161 | 0.117 | 0.108 | **+0.274** |
+| `pooled both`, **tied** | 0.233 | 0.241 | 0.208 | 0.191 | **+0.042** |
+| `pooled cols`, tied | 0.628 | **0.333** | 0.199 | 0.196 | +0.432 |
+| position-specific | 0.773 | 0.237 | 0.103 | 0.105 | +0.668 |
+
+The tied invariant code is nearly **flat** across a 10 px shift where the untied
+one collapses. And there is a crossover: past 4 px the tied `pooled cols` beats
+position-specific (0.333 against 0.237, and 0.196 against 0.105 at 10 px), which
+is exactly the regime free viewing lives in.
+
+**And accumulation works there.** The question `multi_fixation.py` could not
+answer, re-asked on a tied bank:
+
+| free-viewing arm | k=1 | k=4 | accumulation |
+|---|---|---|---|
+| MNIST `pooled both`, untied, explore 8 | 0.093 | 0.069 | −0.024 |
+| MNIST `pooled both`, **tied**, explore 8 | 0.130 | 0.183 | **+0.054** |
+| CIFAR `pooled both`, **tied** | 0.065 | 0.178 | **+0.113** |
+
+Pooling several glances helps only where the code is genuinely invariant, and
+there it is the largest accumulation effect measured anywhere in this project.
+
+Two things this does **not** claim. The invariant codes are weak in absolute
+terms — 0.233 against 0.773 for position-specific on centred digits — so this
+does not rescue overall accuracy, it repairs a mechanism that was silently
+broken and shows the mechanism behaving as documented. And the first version of
+this measurement was itself invalid: a 28×28 object shifted 10 px inside a 28×28
+frame loses a third of itself, so every code including the invariant one fell to
+chance and the conclusion would have been "invariance is not the missing
+property". Giving the object a 48×48 frame to move in is what made it a
+translation test rather than an occlusion test.
+
 ### The imagining has to be anchored to something real
 
 The goal asks for an *infinite* inner world — new percepts and concepts made
@@ -1629,12 +1697,19 @@ Ordered by what unblocks the goal, not by difficulty.
     accuracy (MNIST 0.733 -> 0.257), because diverse glances must be off-centre
     and off-centre glances cannot be read.
 
-    Everything else in this list is downstream of that. A code invariant to
-    position is the one repair that would unblock accumulation, pooling, a
-    second stage and the concept layer at once -- and `pooling_index` already
-    builds one, which was measured as harmful *on digits* where objects are
-    centred by construction and invariance buys nothing. It has never been
-    tested where it would pay.
+    Tested, and it found a real bug rather than a missing feature.
+    `pooling_index` groups cells by index on the assumption that every
+    hypercolumn holds the same filter bank -- true untrained (cosine 0.977) and
+    false after `develop_v1`, which lets each column drift (0.454, against 0.319
+    for random pairs). The "invariant" code was summing unrelated cells.
+    `develop_v1(tie=True)` restores it, invariance appears (a fully pooled code
+    falls +0.042 over 10px instead of +0.274), and glance accumulation starts
+    working (+0.054 on MNIST, +0.113 on CIFAR) where it previously did not.
+
+    What remains open is that the invariant codes are *weak* -- 0.233 against
+    0.773 for position-specific on centred digits -- so the repair does not
+    lift overall accuracy. The selectivity has to come from somewhere else, and
+    that is now the question rather than invariance.
 
 18. **(superseded) six mechanisms failed and one non-mechanism worked.**
     1-NN 0.337 on photographs against 0.914 for the ear. Width is flat from

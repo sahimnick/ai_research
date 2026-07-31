@@ -142,15 +142,39 @@ def develop_v1(layer: WideV1, images: Sequence[np.ndarray], epochs: int = 4,
                lr0: float = 0.35, lr1: float = 0.02,
                sigma0: Optional[float] = None, sigma1: float = 0.01,
                homeostasis: float = 2.0,
-               patches_per_image: int = 24, seed: int = 0,
-               verbose: bool = False) -> WideV1:
+               patches_per_image: int = 24, tie: bool = False,
+               seed: int = 0, verbose: bool = False) -> WideV1:
     """Grow receptive fields from experience. No Gabors are written down.
 
     One developmental step: take a patch, let the cells at that location
     compete for it, and let the winner and its map-neighbours move toward it.
     The learning rate and the neighbourhood width both anneal, which is what
     turns an initially global reorganisation into local refinement -- the
-    coarse-to-fine course of a critical period."""
+    coarse-to-fine course of a critical period.
+
+    ``tie`` shares each filter across every retinotopic position, and it repairs
+    something that was quietly broken. :meth:`WideV1.pooling_index` promises a
+    shift-invariant code by grouping cells that "share a filter but sit at
+    different locations" -- and it identifies those cells purely by index,
+    ``arange(n_cells) // n_pos``. That is only a filter identity if every
+    hypercolumn learns the *same* bank. Untrained, they do: filter *k* has cosine
+    **0.977** to itself across positions. After development each column has drifted
+    independently and the same measurement reads **0.454**, against 0.319 for
+    random pairs -- so pooling by filter index was summing unrelated cells and
+    the "invariant" code was not invariant. Measured consequence: a fully pooled
+    code falls from 0.382 to chance by a 10px offset, which a code that discards
+    position cannot do unless the grouping is wrong.
+
+    The tell was in the other sense. :class:`AuditoryBelt` builds a
+    :class:`WideV1` and never develops it, so its bank stays tied at **0.978** --
+    which is why the same pooling operation genuinely works there and is a large
+    part of why hearing outperforms vision in this project.
+
+    Tying is also the standard assumption about V1 rather than a convenience: a
+    given orientation-and-frequency channel is repeated across the retinotopic
+    map, which is what makes the map a map. It costs the columns their
+    independence, which is the point.
+    """
     rng = np.random.default_rng(seed)
     n_pos, nf = layer.n_pos, layer.n_cells // layer.n_pos
     if nf < 2:
@@ -202,6 +226,13 @@ def develop_v1(layer: WideV1, images: Sequence[np.ndarray], epochs: int = 4,
                 W[:, p, :] += (lr * h)[:, None] * (Pn[p][None, :] - W[:, p, :])
                 D[:, p] *= (1.0 - 0.05)
                 D[win, p] += 0.05
+            if tie:
+                # one bank, repeated: average each filter over the positions
+                # that just updated it, then write it back everywhere. This is
+                # the convolutional weight-sharing constraint, and without it
+                # `pooling_index` is grouping cells that no longer share
+                # anything.
+                W[:] = W.mean(axis=1, keepdims=True)
             np.maximum(W, 0.0, out=W)
             W /= np.maximum(np.linalg.norm(W, axis=2, keepdims=True), 1e-6)
             layer.Wt[:head] = W.reshape(head, -1)
