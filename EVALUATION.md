@@ -1919,6 +1919,75 @@ are equally available and equally unjudged. Leaving the span was the blocking
 problem, and it is solved; choosing *which* point outside the span is worth
 imagining is the next one, and it is what a world model would be for.
 
+### The inner world is real and nothing consumes it
+
+A sight nothing uses is a curiosity. The goal is the *re-creation of the outside
+world inside*, and the only evidence that anything has been re-created is that
+the mind gets better at the world it has to live in. `benchmarks/inner_world.py`
+runs `cross_modal_dream.py`'s protocol on content that benchmark could not
+produce — every arm keeps the **real recording** and invents only the sight,
+which is the goal's own phrasing, and the arms differ only in what is imagined.
+
+| arm | what the night was made of | span residual | sound→vision | d | wins |
+|---|---|---|---|---|---|
+| `stored` | the real sight | 0.0000 (in span) | **+0.0336** | **2.49** | **6/6** |
+| `imagined` | the concept's expected sight | 0.0000 (in span) | −0.0093 | −0.89 | 0/6 |
+| **`factored`** | **form + a foreign concept's colour** | **0.4927 (outside)** | −0.0023 | −0.19 | 2/6 |
+| `factored_own` | the same, colour from its own category | 0.4933 (outside) | +0.0000 | 0.00 | 2/6 |
+| `confabulated` | a random sight | 0.9912 (outside) | −0.0069 | −0.42 | 2/6 |
+
+**Only replaying the real sight helps.** Nothing self-generated does, in span or
+out of it. And the accuracy table was never going to be the right question:
+binding a yellow bus to the real sound of a bus asserts something **false**
+about the world, so a night of recombinations should not raise overall accuracy,
+and does not.
+
+What a recombination *is* evidence for is that form survives a change of colour.
+So the probe that matters exchanges R and B on held-out photographs — luminance
+`(r+g+b)/3` is exactly invariant to that swap, so form is held fixed by
+construction and only the thing the recombination varied is varied:
+
+| arm | names it, colours swapped | fraction of naming kept | Δ | d |
+|---|---|---|---|---|
+| `no_dream` | 0.244 | 69.0% | — | — |
+| `stored` | **0.267** | **77.0%** | **+0.0231** | +1.25 |
+| `imagined` | 0.262 | 77.1% | +0.0174 | +1.03 |
+| **`factored`** | 0.248 | **72.3%** | +0.0035 | +0.28 |
+| `confabulated` | 0.250 | **72.5%** | +0.0058 | +1.11 |
+
+**The factored night is indistinguishable from a random sight** — 72.3% against
+72.5%. That is the same shape as `composition.py`'s verdict arrived at from the
+other end: the mechanism's effect equals a structureless control's effect, so
+whatever structure it has is not what is doing the work. And what *did* move
+robustness is replaying the real sight (+0.0231): the gain came from
+**sharpening** the concept, not from imagined variation.
+
+#### Why, specifically — and it is not that the mechanism was ignored
+
+The recombination recruits only ~4 new cells out of a pool with 145 free, so it
+is not being rejected as novel and filed away. It **updates existing concepts**,
+drifting each one's colour block toward the average of all of them. In this
+world that is a loss rather than an invariance: colour here is *signal*, worth
+**+0.171** to the read-out (`factored.py`: whole code 0.831, form block alone
+0.660). Imagining a yellow bus is sound. Concluding "colour does not matter"
+from it is not — and binding it as a fact is the only thing this architecture
+knows how to do with an imagining.
+
+That is the finding, and it relocates the gap precisely. Across three benchmarks:
+
+- mixing stored codes **provably cannot** produce anything new (`composition.py`)
+- crossing factors **provably can**, and does, coherently (`factored.py`)
+- and the mind has **no operation that benefits from it** (`inner_world.py`)
+
+The missing piece was never novelty, and it is no longer a generative model
+either — that now exists. It is that every route from an imagining back into the
+mind runs through `bind`, which treats what it is given as an observation. An
+imagined thing needs to be *evaluated* rather than memorised: something that asks
+whether a crossing is possible before the concepts absorb it. That is what a
+causal model and a constraint on the result would be for, and it is now the
+blocking problem rather than a wish — demonstrated by three arms that leave the
+span and none that gains from having left it.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

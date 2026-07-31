@@ -48,6 +48,7 @@ PYTHONPATH=. python3 benchmarks/real_mind.py         out_real_mind.json
 PYTHONPATH=. python3 benchmarks/real_time.py         out_real_time.json
 PYTHONPATH=. python3 benchmarks/composition.py       out_composition.json
 PYTHONPATH=. python3 benchmarks/factored.py          out_factored.json
+PYTHONPATH=. python3 benchmarks/inner_world.py       out_inner_world.json
 ```
 
 | script | question | key control |
@@ -68,6 +69,7 @@ PYTHONPATH=. python3 benchmarks/factored.py          out_factored.json
 | `real_time.py` | Is perception what gates the world model? | one **shared** day across all three arms; distinct-percept count beside every self-consistency score, since a collapsed perceiver predicts itself at 1.000 |
 | `composition.py` | Does combining concepts imagine? | *k* stored photographs averaged with **no concept layer** — mixing *k* near-orthogonal codes is 1/√k novel by arithmetic alone; plus a chimera arm that exists to catch the metric being gamed from below |
 | `factored.py` | Can it produce anything memory cannot assemble? | the **span residual**, not a cosine — exactly 0 means a linear combination of things already seen; plus a same-cell control proving the escape is the *crossing* and not the slicing |
+| `inner_world.py` | Does out-of-span imagining pay back into the waking world? | a night of **random sights** at the same span residual — if the recombination matches it, the structure is not what is working; plus an R↔B swap that leaves luminance exactly unchanged |
 
 ## What each script measures
 
