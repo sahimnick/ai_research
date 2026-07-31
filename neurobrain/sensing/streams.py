@@ -271,17 +271,38 @@ class SaccadicEye:
         return (int(np.clip(r, half, self.scene.shape[0] - half - 1)),
                 int(np.clip(c, half, self.scene.shape[1] - half - 1)))
 
-    def free_view(self, n_saccades: int = 20, correct: bool = True
-                  ) -> List[Fixation]:
+    def free_view(self, n_saccades: int = 20, correct: bool = True,
+                  explore: int = 0) -> List[Fixation]:
         """Look around the scene on its own for a while.
 
         ``correct=False`` disables the corrective saccade, which is how the
-        cost of *not* foveating is measured rather than assumed."""
+        cost of *not* foveating is measured rather than assumed.
+
+        ``explore`` offsets the landing point by up to that many pixels *after*
+        the correction, so returning to an object lands on a different part of
+        it. It exists because of a measured degeneracy: the corrective saccade
+        drives to the same saliency peak every time, so the median pixel offset
+        between successive glances at one object was **0.0** and their codes sat
+        at cosine 0.879 -- near-duplicates. Pooling several glances then gains
+        almost nothing (+0.009 on digits, d=0.22) for the simple reason that
+        there is no independent evidence to pool.
+
+        Scanning the *parts* of a thing is what a fixation sequence on one
+        object actually consists of, so the offset is not noise added for its
+        own sake; it is the difference between looking twice and looking once
+        twice.
+        """
         out = []
         for _ in range(n_saccades):
             r, c = self.next_target()
             if correct:
                 r, c = self.foveate(r, c)
+            if explore > 0:
+                half = self.fovea // 2
+                r = int(np.clip(r + self.rng.integers(-explore, explore + 1),
+                                half, self.scene.shape[0] - half - 1))
+                c = int(np.clip(c + self.rng.integers(-explore, explore + 1),
+                                half, self.scene.shape[1] - half - 1))
             out.append(self.fixate(r, c))
         return out
 

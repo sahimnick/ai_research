@@ -1435,6 +1435,59 @@ stays inside the span of what it has seen. Whether that counts as imagining is a
 question the numbers can inform and not settle — but "it recalls one average per
 concept", which is what was true before, is no longer the description.
 
+### Accumulating glances is blocked by the same missing property
+
+`natural_scene.py` left the sharpest split in the project: the eye finds
+photographs (on-object 0.883) and cannot name them (0.134). Seven mechanisms
+inside the recognition path had already failed, so the next attempt used **more
+of the faculty that works** instead of a better code — the eye lands on the same
+object several times during a free view, and every glance is currently
+classified alone and thrown away.
+
+It does not work, and the reason is worth more than the attempt.
+
+**The glances are near-duplicates.** Median pixel offset between successive
+fixations on the same object: **0.0**. Their codes sit at cosine 0.879 against
+0.347 for different objects. The corrective saccade drives to the same saliency
+peak every time, so there is no independent evidence to accumulate — pooling
+gains +0.009 (d=0.22) and the reason is arithmetic, not biology.
+
+Two things fell out of building the test, both corrections to my own design:
+
+* Pooling *codes* and pooling *scores* are **mathematically identical** here —
+  `unit(mean(C))` is proportional to `sum(C)`, so nearest-prototype cannot tell
+  them apart. They agreed to three decimals on every row, which is the
+  arithmetic confirming itself rather than two mechanisms agreeing.
+* Two of my own benchmarks reported per-fixation naming on MNIST as 0.559 and
+  0.733. Re-run on identical settings they agree (0.645 against 0.641), and
+  `which_object` places **100%** of on-object fixations (195/195, 256/256). The
+  gap was seed variance across a small number of scenes — which is itself a
+  warning about how much weight the single-digit gains in this section can take.
+
+**Then the fix, and the trap.** Letting the eye scan *parts* of an object rather
+than re-centring (`SaccadicEye.free_view(explore=)`) removes the redundancy
+exactly as designed — 0.856 → 0.168. It still does not pay:
+
+| explore | redundancy | MNIST k=1 | MNIST k=4 | CIFAR k=1 | CIFAR k=3 |
+|---|---|---|---|---|---|
+| 0 | 0.842 | **0.733** | 0.753 | 0.114 | 0.128 |
+| 4 | 0.235 | 0.257 | 0.349 | 0.128 | 0.139 |
+| 8 | 0.224 | 0.101 | 0.090 | 0.106 | 0.147 |
+| 12 | 0.293 | 0.094 | 0.117 | 0.085 | 0.150 |
+
+The wide V1 code is retinotopic and has **no translation invariance at all** —
+which this module already knew, since the corrective saccade exists because
+free-viewing recognition collapsed to 17.2% against 78.3% for centred crops. So
+an off-centre glance is a bad glance, and the two requirements are in direct
+opposition: **diverse glances must be off-centre, and off-centre glances cannot
+be read.** The correction that makes single glances work is exactly what makes
+repeated glances redundant.
+
+That closes the loop on this section. Accumulation, the second stage, the trace
+rule, pooling, width — every one of them is blocked by the same missing property.
+The eye's problem has one name, and it is not depth or capacity: it is that
+nothing in this visual pathway is invariant to where the thing is.
+
 ### The imagining has to be anchored to something real
 
 The goal asks for an *infinite* inner world — new percepts and concepts made
@@ -1566,8 +1619,24 @@ Ordered by what unblocks the goal, not by difficulty.
     *variation* rather than the content be self-generated. Interpolating between
     two same-label concepts is the only self-generated arm that helps on a
     sparse day (+0.0058), which is a signal worth chasing rather than a result.
-17. **The eye is the ceiling; six mechanisms failed and one non-mechanism
-    worked.**
+17. **The eye's problem has one name: no translation invariance.** Eight
+    mechanisms have now failed against it, and the eighth named it. Multi-glance
+    accumulation is blocked because the corrective saccade -- which exists
+    precisely because off-centre objects cannot be read -- lands on the same
+    pixel every time (median offset 0.0, glance-to-glance cosine 0.879), so
+    there is no independent evidence to pool. Letting the eye scan an object's
+    parts removes the redundancy (0.856 -> 0.168) and destroys single-glance
+    accuracy (MNIST 0.733 -> 0.257), because diverse glances must be off-centre
+    and off-centre glances cannot be read.
+
+    Everything else in this list is downstream of that. A code invariant to
+    position is the one repair that would unblock accumulation, pooling, a
+    second stage and the concept layer at once -- and `pooling_index` already
+    builds one, which was measured as harmful *on digits* where objects are
+    centred by construction and invariance buys nothing. It has never been
+    tested where it would pay.
+
+18. **(superseded) six mechanisms failed and one non-mechanism worked.**
     1-NN 0.337 on photographs against 0.914 for the ear. Width is flat from
     1024 to 4096 cells; a larger aperture is worse; a longer integration window
     does nothing; **spiking costs nothing at all** against the noiseless filter
