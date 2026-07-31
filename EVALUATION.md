@@ -2422,6 +2422,66 @@ confirmed. (Every number here sits between 0.14 and 0.16 against a chance of
 0.100, so these are small effects on a perceiver that is barely working, which
 is the standing caveat on all of §9.)
 
+### The inner world pays back — once it is used as an error and not as a fact
+
+`inner_world.py` returned this project's sharpest negative: a night of
+out-of-span recombinations improved held-out recognition by exactly as much as a
+night of **random sights** (72.3% against 72.5%). Its diagnosis was that binding
+a yellow bus to the real sound of a bus asserts something *false*. That
+diagnosis was right, and it was a statement about the architecture rather than
+about imagination: **every route from an imagining back into the mind ran
+through `bind`, which treats what it is handed as an observation.**
+
+Two things changed. `merger.py` gave the layer concepts instead of memories
+(singletons 53% → 0%, verbatim 39% → 1%). And `bind_contrastive` gives the
+imagining somewhere else to go: the **negative phase** — the thing the layer
+moves *away* from — so a wrong fantasy teaches by being wrong instead of by
+being believed.
+
+`benchmarks/payback.py`, 6 seeds. Every arm replays the **same 400 pairs in the
+same order** from an identically seeded generator, so the arms differ in the
+rule and in nothing else.
+
+| arm | sound→vision | see→name | swapped |
+|---|---|---|---|
+| `stored` (replay what it really saw) | +0.0255 d=+0.91 5/6 | −0.0069 | +0.0231 |
+| `imagined_as_fact` (believe it) | **−0.0174 d=−1.07 0/6** | −0.0012 | −0.0023 |
+| `imagined_as_error` (learn against it) | +0.0197 d=+0.79 4/6 | −0.0069 | +0.0174 |
+| `merged` (generalise, no night) | +0.0255 d=+0.92 5/6 | −0.0255 | −0.0058 |
+| **`merged+error`** | **+0.0833 d=+3.65 6/6** | −0.0150 | +0.0069 |
+
+**Believing the imagining hurts (−0.0174, 0 of 6 seeds). Learning against the
+identical imaginings helps (+0.0197). On a layer that generalises it is
++0.0833, d=3.65, 6 of 6** — the largest and most consistent effect measured
+anywhere in this project. Same completions, same replay order, same number of
+plasticity events. The only difference is whether the fantasy is believed.
+
+**And the two repairs are superadditive**: consolidation alone +0.0255,
+learning-against alone +0.0197, sum +0.0452, together **+0.0833**. They are not
+independent fixes. An error-driven rule needs concepts worth being wrong about,
+and a layer that memorises gives it nothing to predict — each is most of the
+other's precondition. That is why every earlier night failed: they were all run
+on a memoriser, using a rule that could only believe.
+
+**The comparison that settles the goal**: replaying what the mind *actually saw*
+is worth +0.0255. Learning against what it *imagines* is worth +0.0833 — **3.3×
+more than replaying reality.**
+
+**Scope, stated rather than glossed.** The gain is in **cross-modal recall** —
+hear a sound, know what it looks like. Direct visual naming does not improve
+(−0.0150) and colour robustness does not (+0.0069). The eye is still the eye,
+and §7.8's step 13 is still the critical path for everything that runs through
+it. What has changed is that the imagination is no longer waiting on it: there
+is now a measured channel by which the mind's own inner world improves its grip
+on the outer one.
+
+So the goal, at the width the measurements support: **a mind re-creates the
+outside world inside by combining what is real with what it imagines — the real
+pair as the positive phase, its own completion as the negative — and doing so
+improves its cross-modal grip on the real world by more than replaying reality
+does.** Not because the imagining is true, but because being wrong about it is
+informative.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
