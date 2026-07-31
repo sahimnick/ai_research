@@ -2042,12 +2042,37 @@ precisely the opposite property.
 
 So the third component is not blocked on a rule that has yet to be invented; the
 Hebbian one is adequate. It is blocked on a factorisation over which
-plausibility is a real question. Form × colour is not one. Form × *support*
-(a bus is on a road), object × *scene*, sound × *sight* at a given moment — those
-are dependencies a world actually has, and the last of them is already in this
-architecture, unexamined from this angle: `Wv` and `Wa` are two factors of one
-concept, and whether a sight goes with a sound is a question the world genuinely
-answers.
+plausibility is a real question. Form × colour is not one — but **sight × sound
+is**, and it was already in the architecture, unexamined from this angle: `Wv`
+and `Wa` are two factors of one concept, and whether a bark goes with a dog is a
+question the world genuinely answers.
+
+#### And the same rule, asked that question, gives the session's answer
+
+| the same Hebbian outer product, over sight × sound | AUC |
+|---|---|
+| with the visual code the eye actually produces | 0.533 |
+| **with a visual code that clusters by category** | **0.879** |
+
+Nothing about the rule changes between those two rows. Only whether similar
+things are similar in what it is handed. **The judgement machinery works — it
+reaches 0.879 — and the eye's code is what fails it.**
+
+That is the same upstream defect that has blocked every downstream result in
+§7.8, where the eye names photographs at 0.134 against 0.559 for digits. It now
+has a much wider consequence than "recognition is weak", because a
+representation in which same-category things are not similar cannot support a
+generative model, a constraint solver **or** a causal model, however each is
+built. The three components are not three independent gaps. They are one gap,
+seen three times.
+
+This also settles what to do next, and it is not more imagination machinery.
+Every mechanism built in this section works as specified: recombination leaves
+the span, the compatibility captures ~92% of the constraint available to it,
+replay sharpens what it replays. Each of them is then measured against a world
+it cannot see clearly. **The eye is the whole project's critical path**, and
+§7.8's step 13 — which has been open the entire time — is not one item among
+several any more. It is the only one whose resolution unblocks the rest.
 
 ---
 

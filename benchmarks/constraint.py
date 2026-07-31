@@ -123,6 +123,46 @@ def run_seed(V, A, y, n_cls, seed):
         cross = [fc.score(crossed(k)) for k in te]
         out[tag] = auc(real, cross)
     out["cells"] = int((assoc.wins > 0).sum())
+
+    # ---- the same question of a factorisation that SHOULD be constrained ---
+    # Sight and sound are two factors of one concept, and unlike form and
+    # colour the world genuinely answers whether they go together: a bark goes
+    # with a dog. If a compatibility cannot find that either, the rule is not
+    # what is failing.
+    nv, na = d, A.shape[1]
+    b2 = [(0, nv), (nv, nv + na)]
+
+    def pair(i, j=None):
+        return np.concatenate([assoc.prep_v(V[int(i)]),
+                               assoc.prep_a(A[int(i if j is None else j)])])
+
+    fc2 = FactorCompatibility(b2, rank=256, seed=seed)
+    for i in tr:
+        fc2.observe(pair(i))
+    real2 = [fc2.score(pair(k)) for k in te]
+    bad2 = [fc2.score(pair(k, int(rng.choice(
+        [j for j in tr if int(y[j]) != int(y[k])])))) for k in te]
+    out["sight x sound"] = auc(real2, bad2)
+
+    # ...and the control that decides between "weak rule" and "weak
+    # representation": hand the SAME rule a visual code that actually clusters
+    # by category -- the class prototype -- and ask again. Nothing about the
+    # rule changes; only whether similar things are similar in what it is given.
+    protoV = {c: _unit(np.mean([assoc.prep_v(V[int(i)]) for i in tr
+                                if int(y[i]) == c], axis=0))
+              for c in range(n_cls)}
+
+    def oracle(i, j=None):
+        return np.concatenate([protoV[int(y[int(i)])],
+                               assoc.prep_a(A[int(i if j is None else j)])])
+
+    fc3 = FactorCompatibility(b2, rank=256, seed=seed)
+    for i in tr:
+        fc3.observe(oracle(i))
+    real3 = [fc3.score(oracle(k)) for k in te]
+    bad3 = [fc3.score(oracle(k, int(rng.choice(
+        [j for j in tr if int(y[j]) != int(y[k])])))) for k in te]
+    out["sight x sound, clustered sight"] = auc(real3, bad3)
     return out
 
 
@@ -150,8 +190,8 @@ def main():
            "per_seed": rows}
 
     ceil = res["mean"]["available"]
-    print(f"{'':<22}{'AUC':>8}{'sd':>8}   (0.500 is nothing)")
-    print(f"{'the CEILING':<22}{ceil:>8.3f}{res['sd']['available']:>8.3f}"
+    print(f"{'':<32}{'AUC':>8}{'sd':>8}   (0.500 is nothing)")
+    print(f"{'the CEILING':<32}{ceil:>8.3f}{res['sd']['available']:>8.3f}"
           f"   how much colour a category determines")
     print(f"{'':<22}{'':>8}{'':>8}   (same-category colour gap "
           f"{res['colour_gap']:+.4f})\n")
@@ -160,16 +200,31 @@ def main():
     # and only the second means anything: both numbers have a floor of 0.5 that
     # has to come out before they are compared.
     head = ceil - 0.5
+    OTHER = ("sight x sound", "sight x sound, clustered sight")
     for k in keys:
         if k == "available":
             continue
         v, s = res["mean"][k], res["sd"][k]
+        if k in OTHER:
+            # a different factorisation: the form->colour ceiling does not
+            # govern it, and dividing by it anyway printed "844%"
+            print(f"{k:<32}{v:>8.3f}{s:>8.3f}   (other factorisation)")
+            continue
         got = (v - 0.5) / head if head > 1e-9 else 0.0
         res.setdefault("captured", {})[k] = round(float(got), 4)
-        print(f"{k:<22}{v:>8.3f}{s:>8.3f}   {got:>5.0%} of the available "
+        print(f"{k:<32}{v:>8.3f}{s:>8.3f}   {got:>5.0%} of the available "
               f"signal")
 
-    best = max((k for k in keys if k != "available"),
+    sxs = res["mean"]["sight x sound"]
+    orc = res["mean"]["sight x sound, clustered sight"]
+    print(f"\n  the same rule on a factorisation the world DOES constrain:")
+    print(f"    sight x sound, as the eye codes it   {sxs:.3f}")
+    print(f"    sight x sound, sight that CLUSTERS   {orc:.3f}"
+          f"   <- the rule, given similar things that are similar")
+    res["rule_is_adequate"] = bool(orc > 0.75)
+
+    best = max((k for k in keys if k not in
+                ("available", "sight x sound", "sight x sound, clustered sight")),
                key=lambda k: res["mean"][k])
     res["best"] = best
     print(f"\n=== can a constraint solver be built on these factors? ===")
@@ -195,6 +250,21 @@ def main():
               "makes factored recombination work makes it unconstrainable.**")
         print("  A constraint solver needs factors that constrain each other; "
               "these were chosen for the opposite property.")
+        if res["rule_is_adequate"]:
+            print(f"\n  And the rule is not the limit anywhere here. Given a "
+                  f"visual code in which similar things are actually similar, "
+                  f"the SAME Hebbian outer")
+            print(f"  product reaches {orc:.3f} on sight x sound, against "
+                  f"{sxs:.3f} on the code the eye actually produces. The "
+                  f"judgement machinery works; what it is")
+            print("  being handed does not. That is the same upstream defect "
+                  "that has blocked every downstream result in section 7.8 -- "
+                  "the eye names")
+            print("  photographs at 0.134 against 0.559 for digits, and a "
+                  "representation that does not cluster cannot support a "
+                  "generative model, a")
+            print("  constraint solver, or a causal model, however each is "
+                  "built.")
     else:
         print(f"\n  There is {reachable:.3f} of AUC to work with, and the best "
               f"model captures {(res['mean'][best]-0.5)/reachable:.0%} of it. "

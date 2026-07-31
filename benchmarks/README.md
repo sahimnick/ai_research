@@ -71,7 +71,7 @@ PYTHONPATH=. python3 benchmarks/constraint.py        out_constraint.json
 | `composition.py` | Does combining concepts imagine? | *k* stored photographs averaged with **no concept layer** — mixing *k* near-orthogonal codes is 1/√k novel by arithmetic alone; plus a chimera arm that exists to catch the metric being gamed from below |
 | `factored.py` | Can it produce anything memory cannot assemble? | the **span residual**, not a cosine — exactly 0 means a linear combination of things already seen; plus a same-cell control proving the escape is the *crossing* and not the slicing |
 | `inner_world.py` | Does out-of-span imagining pay back into the waking world? | a night of **random sights** at the same span residual — if the recombination matches it, the structure is not what is working; plus an R↔B swap that leaves luminance exactly unchanged |
-| `constraint.py` | Can a plausibility model judge an imagined crossing? | the **ceiling** — how much colour a category determines at all — reported beside every model, so a weak world is not read as a weak rule; share-of-available-signal, not a ratio of AUCs |
+| `constraint.py` | Can a plausibility model judge an imagined crossing? | the **ceiling** — how much colour a category determines at all — reported beside every model, so a weak world is not read as a weak rule; plus the same rule handed a visual code that clusters, which separates "weak rule" from "weak representation" |
 
 ## What each script measures
 
