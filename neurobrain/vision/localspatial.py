@@ -136,13 +136,27 @@ class LocalSpatialEye:
                  patch: int = 8, stride: int = 4, n_cells: int = 128,
                  rf: int = 3, bins: int = 3, centred: bool = True,
                  local: bool = True, shared_bank: bool = True,
-                 resample: bool = True, kwta: float = 0.25, seed: int = 0):
+                 resample: bool = True, kwta: float = 0.25,
+                 spiking: bool = True, seed: int = 0):
         self.H, self.W = image_shape
         self.patch, self.stride = int(patch), int(stride)
         self.bins, self.centred, self.local = int(bins), bool(centred), bool(local)
         self.shared_bank = bool(shared_bank)
         self.resample = bool(resample)
         self.kwta = float(kwta)
+        # `WideV1.rate` runs a 50 ms Izhikevich simulation per patch, and this
+        # pathway calls it 121 times per image on a 48 px frame. The project has
+        # already measured what that buys on STATIC identity -- see
+        # `WideV1.rate`'s own docstring: 1-NN **0.322 against 0.323** for
+        # `drive`, the same filters with the neuron model removed, at **18x the
+        # wall clock**. Identical to the third decimal, eighteen times the cost.
+        #
+        # So `spiking=False` is not a shortcut around the project's spiking
+        # commitment; it is that commitment applied where it was measured to
+        # pay. It pays on movement (4-way direction 72.0% against a 28.5% static
+        # control) and this is a still-image benchmark. Any arm that uses it
+        # must be compared only against arms that also use it.
+        self.spiking = bool(spiking)
         ys = list(range(0, self.H - self.patch + 1, self.stride))
         xs = list(range(0, self.W - self.patch + 1, self.stride))
         self.origins = np.array([(y, x) for y in ys for x in xs], int)
@@ -242,12 +256,13 @@ class LocalSpatialEye:
             out = np.empty((self.n_feat, self.n_patch), np.float32)
             for k, p in enumerate(self.patch_images(image, origins)):
                 bank = self.banks[0] if self.shared_bank else self.banks[k]
-                out[:, k] = bank.rate(p)
+                out[:, k] = bank.rate(p) if self.spiking else bank.drive(p)
         else:
             # the H4 control: one global bank, its cells regrouped by the
             # position they already look at, so the binning below sees the same
             # kind of (feature, place) table without any local extraction
-            r = self.banks[0].rate(image)
+            r = (self.banks[0].rate(image) if self.spiking
+                 else self.banks[0].drive(image))
             per = max(self.banks[0].n_cells // self.banks[0].n_pos, 1)
             g = np.zeros((self.n_feat, self.n_patch), np.float32)
             pos = self.banks[0].anchors + self.banks[0].rf / 2.0

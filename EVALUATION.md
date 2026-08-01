@@ -2905,6 +2905,76 @@ teaching rules, tying, fixation choice and now second-order spatial statistics.
 The ear sits at 0.788 on its own material. Whatever separates them is not on the
 list of things this architecture lets one vary.
 
+## 9.6 A second visual pathway, rejected — and what its ablations found
+
+`LocalSpatialEye` is a new pathway rather than an eleventh repair: 8×8
+overlapping patches, a feature bank per patch, and every local feature vector
+placed by **where it sits in the object** rather than in the frame — the patch
+grid itself laid out from the object's centroid, so translation cancels in the
+*sampling* and not merely in the labelling.
+
+Hypotheses and the rejection bar were fixed in `localspatial.py` before any
+measurement: **H2 — cluster AUC must beat the best existing arm by ≥0.02 with
+d ≥ 0.8 and ≥75% of seeds.** Invariance alone was declared not to count, because
+pooling and `relational_code` both already achieve it and cluster at 0.540/0.560.
+
+`benchmarks/pathways.py`, 4 seeds, 240 photographs, luminance for every arm,
+`drive` for every arm (the project's own measurement: 1-NN 0.322 vs 0.323 for
+`rate`, at 18× the cost — spiking pays on motion, and these are still images).
+
+| pathway | dim | cluster AUC | Δ vs rate | self-sim | proto |
+|---|---|---|---|---|---|
+| rate *(current)* | 4096 | 0.571 | — | 0.293 | 0.297 |
+| pooled | 10 | 0.557 | −0.014 (2/4) | 0.707 | 0.339 |
+| relational | 729 | 0.575 | +0.004 (1/4) | 0.754 | **0.362** |
+| **local-spatial** *(as specified)* | 1152 | 0.587 | +0.015 d=0.35 (3/4) | **0.931** | 0.305 |
+| **ablate: no object frame** | 1152 | **0.629** | **+0.058 d=2.15 (4/4)** ✔ | 0.666 | 0.323 |
+| **ablate: no resampling** | 1152 | **0.630** | **+0.058 d=2.18 (4/4)** ✔ | 0.701 | 0.333 |
+| ablate: no position | 128 | 0.581 | +0.009 (3/4) | 0.912 | 0.279 |
+| ablate: global bank | 1152 | 0.597 | +0.026 d=0.98 (4/4) ✔ | 0.385 | 0.318 |
+| ablate: independent banks | 1152 | 0.532 | −0.040 (1/4) | **0.955** | 0.302 |
+
+### The architecture as specified is rejected
+
+**H1 not met**: self-similarity under ±5 px is 0.931 against a 0.95 bar. On a
+synthetic object it reached 0.993 — real photographs fill the frame, so there is
+no figure for the centroid to lock onto and the object-centred frame is
+estimated from whole-image contrast.
+
+**H2 not met**: +0.015 over `rate` (d=0.35, 3/4) against a +0.02 bar, and
++0.012 over the best rival. Requirement 11 says reject, and it is rejected.
+
+**H3 is refuted, in the opposite direction to my prediction.** I expected the
+object-centred frame to be where the gain came from. Removing it *raises*
+clustering by 0.043 (0.587 → 0.630) while costing invariance (0.931 → 0.701).
+The centroid is estimated per image from contrast, and that estimate is stable
+when the *same* photograph moves and inconsistent *between* photographs — so it
+cancels translation and adds between-image jitter, which is precisely the wrong
+trade for clustering.
+
+### What the ablations did find, which is the useful part
+
+**H4 is confirmed, and it is the largest movement of this metric in the
+project.** Local receptive fields with **frame-absolute** position score
+**0.630 against `rate`'s 0.571 — +0.058, d = 2.18, 4 of 4 seeds**, and beat the
+same binning over a *global* bank (0.597), which is the control that separates
+locality from the position code. Ten previous interventions moved this number
+over 0.540–0.605 in total; patching alone moves it 0.058 in one step.
+
+That configuration is **not the architecture that was specified** — it is the
+specification with its defining feature removed. Reporting it as a success of
+the proposal would be exactly the substitution this project keeps catching, so
+it is reported as what it is: a rejected hypothesis whose control found
+something.
+
+**Two dissociations worth keeping.** `relational` has the best downstream
+prototype accuracy (0.362) while clustering worse than local-spatial (0.575 vs
+0.587), and `independent banks` has the best invariance in the whole table
+(0.955) with the worst clustering (0.532). Both are H5's concern made concrete:
+downstream accuracy, invariance and representation quality move independently,
+and an architecture judged on any one of them alone can be sold on a number that
+means nothing about the other two.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

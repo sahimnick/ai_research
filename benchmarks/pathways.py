@@ -44,6 +44,13 @@ and its ablations, one per hypothesis:
     global bank         the same binning over one global WideV1 (H4)
     independent banks   a separate filter bank per patch
 
+Every arm uses `drive` rather than `rate`. That is not a shortcut around the
+project's spiking commitment -- `WideV1.rate`'s own docstring records the
+measurement: 1-NN **0.322 against 0.323** for `drive` on static photographs, at
+**18x the wall clock**. Spiking pays on movement (4-way direction 72.0% against
+a 28.5% static control) and this benchmark shows still images. Uniform across
+arms, so it cannot favour one.
+
 Colour is dropped for **every** arm. The existing pathway gains about 0.04 from
 opponent channels, so this understates it, but running some arms in colour and
 others not would confound the comparison with its input.
@@ -108,20 +115,50 @@ def place(im, dx=0, frame=FRAME):
     return out
 
 
+def _bank_key(arm):
+    """Which arms can share a developed bank.
+
+    `local-spatial`, `no object frame`, `no resampling` and `no position` differ
+    ONLY in how position is handled -- their filter banks are constructed and
+    developed identically. Giving each its own separately-developed bank does
+    not just cost four times the development, it varies a second thing: two
+    banks grown from the same patches with different random draws are not the
+    same bank. An ablation has to change one component, so the bank is grown
+    once and shared, and the arms differ only in the component named.
+    """
+    kw = ARMS[arm]
+    return (arm if arm in ("rate", "pooled", "relational") else
+            ("local", kw.get("local", True), kw.get("shared_bank", True)))
+
+
+_CACHE = {}
+
+
 def build(arm, frames, seed):
     """One encoder per arm. Every one develops on the same frames."""
     if arm in ("rate", "pooled", "relational"):
-        v1 = WideV1(n_cells=GLOBAL_CELLS, window_ms=50, rf=7, stride=2,
-                    image_shape=(FRAME, FRAME), seed=seed)
-        develop_v1(v1, list(frames), epochs=3, tie=True, seed=seed)
+        gk = ("global", seed)
+        if gk in _CACHE:
+            v1 = _CACHE[gk]
+        else:
+            v1 = WideV1(n_cells=GLOBAL_CELLS, window_ms=50, rf=7, stride=2,
+                        image_shape=(FRAME, FRAME), seed=seed)
+            develop_v1(v1, list(frames), epochs=3, tie=True, seed=seed)
+            _CACHE[gk] = v1
         if arm == "rate":
-            return lambda f: _unit(v1.rate(f))
+            return lambda f: _unit(v1.drive(f))
         if arm == "relational":
             return lambda f: v1.relational_code(f, n_feat=12)
         idx, n = v1.pooling_index("both")
         return lambda f: v1.pooled_code(v1.drive(f), idx, n)
-    eye = LocalSpatialEye(image_shape=(FRAME, FRAME), seed=seed, **ARMS[arm])
-    eye.develop(list(frames), epochs=3, seed=seed)
+    eye = LocalSpatialEye(image_shape=(FRAME, FRAME), seed=seed,
+                          spiking=False, **ARMS[arm])
+    key = (_bank_key(arm), seed)
+    if key in _CACHE:
+        eye.banks = _CACHE[key]              # the identical developed bank
+    else:
+        eye.develop(list(frames), epochs=3, seed=seed)
+        _CACHE[key] = eye.banks
     return eye.code
 
 
@@ -155,10 +192,16 @@ def run_seed(images, y, seed, arms):
         rec = {"dim": int(V.shape[1]),
                "cluster_auc": cluster_auc(V[te], y[te], V[tr], y[tr], rng)}
 
+        # Encode each shifted set ONCE and use it for both questions. The first
+        # version encoded them twice -- once for self-similarity and once for
+        # prototype accuracy -- which was a third of the benchmark's runtime
+        # spent recomputing identical arrays.
+        shifted = {dx: codes(coder, [place(images[i], dx) for i in te])
+                   for dx in SHIFTS[1:]}
+
         # same-object invariance: the SAME photograph, moved
         base = V[te]
-        for dx in SHIFTS[1:]:
-            S = codes(coder, [place(images[i], dx) for i in te])
+        for dx, S in shifted.items():
             rec[f"self {dx:+d}px"] = float(np.mean(
                 [base[k] @ S[k] for k in range(len(te))]))
 
@@ -169,11 +212,9 @@ def run_seed(images, y, seed, arms):
         cls = np.unique(y[tr])
         rec["proto centred"] = float(np.mean(
             cls[(V[te] @ protos.T).argmax(1)] == y[te]))
-        sh = []
-        for dx in SHIFTS[1:]:
-            S = codes(coder, [place(images[i], dx) for i in te])
-            sh.append(float(np.mean(cls[(S @ protos.T).argmax(1)] == y[te])))
-        rec["proto shifted"] = float(np.mean(sh))
+        rec["proto shifted"] = float(np.mean(
+            [np.mean(cls[(S @ protos.T).argmax(1)] == y[te])
+             for S in shifted.values()]))
         out[arm] = rec
         print(f"    {arm:<28} AUC {rec['cluster_auc']:.3f}  self+5 "
               f"{rec['self +5px']:.3f}  proto {rec['proto centred']:.3f}/"
@@ -196,11 +237,14 @@ def main():
     rows = []
     for sd in SEEDS:
         print(f"  seed {sd}", flush=True)
+        _CACHE.clear()          # banks are shared WITHIN a seed, never across
         rows.append(run_seed(images, y, sd, only))
     KEYS = ["cluster_auc", "self +5px", "self -5px", "proto centred",
             "proto shifted"]
     res = {"seeds": list(SEEDS), "chance": round(chance, 4),
            "bar": {"beat": BEST_EXISTING, "gain": MIN_GAIN, "d": MIN_D},
+           "per_seed": [{a: {k: round(float(r[a][k]), 4) for k in KEYS}
+                         for a in only} for r in rows],
            "arms": {}}
     for a in only:
         res["arms"][a] = {k: round(float(np.mean([r[a][k] for r in rows])), 4)
@@ -217,6 +261,31 @@ def main():
         print(f"{a:<28}{v['dim']:>7}{v['cluster_auc']:>13.3f}"
               f"{v['self mean']:>10.3f}{v['proto centred']:>11.3f}"
               f"{v['proto shifted']:>13.3f}")
+
+    # every arm against the current pathway, paired -- so a configuration that
+    # is not the proposed one can still be reported with its statistics rather
+    # than as a bare mean
+    if "rate" in only:
+        print(f"\ncluster AUC against `rate`, paired over {len(SEEDS)} seeds")
+        for a in only:
+            if a == "rate":
+                continue
+            dd = np.array([r[a]["cluster_auc"] - r["rate"]["cluster_auc"]
+                           for r in rows])
+            sdd = float(dd.std(ddof=1))
+            cdd = None if sdd < 1e-9 else float(dd.mean() / sdd)
+            res.setdefault("vs_rate_all", {})[a] = dict(
+                delta=round(float(dd.mean()), 4),
+                cohens_d=None if cdd is None else round(cdd, 3),
+                wins=int((dd > 0).sum()), n=len(dd))
+            mark = ""
+            if (cdd is not None and cdd >= MIN_D
+                    and (dd > 0).sum() >= MIN_WINS * len(dd)
+                    and dd.mean() >= MIN_GAIN):
+                mark = "   <- clears the gate"
+            print(f"  {a:<28}{dd.mean():>+9.4f}  "
+                  f"d={'n/a' if cdd is None else f'{cdd:+.2f}'}  "
+                  f"{int((dd > 0).sum())}/{len(dd)}{mark}")
 
     if "local-spatial" not in only or "rate" not in only:
         json.dump(res, open(out_path, "w"), indent=1)
