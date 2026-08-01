@@ -69,8 +69,8 @@ N_CONCEPT = 256
 REPLAYS = 400
 DREAM_NOVELTY_RATE = 0.02
 KEEP = 0.6
-ARMS = ("no_dream", "stored", "imagined_as_fact", "imagined_as_error",
-        "merged", "merged+error")
+ARMS = ("no_dream", "stored", "imagined_as_fact", "imagined_as_fact_fixed",
+        "imagined_as_error", "merged", "merged+error")
 
 
 def fold(votes, merged):
@@ -99,7 +99,23 @@ def wake(V, A, y, tr, seed):
 def night(a, votes, V, A, y, tr, arm, seed):
     """Every arm replays the same pairs in the same order, drawn from one
     generator seeded identically -- so the arms differ in the RULE and not in
-    what they saw."""
+    what they saw.
+
+    Except that for a while they differed in one more thing, and it was found
+    by `pathway_downstream.py` rather than here. ``imagine_from_sound`` returns
+    a **prep_v**-space vector; ``bind_contrastive`` consumes it in that space,
+    but :meth:`bind` preps whatever it is handed. So ``imagined_as_fact`` was
+    binding a twice-normalised fantasy -- measured at cos **0.407** to the one
+    the model generated, waking a different concept cell 21 times out of 36 --
+    while ``imagined_as_error`` saw the undistorted one. The arms differed in
+    the rule *and* in whether the imagining survived intact.
+
+    ``imagined_as_fact_fixed`` un-preps before binding, which is an exact
+    inverse (``prep_v(v_hat * sd + mu) == v_hat``, measured cos 1.0). It is the
+    arm the comparison should always have used. The uncorrected one stays
+    because the number it produced is published in EVALUATION.md and deleting
+    it would make the correction unreadable.
+    """
     if arm in ("no_dream", "merged"):
         return votes
     rng = np.random.default_rng(seed + 101)
@@ -111,6 +127,9 @@ def night(a, votes, V, A, y, tr, arm, seed):
         elif arm == "imagined_as_fact":
             w = a.bind(a.imagine_from_sound(A[i], temperature=1.0, rng=rng),
                        A[i])
+        elif arm == "imagined_as_fact_fixed":
+            v_hat = a.imagine_from_sound(A[i], temperature=1.0, rng=rng)
+            w = a.bind(v_hat * a.v_sd + a.v_mu, A[i])
         else:                                   # believed nothing; learned from
             w, _, _ = a.bind_contrastive(V[i], A[i], temperature=1.0, rng=rng)
         votes.setdefault(w, {})
@@ -200,12 +219,19 @@ def main():
 
     print("\n=== does the inner world pay back? ===")
     fact = gate["imagined_as_fact"]["see_to_name"]
+    fixed = gate["imagined_as_fact_fixed"]["see_to_name"]
     err = gate["imagined_as_error"]["see_to_name"]
     both_ = gate["merged+error"]["see_to_name"]
     print(f"  believing the imagining : {fact['delta']:+.4f} "
           f"(d={fact['cohens_d']:+.2f}, {fact['wins']}/{fact['n']})")
+    print(f"  ...undistorted (the fair one): {fixed['delta']:+.4f} "
+          f"(d={fixed['cohens_d']:+.2f}, {fixed['wins']}/{fixed['n']})")
     print(f"  learning against it     : {err['delta']:+.4f} "
           f"(d={err['cohens_d']:+.2f}, {err['wins']}/{err['n']})")
+    res["correction_widens_gap"] = bool(fixed["delta"] < fact["delta"])
+    print(f"  -> removing the space bug moves `believe` by "
+          f"{fixed['delta'] - fact['delta']:+.4f}; the gap the claim rests on "
+          f"{'WIDENS' if res['correction_widens_gap'] else 'NARROWS'}")
     print(f"  ...on a layer that generalises: {both_['delta']:+.4f} "
           f"(d={both_['cohens_d']:+.2f}, {both_['wins']}/{both_['n']})")
 

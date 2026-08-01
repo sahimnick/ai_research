@@ -2634,6 +2634,15 @@ possible.
 | **`imagined_as_error`** — learn against it | **+0.0236 d=+4.33 4/4** | **+0.0165 d=+3.50 4/4** |
 | `merged+error` | +0.0047 d=+0.50 3/4 | −0.0519 d=−1.77 0/4 |
 
+> **Correction pending a live re-run.** §9.7 found that `imagined_as_fact`
+> double-preps the fantasy it binds, here as in `payback.py`. The corrected arm
+> `imagined_as_fact_fixed` is now in `live_mind.py`, but this table predates it
+> and cannot be re-measured from an archive — live cameras are showing something
+> else now. On the archive the correction moved the arm by −0.0012 and left
+> every conclusion in place, so the expectation is that the row above is
+> slightly *flattering* to believing; that is an expectation, not a measurement,
+> and it is marked as one until the benchmark is run against live cameras again.
+
 **The archived result reproduces on live sensors**, and reproduces in the part
 that matters most: *learning against what the mind imagines beats replaying what
 it actually saw* — +0.0236 against +0.0189 — while **believing the identical
@@ -2974,6 +2983,148 @@ prototype accuracy (0.362) while clustering worse than local-spatial (0.575 vs
 downstream accuracy, invariance and representation quality move independently,
 and an architecture judged on any one of them alone can be sold on a number that
 means nothing about the other two.
+
+---
+
+## 9.7 What the pathways do once a mind is built on them
+
+`pathways.py` judged the four visual pathways as *representations*. Requirements
+4, 10d and 10e ask what happens when a **concept layer**, a **night** and an
+**imagination** sit on top of each. `benchmarks/pathway_downstream.py`, 4 seeds,
+240 CIFAR photographs paired with real ESC-50 recordings, hypotheses H6–H9 fixed
+in the docstring before the run.
+
+| pathway | dim | cluster AUC | 1-NN floor | cells | per pair | see→name | sound→vision |
+|---|---|---|---|---|---|---|---|
+| rate *(current)* | 4096 | 0.571 | 0.292 | 87.0 | 0.60 | 0.242 | **0.570** |
+| relational | 729 | 0.575 | 0.292 | 86.5 | 0.60 | 0.273 | 0.359 |
+| local-spatial *(as specified)* | 1152 | 0.587 | 0.255 | 89.2 | 0.62 | 0.297 | 0.448 |
+| **local-absolute** | 1152 | **0.629** | **0.318** | 87.8 | 0.61 | **0.344** | 0.510 |
+
+### H6 confirmed: cluster AUC is what the layer consumes
+
+Naming accuracy orders the pathways **exactly** as cluster AUC does —
+local-absolute > local-spatial > relational > rate — and *not* as invariance
+does, nor as the 1-NN floor does (which puts `rate` second and `local-spatial`
+last). So `pathways.py` rejected the architecture on the right quantity. Had the
+order tracked invariance instead, the rejection would have been decided on a
+number the rest of the mind does not read.
+
+**But the layer is not a pass-through, and one mean nearly hid that.** Averaged
+over the four pathways, concept-layer naming minus the 1-NN floor is −0.0000,
+which reads as "the layer adds nothing". Split by pathway it is not a null at
+all:
+
+| pathway | layer − 1-NN | d | seeds |
+|---|---|---|---|
+| rate | **−0.0495** | −1.81 | 0/4 |
+| relational | −0.0182 | −0.51 | 1/4 |
+| local-spatial | **+0.0417** | +1.02 | 3/4 |
+| local-absolute | +0.0260 | +0.68 | 2/4 |
+
+The layer holds ~0.61 cells per training pair, so it merges roughly two pairs in
+five. **Merging helps a representation that clusters and hurts one that does
+not** — the same operation, opposite sign, decided entirely by the code beneath
+it. Reported as one average it cancels to zero; that average would have been a
+fabricated null, and the per-pathway split is the result.
+
+### H7 partly holds — and the arm it is measured against had a bug in it
+
+Building this benchmark turned up a confound in the project's headline replay
+result. `imagine_from_sound` returns a vector in **prep_v** space.
+`bind_contrastive` consumes it there and is correct. But `bind` preps whatever
+it is handed, so `imagined_as_fact` — in `payback.py:112` and `live_mind.py:120`
+as well as here — was binding a **twice-normalised** fantasy: cos **0.407** to
+the one the model actually generated, waking a *different* concept cell 21 times
+out of 36. The two arms differed in the learning rule **and** in whether the
+imagining survived intact.
+
+`imagined_as_fact_fixed` un-preps before binding, an exact inverse
+(`prep_v(v_hat·sd + mu) == v_hat`, measured cos 1.000). Sound→vision deltas
+against `no_dream`:
+
+| pathway | `stored` *(control)* | believe | believe *(undistorted)* | learn against | against − undistorted |
+|---|---|---|---|---|---|
+| rate | +0.0052 | −0.0104 | −0.0391 | +0.0026 | **+0.0417** d=0.87, 2/4 |
+| relational | **−0.0052** | −0.0130 | +0.0000 | −0.0026 | −0.0026 d=−0.05, 2/4 |
+| local-spatial | +0.0208 | −0.0156 | −0.0104 | +0.0234 | **+0.0339** d=2.17, **4/4** |
+| local-absolute | +0.0182 | +0.0000 | −0.0339 | +0.0156 | **+0.0495** d=0.83, 3/4 |
+
+**The correction does not overturn the claim — it widens it.** On three of the
+four pathways, believing the *undistorted* fantasy is **worse** than believing
+the mangled one, so the bug had been flattering the arm the claim is made
+against. Learning-against beats believing-undistorted by +0.0417, +0.0339 and
++0.0495 where it beat the buggy arm by +0.0130, +0.0391 and +0.0156.
+
+**`payback.py` re-run with the corrected arm** (6 seeds, 360 archived pairs, the
+run the original number came from) says the same thing and settles it for the
+published table:
+
+| arm | sound→vision | see→name | swapped |
+|---|---|---|---|
+| `stored` *(control)* | +0.0255 d=+0.91 5/6 | −0.0081 | +0.0243 d=+1.44 5/6 |
+| `imagined_as_fact` *(as published)* | −0.0162 d=−0.66 2/6 | −0.0116 | −0.0012 |
+| `imagined_as_fact_fixed` *(undistorted)* | **−0.0174 d=−1.11 1/6** | −0.0162 d=−0.77 0/6 | +0.0093 |
+| `imagined_as_error` | **+0.0208** d=+0.87 5/6 | −0.0081 | +0.0185 d=+1.23 4/6 |
+| `merged+error` | **+0.0833 d=+3.65 6/6** | −0.0139 | +0.0058 |
+
+Believing the undistorted fantasy scores −0.0174 where believing the mangled one
+scored −0.0162: the same conclusion, marginally stronger, and **+0.0833 for
+`merged+error` is untouched**. The bug was real, it made two arms differ in more
+than the rule they were meant to isolate, and fixing it changed nothing about
+what the benchmark concluded. That is the outcome worth recording — a found bug
+whose correction leaves the result standing is evidence *for* the result, and it
+is only visible because the corrected arm was run rather than reasoned about.
+
+The one pathway that flips is `relational`, and its **positive control is
+negative**: replaying *real stored pairs* scores −0.0052 there, so the payback
+channel is not open on that pathway and neither of its imagination arms means
+anything. A first pass at the verdict gated on all four pathways regardless,
+printed "the claim survives only against the arm with the space bug in it", and
+was wrong — letting a pathway with a closed channel veto the result is
+cherry-picking with the sign reversed. The gate now requires `stored > 0`.
+
+So: **H7 holds on every pathway where the payback channel is open (3/3), and
+holds by a larger margin once the fantasy is undistorted.** Learning against an
+imagining is a property of the rule, not of the representation. What was
+genuinely wrong is the *size* attributed to it, and the direction of that error
+was the flattering one — the effect had been understated.
+
+### H8 confirmed on every pathway, and the better code has less room to escape
+
+Mixing whole codes cannot leave the span of what is stored; crossing factors
+can. The argument is algebraic and never mentions the eye, so it should not care
+which pathway it runs on. It does not:
+
+| pathway | mixing | crossing |
+|---|---|---|
+| rate | **0.0000** | 0.5112 |
+| relational | **0.0000** | 0.4396 |
+| local-spatial | **0.0000** | 0.3827 |
+| local-absolute | **0.0000** | 0.3362 |
+
+Exactly zero for mixing on all four, to every digit numpy prints. On the local
+pathways the crossed factor is **spatial and explicit** — the top row of
+position bins from one concept, the middle and bottom rows from another, so the
+imagining is the top of one object carried on the rest of another. That is a
+part recombination rather than the colour swap `factored.py` had to use.
+
+The crossing residual **falls monotonically as clustering rises** (0.511 → 0.336
+from worst-clustering to best). A representation whose categories are better
+separated leaves less of an imagined crossing outside the span it already
+covers, which is the same trade this project keeps finding rather than a new
+one: novelty and structure are bought from the same budget.
+
+### H9 confirmed: the rejected architecture is not rescued downstream
+
+Requirement 11's failure mode is an architecture that changes downstream
+learning without improving the representation. `local-spatial` — the
+specification, rejected on cluster AUC — names at **0.297** against
+`local-absolute`'s **0.344** (+0.0469, d=1.79, **4/4 seeds**), the same
+direction as the representation and the same direction as the rejection. It is
+not rescued at the concept layer, not by any of the four night arms, and not by
+the imagination. **The rejection stands on the representation and on everything
+built above it.**
 
 ---
 

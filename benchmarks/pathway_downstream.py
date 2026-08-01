@@ -324,11 +324,20 @@ def main():
     # The layer has to beat the representation read directly, or the ordering
     # it produces is the representation's ordering and H6 is untestable rather
     # than confirmed.
-    gain = float(np.mean([res["arms"][p]["no_dream: see->name"]
-                          - res["arms"][p]["1nn"] for p in PATHWAYS]))
-    res["H6_layer_beats_1nn"] = bool(gain > 0.02)
-    print(f"  concept layer minus 1-NN, averaged over pathways: {gain:+.4f}"
-          f"  -> layer adds capacity: {res['H6_layer_beats_1nn']}")
+    # Reported per pathway, never as one mean. Averaging over the pathways here
+    # cancelled a +0.042 against a -0.050 into -0.0000 and read as "the layer is
+    # a pass-through", which is the opposite of what the split actually says.
+    print(f"  concept layer minus 1-NN floor, per pathway "
+          f"(the layer holds ~{res['arms'][PATHWAYS[0]]['cells per pair']:.2f}"
+          f" cells per pair, so it is merging, not memorising):")
+    per = {}
+    for p in PATHWAYS:
+        g = np.array([r[p]["no_dream: see->name"] - r[p]["1nn"] for r in rows])
+        per[p] = float(g.mean())
+        print(f"    {p:<16}{g.mean():>+8.4f}  d={g.mean()/(g.std(ddof=1)+1e-12):>5.2f}"
+              f"  {int((g > 0).sum())}/{len(g)} seeds")
+    res["H6_layer_minus_1nn"] = {k: round(v, 4) for k, v in per.items()}
+    res["H6_layer_beats_1nn"] = bool(float(np.mean(list(per.values()))) > 0.02)
 
     print(f"\n--- H7: does replay behave the same on every pathway? ---")
     print(f"  sound->vision deltas against no_dream. `stored` is the positive "
@@ -349,18 +358,41 @@ def main():
         res["arms"][p]["replay believe fixed"] = round(float(x_), 4)
         res["arms"][p]["replay against"] = round(float(e_), 4)
         print(f"{p:<16}{s_:>+10.4f}{f_:>+10.4f}{x_:>+16.4f}{e_:>+15.4f}")
+    # A pathway whose `stored` control is negative has no payback channel open
+    # at all -- replaying REAL pairs does not help there -- so its imagination
+    # arms are noise around a closed channel and cannot confirm or refute a
+    # claim about what to do with an imagining. Gating on every pathway
+    # regardless of the control lets one such pathway veto the result, which is
+    # the mirror image of cherry-picking and just as wrong.
+    open_ = [p for p in PATHWAYS if res["arms"][p]["replay stored"] > 0]
+    shut = [p for p in PATHWAYS if p not in open_]
+    res["H7_channel_open"] = open_
+    if shut:
+        print(f"  payback channel CLOSED (stored <= 0, nothing concludable): "
+              f"{', '.join(shut)}")
     agree = all(res["arms"][p]["replay against"]
-                >= res["arms"][p]["replay believe"] for p in PATHWAYS)
+                >= res["arms"][p]["replay believe"] for p in open_)
     fair = all(res["arms"][p]["replay against"]
-               >= res["arms"][p]["replay believe fixed"] for p in PATHWAYS)
+               >= res["arms"][p]["replay believe fixed"] for p in open_)
     res["H7_holds"] = bool(agree)
     res["H7_holds_against_fixed"] = bool(fair)
-    print(f"  learning-against >= believing, on every pathway ....... {agree}")
-    print(f"  ... and >= believing the UNDISTORTED fantasy .......... {fair}")
-    if agree and not fair:
-        print("  The claim survives only against the arm with the space bug in "
-              "it. `payback.py`'s replay result is confounded and has to be "
-              "re-reported against the corrected arm.")
+    print(f"  where the channel is open ({len(open_)} of {len(PATHWAYS)}):")
+    print(f"    learning-against >= believing ....................... {agree}")
+    print(f"    ... and >= believing the UNDISTORTED fantasy ........ {fair}")
+    # Which way the correction moved it matters more than either boolean: if
+    # removing the space bug WIDENS the gap, the bug was flattering the arm the
+    # claim is made against, and the claim was understated rather than
+    # manufactured.
+    moved = float(np.mean([res["arms"][p]["replay believe"]
+                           - res["arms"][p]["replay believe fixed"]
+                           for p in open_]))
+    res["H7_correction_widens_gap"] = bool(moved > 0)
+    print(f"    correcting the space bug moved `believe` by {-moved:+.4f} -> "
+          f"the gap {'WIDENS' if moved > 0 else 'NARROWS'}")
+    if not fair:
+        print("    At least one open pathway flips once the fantasy is "
+              "undistorted; the claim does not hold universally and the "
+              "per-pathway numbers above are the result, not the boolean.")
 
     print(f"\n--- H8: is leaving the span algebraic? ---")
     print(f"{'pathway':<16}{'mix':>10}{'crossing':>12}")

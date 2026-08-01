@@ -48,7 +48,11 @@ The arms are `payback.py`'s, unchanged, so the two tables can be read together:
 
     no_dream            watch, stop
     stored              replay the real sight -- the positive control
-    imagined_as_fact    believe the mind's own completion
+    imagined_as_fact    believe the mind's own completion -- as first written,
+                        which double-preps the fantasy (cos 0.407 to what the
+                        model generated); kept because its number is published
+    imagined_as_fact_fixed  the same arm with that corrected, which is the one
+                        the comparison below actually needs
     imagined_as_error   learn against it, same completions, same order,
                         same number of plasticity events
     merged+error        forced consolidation as well
@@ -77,8 +81,8 @@ REPLAYS = 300
 DREAM_NOVELTY_RATE = 0.02
 KEEP = 0.6
 SEEDS = (0, 1, 2, 3)
-ARMS = ("no_dream", "stored", "imagined_as_fact", "imagined_as_error",
-        "merged+error")
+ARMS = ("no_dream", "stored", "imagined_as_fact", "imagined_as_fact_fixed",
+        "imagined_as_error", "merged+error")
 
 
 def to_frame(img, size=SIZE):
@@ -117,8 +121,15 @@ def night(a, votes, V, A, y, idx, arm, seed):
         if arm == "stored":
             w = a.bind(V[i], A[i])
         elif arm == "imagined_as_fact":
+            # `imagine_from_sound` returns prep_v space and `bind` preps again,
+            # so this arm believes a fantasy at cos 0.407 to the one the model
+            # produced -- see `payback.night`. Kept because its number is
+            # published; `_fixed` below is the arm the comparison needs.
             w = a.bind(a.imagine_from_sound(A[i], temperature=1.0, rng=rng),
                        A[i])
+        elif arm == "imagined_as_fact_fixed":
+            v_hat = a.imagine_from_sound(A[i], temperature=1.0, rng=rng)
+            w = a.bind(v_hat * a.v_sd + a.v_mu, A[i])
         else:
             w, _, _ = a.bind_contrastive(V[i], A[i], temperature=1.0, rng=rng)
         votes.setdefault(w, {})
@@ -276,14 +287,20 @@ def main():
     key = "name_to_place"
     f, e, me = (gate["imagined_as_fact"][key], gate["imagined_as_error"][key],
                 gate["merged+error"][key])
+    fx = gate["imagined_as_fact_fixed"][key]
     def fmt(g):
         d = "d=n/a (zero spread)" if g["cohens_d"] is None \
             else f"d={g['cohens_d']:+.2f}"
         return (f"{g['delta']:+.4f} = {g['units']:+.1f} cameras of "
                 f"{n_places}, {d}, {g['wins']}/{g['n']}")
     print(f"  believing the imagining : {fmt(f)}")
+    print(f"  ...undistorted (fair)   : {fmt(fx)}")
     print(f"  learning against it     : {fmt(e)}")
     print(f"  ...plus consolidation   : {fmt(me)}")
+    res["correction_widens_gap"] = bool(fx["delta"] < f["delta"])
+    print(f"  -> removing the space bug moves `believe` by "
+          f"{fx['delta'] - f['delta']:+.4f}; the gap "
+          f"{'WIDENS' if res['correction_widens_gap'] else 'NARROWS'}")
 
     def ok(g):
         # an effect smaller than one camera cannot be resolved here, whatever
