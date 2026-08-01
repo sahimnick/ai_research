@@ -35,6 +35,17 @@ things at once, and they are separately measurable: the centroid should track a
 large the estimator is simply bad; if both are small the mechanism is not
 present at all and H10 cannot be true for the stated reason.
 
+A note on the first version of this file, which was vacuous
+-----------------------------------------------------------
+It placed every photograph at the frame centre. The object's true centre is
+then the frame centre, so the "oracle" object-centred grid is laid out exactly
+where the frame-absolute grid already is, and the two arms are the *same
+computation*. It duly reported the oracle recovering **100.0%** of the gap,
+with all four seeds identical to three decimals in both arms (0.661/0.661,
+0.573/0.573, 0.651/0.651, 0.633/0.633). An oracle that never has to locate
+anything cannot test a locator. Objects are now displaced per image on both
+axes, and an assertion fails if the oracle origin does not vary.
+
 The oracle is an **instrument, not a proposal**. Nothing in the mind can supply
 the true object position; an arm that uses it is not an architecture and is not
 reported as one. It exists to localise the fault.
@@ -59,11 +70,36 @@ SEEDS = (0, 1, 2, 3)
 N_IMAGES = 240
 SHIFT = 5
 OBJ = 32                       # the photographs are 32 px in a 48 px frame
+#: How far each photograph is displaced from centre, drawn per image. Without
+#: this the whole benchmark is vacuous, and the first version of it was: with
+#: every object at dx=0 the object's true centre IS the frame centre, so the
+#: "oracle" object-centred grid and the frame-absolute grid are the same
+#: computation. That run reported the oracle recovering 100% of the gap, and
+#: the four seeds returned cluster AUC identical to three decimals in both
+#: arms -- 0.661/0.661, 0.573/0.573, 0.651/0.651, 0.633/0.633 -- which is what
+#: identity by construction looks like, not what a perfect estimator looks
+#: like. An oracle that never has to locate anything tests nothing.
+JITTER = 8                     # dx, dy each drawn from [-JITTER, +JITTER]
 
 
-def true_centre(dx, frame=FRAME, obj=OBJ):
-    """Where `place` actually put the object. The oracle, and it is exact."""
-    y0 = (frame - obj) // 2
+def place2(im, dx=0, dy=0, frame=FRAME):
+    """`pathways.place`, but able to move the object on both axes.
+
+    Position has to vary in two dimensions or the estimator is only ever asked
+    half the question it is accused of failing.
+    """
+    a = np.asarray(im, np.float32)
+    h, w = a.shape
+    out = np.zeros((frame, frame), np.float32)
+    y0 = int(np.clip((frame - h) // 2 + dy, 0, frame - h))
+    x0 = int(np.clip((frame - w) // 2 + dx, 0, frame - w))
+    out[y0:y0 + h, x0:x0 + w] = a
+    return out
+
+
+def true_centre(dx=0, dy=0, frame=FRAME, obj=OBJ):
+    """Where `place2` actually put the object. The oracle, and it is exact."""
+    y0 = int(np.clip((frame - obj) // 2 + dy, 0, frame - obj))
     x0 = int(np.clip((frame - obj) // 2 + dx, 0, frame - obj))
     return np.array([y0 + obj / 2.0, x0 + obj / 2.0], np.float32)
 
@@ -90,35 +126,51 @@ def codes(raw):
 
 def run_seed(images, y, seed):
     tr, te = split(y, seed)
-    frames = [place(im) for im in images]
-    shifted = [place(im, dx=SHIFT) for im in images]
+    # Each photograph gets its own displacement, so "where is the object" is a
+    # real question with a different answer per image.
+    jit = np.random.default_rng(seed + 7)
+    dx = jit.integers(-JITTER, JITTER + 1, size=len(images))
+    dy = jit.integers(-JITTER, JITTER + 1, size=len(images))
+    frames = [place2(im, int(a), int(b)) for im, a, b in zip(images, dx, dy)]
+    shifted = [place2(im, int(a) + SHIFT, int(b))
+               for im, a, b in zip(images, dx, dy)]
+    o0 = np.array([true_centre(int(a), int(b)) for a, b in zip(dx, dy)],
+                  np.float32)
+    oS = np.array([true_centre(int(a) + SHIFT, int(b))
+                   for a, b in zip(dx, dy)], np.float32)
+    # The guard the first version lacked: if the oracle origin never varies it
+    # is the frame centre, the object-frame grid collapses onto the absolute
+    # one, and the comparison is an identity rather than a measurement.
+    assert o0.std(0).max() > 1.0, (
+        "oracle origin does not vary across images -- the arms are the same "
+        "computation and this benchmark tests nothing")
     eye, flat = build(seed, frames)
-    o0 = true_centre(0)
-    oS = true_centre(SHIFT)
 
     arms = {
         # the specification: origin estimated from image contrast
-        "local-spatial": (lambda f, s: eye.code(f),
-                          lambda f, s: eye.code(s)),
+        "local-spatial": (lambda i: eye.code(frames[i]),
+                          lambda i: eye.code(shifted[i])),
         # the ablation that won in pathways.py: no object frame at all
-        "local-absolute": (lambda f, s: flat.code(f),
-                           lambda f, s: flat.code(s)),
+        "local-absolute": (lambda i: flat.code(frames[i]),
+                           lambda i: flat.code(shifted[i])),
         # the instrument: the object frame with a PERFECT origin
-        "oracle-centroid": (lambda f, s: eye.code(f, origin=o0),
-                            lambda f, s: eye.code(s, origin=oS)),
+        "oracle-centroid": (lambda i: eye.code(frames[i], origin=o0[i]),
+                            lambda i: eye.code(shifted[i], origin=oS[i])),
     }
     out = {}
     for name, (fc, sc) in arms.items():
-        V = codes(np.array([fc(f, s) for f, s in zip(frames, shifted)],
-                           np.float32))
-        S = codes(np.array([sc(f, s) for f, s in zip(frames, shifted)],
-                           np.float32))
+        V = codes(np.array([fc(i) for i in range(len(frames))], np.float32))
+        S = codes(np.array([sc(i) for i in range(len(frames))], np.float32))
         rng = np.random.default_rng(seed)
         out[name] = {
             "cluster_auc": cluster_auc(V[te], y[te], V[tr], y[tr], rng),
             "self_shift": float(np.mean([float(V[i] @ S[i])
                                          for i in range(len(V))])),
         }
+    if (out["oracle-centroid"]["cluster_auc"]
+            == out["local-absolute"]["cluster_auc"]):
+        print("    WARNING: oracle and absolute arms scored identically -- "
+              "check they are not the same computation", flush=True)
 
     # ---- H11: where does the estimator's error actually live? --------------
     est0 = np.array([eye.image_centroid(f) for f in frames], np.float32)
@@ -130,11 +182,15 @@ def run_seed(images, y, seed):
         moved - np.array([0.0, float(SHIFT)], np.float32), axis=1)))
     # between-image: spread of the estimate across photographs of one category,
     # which is the quantity the mechanism blames
+    # between-image: how far the estimate lands from the object's TRUE centre,
+    # which is the error that matters now that the objects are in different
+    # places. Measured per category so it is the spread the clustering sees.
+    err = est0 - o0
     between = float(np.mean([
-        np.linalg.norm(est0[y == c] - est0[y == c].mean(0), axis=1).mean()
+        np.linalg.norm(err[y == c] - err[y == c].mean(0), axis=1).mean()
         for c in np.unique(y)]))
     # and the absolute error against the position the object really occupies
-    bias = float(np.mean(np.linalg.norm(est0 - true_centre(0), axis=1)))
+    bias = float(np.mean(np.linalg.norm(err, axis=1)))
     out["_centroid"] = {"within_image_error_px": within,
                         "between_image_spread_px": between,
                         "bias_vs_truth_px": bias}
