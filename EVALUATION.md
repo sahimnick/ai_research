@@ -2690,6 +2690,53 @@ the pooling contract but its invariant codes score 0.233 against 0.773 for
 position-specific ones); this is the same fact at the level the concept layer
 actually consumes.
 
+### Phase 10.2 retried with 10.3's perception — the translation collapse is repaired
+
+`phase10_2.py` gave the eye exactly one look, always at the frame centre, so a
+shifted object was simply somewhere else. Phase 10.3 had meanwhile produced a
+translation mechanism nobody had pointed at the translation failure.
+`benchmarks/phase10_2b.py` measures 10.2's quantity with 10.3's perception —
+*k* glances pooled, chosen at random or by disagreement over the concept cells.
+
+| arm | centred | +5 px | −5 px | **shifted mean** |
+|---|---|---|---|---|
+| one centred look | 0.288 | 0.021 | 0.021 | **0.021** |
+| 3 random glances | 0.254 | 0.248 | 0.241 | 0.245 |
+| 3 disagreeing glances | 0.259 | 0.264 | 0.240 | 0.252 |
+| **5 random glances** | 0.281 | 0.262 | 0.266 | **0.264** |
+| 5 disagreeing glances | 0.264 | 0.245 | 0.252 | 0.248 |
+
+**The collapse is repaired.** 0.021 → 0.264, a factor of 12.7, d = +22.1, 4 of 4
+seeds — and back above the 0.167 chance rate that a single look falls *below*
+when the object moves.
+
+The sharper way to read it is the gap between centred and shifted, because that
+is the translation sensitivity itself:
+
+    one centred look     0.288 centred, 0.021 shifted   gap 0.267
+    5 pooled glances     0.281 centred, 0.264 shifted   gap 0.017
+
+**94% of the eye's position sensitivity is gone**, and the centred performance
+is essentially unchanged (0.288 → 0.281) — so this is not the invariance-for-
+selectivity trade that `translation.py` measured for pooled codes, where
+invariance cost almost all the accuracy. Nothing was learned to achieve it: the
+same V1, the same concept layer, only several fixations instead of one.
+
+**And the choosing is not what does it here.** Best chosen 0.252 against best
+random 0.264 — the extra looks carry the effect, not their selection. That does
+not contradict `uncertain_look.py`, where disagreement-choosing passed its gate
+at k=5; the two measure different things on different material (1-NN over 1200
+training photographs with ±8 jitter, against concept-waking over 216 with ±5).
+The honest statement is that **choosing helps where it was measured to help and
+does not here**, and pooling helps in both.
+
+**The numeric prediction is still not met**: 0.264 against the 0.55–0.60 asked
+for. That target was about raising the eye's *ceiling*, and the ceiling has not
+moved — centred accuracy is 0.288 whatever is done to it, which is the same wall
+five other interventions hit. What has moved is that the eye no longer falls off
+a cliff when the world shifts by five pixels, which was the failure Phase 10.2
+was designed to expose.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
