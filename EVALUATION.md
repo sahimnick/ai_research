@@ -3576,6 +3576,71 @@ difference, and did not know it.
 
 ---
 
+## 9.11 What is actually wrong with the eye: it cannot turn seeing into learning
+
+Every visual number in this project was compared to raw pixels, to the ear, or
+to another variant of itself. `benchmarks/vision_reference.py` supplies the
+reference it never had — a gradient-trained CNN on the *same* 6 categories, the
+same 32-px grayscale frames, the same `cluster_auc`, the same split.
+
+| arm | cluster AUC | 6-way accuracy |
+|---|---|---|
+| raw pixels | 0.521 | 0.271 *(probe)* |
+| **the eye, this project** | **0.589** | 0.316 *(probe)* |
+| CNN, backprop, **the same 240 images** | 0.575 | 0.312 |
+| CNN, backprop, **12 000 images** | **0.698** | **0.585** |
+
+**On the same data, gradients buy nothing.** −0.0134 for the CNN, comfortably
+inside the noise §9.10 established. A loss function, labels and backpropagation
+produce no better a representation than a local Hebbian rule when both see 240
+photographs. The learning rule was never the eye's problem.
+
+**The entire CNN advantage is data**: +0.110 cluster AUC and +0.273 accuracy
+from 50× the images. So the obvious question, which thirteen interventions never
+asked — does *V1's* rule improve with data?
+
+| `develop_v1` trained on | cluster AUC |
+|---|---|
+| 240 images | **0.595** |
+| 2 400 images | 0.561 |
+| 12 000 images | 0.582 |
+
+**Flat.** Fifty times the data moves the eye's representation not at all, while
+moving the CNN's by +0.123 over the same range.
+
+### The diagnosis, and it is one thing rather than thirteen
+
+`scale.py` already measured this for the concept layer: pairs-per-cell stays at
+**1.00** at every data size from 100 to 3000, so the layer stores one cell per
+experience no matter how much it sees. The same is now measured one level down.
+
+> **Neither layer of this visual stack can convert additional experience into a
+> better representation.** The eye does not see badly — it sees about as well as
+> a CNN given the same tiny budget. What it cannot do is *learn more from seeing
+> more*.
+
+That is a single coherent account of why thirteen interventions all landed in
+0.540–0.630: every one of them varied the *structure* of a rule family that is
+insensitive to data volume, and evaluated it at a budget where the insensitivity
+does not show. Geometry (§9.8), time (§9.9), capacity (§9.9) and now the
+learning rule itself have all been excluded as the differentiator, because in
+this regime **nothing differentiates** — the band is what a 240-image budget
+buys, whatever rule is applied to it.
+
+### And the read-out is not hiding anything
+
+A supervised linear probe on the eye's own code reaches **0.316**, against the
+unsupervised read-out's 0.271 and raw pixels' 0.271. The gap is +0.045. So the
+category information is *not* sitting in the code unreachable by the concept
+layer — the code genuinely carries about that much and no more. The CNN at 12k
+carries 0.585.
+
+The honest summary is neither "the eye is fine" nor "the architecture is wrong":
+it is that **this project has been measuring a data-starved regime and
+attributing the result to architecture.**
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
