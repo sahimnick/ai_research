@@ -168,8 +168,44 @@ def codes(coder, frames):
     return np.array([_unit(ad(r)) for r in R], np.float32)
 
 
+def cluster_auc_full(Q, yq, B, yb, rng=None):
+    """The same question, estimated properly. Prefer this in new work.
+
+    `cluster_auc` below draws ONE same-class and ONE different-class neighbour
+    per query and then takes the cross product of those two lists, so query k's
+    same-score is compared against query j's different-score. Two faults follow:
+
+    * **variance** -- one draw per query instead of all pairs. Measured across 6
+      seeds: sd 0.0222 against 0.0069 for this estimator on the eye's codes, and
+      0.0238 against 0.0042 on raw pixels. Three to six times too noisy, which
+      means every null result measured with it had less power than claimed.
+    * **bias, and an uneven one** -- comparing across queries mixes each query's
+      own similarity offset into the statistic. It reads **+0.031** high on the
+      eye's codes and only **+0.006** on raw pixels, so it flatters a structured
+      code more than an unstructured one and inflates the gap between them.
+
+    Here each query is scored against ALL same-class and ALL different-class
+    items and the per-query AUCs are averaged: no sampling, and no comparison
+    ever crosses between queries.
+    """
+    out = []
+    for k in range(len(Q)):
+        s = Q[k] @ B[yb == yq[k]].T
+        d = Q[k] @ B[yb != yq[k]].T
+        if not len(s) or not len(d):
+            continue
+        out.append(float((s[:, None] > d[None, :]).mean()))
+    return float(np.mean(out)) if out else 0.5
+
+
 def cluster_auc(Q, yq, B, yb, rng):
-    """Same-category above different-category, from raw codes. No learning."""
+    """Same-category above different-category, from raw codes. No learning.
+
+    **Kept only for reproducibility of the numbers already published against
+    it.** `cluster_auc_full` above is the correct estimator and states what is
+    wrong with this one. Every figure in EVALUATION.md before section 9.13 was
+    measured with this function.
+    """
     same, diff = [], []
     for k in range(len(Q)):
         ps, pd = np.flatnonzero(yb == yq[k]), np.flatnonzero(yb != yq[k])

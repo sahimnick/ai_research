@@ -3690,6 +3690,76 @@ this line has to be **faithful and whole, or not attempted**.
 
 ---
 
+## 9.13 Is the benchmark wrong? Partly — and it does not rescue the system
+
+A fair challenge: the papers are established results, so if they do not transfer
+here, perhaps the measurement is at fault and the system is fine. Both halves
+were tested.
+
+### The metric does have a real defect, measured
+
+`cluster_auc` draws **one** same-class and **one** different-class neighbour per
+query and then takes the cross product, so query *k*'s same-score is compared
+against query *j*'s different-score. Against a proper estimator — every query
+scored against all same-class and all different-class items, per-query AUCs
+averaged, no sampling and no cross-query comparison — over 6 seeds:
+
+| code | current (sampled) | correct (full pairs) |
+|---|---|---|
+| raw pixels | 0.5377 ± 0.0238 | **0.5315 ± 0.0042** |
+| the eye | 0.5939 ± 0.0222 | **0.5633 ± 0.0069** |
+
+* **3–6× too noisy.** Every null result measured with it had less power than
+  claimed, so "eleven interventions moved nothing" is weaker evidence than it
+  reads.
+* **Biased, and unevenly.** It reads +0.031 high on the eye's structured code
+  and only +0.006 on raw pixels, so it flatters structure and **inflates the gap
+  between a good code and a bad one**. The eye's advantage over raw pixels is
+  +0.032, not the +0.056 previously reported.
+
+`cluster_auc_full` is now in `pathways.py` and is the estimator for new work;
+the old one is kept because every figure before this section was measured with
+it.
+
+### But the system is not vindicated by it
+
+The defect inflates differences — it does not manufacture the *ordering*, and
+the central conclusion of §9.11 never depended on this metric at all. Linear
+probe accuracy is an independent measurement with no cosine ranking in it:
+
+| | probe accuracy (6-way, chance 0.167) |
+|---|---|
+| raw pixels | 0.271 |
+| the eye | 0.316 |
+| CNN, same 240 images | 0.312 |
+| CNN, 12 000 images | **0.585** |
+
+The eye and a CNN tie on equal data, and the CNN nearly doubles with more data
+while the eye stays flat. That is measured without `cluster_auc` and it is the
+finding.
+
+### Why the papers do not transfer, concretely
+
+Three reasons, and none of them is "the papers are wrong":
+
+1. **The comparison was never like-for-like.** SoftHebb's 80.3% is unsupervised
+   features **plus a supervised linear classifier**. This project's headline
+   metric has no learning in it at all. The number that compares to SoftHebb is
+   our *probe* — 0.316 on 6 classes — not our cluster AUC.
+2. **Scale.** SoftHebb uses five hidden layers on 50 000 images. This project
+   ran one layer on 240–12 000, and §9.11 shows one layer is flat in data
+   regardless of rule.
+3. **Systems do not decompose.** §9.12's pilot took the single mechanism the
+   theory names — soft WTA — and it made data-scaling *worse* (−0.071 against
+   −0.013). The published property belongs to the whole system, not to the part
+   that carries the explanation.
+
+So: the benchmark was partly wrong, the system is not fine, and the reason the
+literature does not reproduce here is that neither the measurement nor the
+implementation was ever matched to it.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
