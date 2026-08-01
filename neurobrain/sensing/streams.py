@@ -963,9 +963,57 @@ def streaming_experiment(n_saccades: int = 60, n_events: int = 24,
 # ---------------------------------------------------------------------------
 # A world where things actually move
 # ---------------------------------------------------------------------------
+def warp_tile(tile: np.ndarray, scale: float = 1.0,
+              theta: float = 0.0) -> np.ndarray:
+    """Rotate and scale a square tile about its centre. NumPy only.
+
+    Inverse mapping with bilinear sampling: for every *destination* pixel work
+    out where it came from and interpolate there, which is what stops a forward
+    map from leaving holes. Outside the source the value is zero, so an object
+    scaled past the tile is cropped rather than wrapped.
+
+    Written out rather than taken from scipy because the project's only
+    requirement is numpy and this is thirty lines. What scipy would really have
+    bought is a resampler that is already known to be correct, and
+    `tests/test_warp.py` buys that instead by asserting the identities this has
+    to satisfy -- scale 1 with angle 0 is exactly the input, a full turn is the
+    input, and four quarter turns compose back to it.
+    """
+    a = np.asarray(tile, np.float32)
+    n = a.shape[0]
+    if scale == 1.0 and theta == 0.0:
+        return a
+    c = (n - 1) / 2.0
+    yy, xx = np.mgrid[0:n, 0:n].astype(np.float32)
+    dy, dx = yy - c, xx - c
+    ct, st = float(np.cos(theta)), float(np.sin(theta))
+    s = 1.0 / max(float(scale), 1e-3)
+    sy = (ct * dy + st * dx) * s + c
+    sx = (-st * dy + ct * dx) * s + c
+    y0 = np.floor(sy).astype(int)
+    x0 = np.floor(sx).astype(int)
+    wy, wx = sy - y0, sx - x0
+
+    def at(yi, xi):
+        ok = ((yi >= 0) & (yi < n) & (xi >= 0) & (xi < n)).astype(np.float32)
+        return a[np.clip(yi, 0, n - 1), np.clip(xi, 0, n - 1)] * ok
+
+    out = (at(y0, x0) * (1 - wy) * (1 - wx)
+           + at(y0 + 1, x0) * wy * (1 - wx)
+           + at(y0, x0 + 1) * (1 - wy) * wx
+           + at(y0 + 1, x0 + 1) * wy * wx)
+    return out.astype(np.float32)
+
+
 @dataclass
 class MovingObject:
-    """One object with a position and a velocity, in pixels per frame."""
+    """One object with a position and a velocity, in pixels per frame.
+
+    ``scale`` and ``theta`` (with their per-frame rates ``dscale`` and
+    ``dtheta``) let the object also loom and turn as it travels. They default to
+    "off" so every existing caller -- `report_vision.py`,
+    `smooth_pursuit_experiment` -- keeps the world it was measured on.
+    """
 
     label: int
     image: np.ndarray
@@ -973,6 +1021,14 @@ class MovingObject:
     col: float
     vr: float
     vc: float
+    scale: float = 1.0
+    theta: float = 0.0
+    dscale: float = 0.0
+    dtheta: float = 0.0
+
+    def view(self) -> np.ndarray:
+        """What this object looks like right now, at its current pose."""
+        return warp_tile(self.image, self.scale, self.theta)
 
     def advance(self, h: int, w: int) -> None:
         """Move, and bounce off the walls so the object stays in the world."""
@@ -985,6 +1041,15 @@ class MovingObject:
         if not (m <= self.col <= w - m):
             self.vc = -self.vc
             self.col = float(np.clip(self.col, m, w - m))
+        self.theta += self.dtheta
+        if self.dscale:
+            # scale bounces between 0.6 and 1.6 for the same reason position
+            # bounces off the walls: the object has to stay something the eye
+            # can still see rather than shrinking to nothing
+            self.scale += self.dscale
+            if not (0.6 <= self.scale <= 1.6):
+                self.dscale = -self.dscale
+                self.scale = float(np.clip(self.scale, 0.6, 1.6))
 
 
 class MovingScene:
@@ -1002,7 +1067,10 @@ class MovingScene:
 
     def __init__(self, images: np.ndarray, labels: np.ndarray, size: int = 256,
                  n_objects: int = 8, speed: float = 3.0, clutter: float = 0.08,
-                 seed: int = 0):
+                 spin: float = 0.0, zoom: float = 0.0, seed: int = 0):
+        """``spin`` is radians per frame and ``zoom`` is scale per frame, each
+        drawn per object in ``[-x, +x]``. Both default to 0, so the world every
+        earlier measurement ran on is unchanged."""
         rng = np.random.default_rng(seed)
         self.size, self.clutter, self.rng = int(size), float(clutter), rng
         self.tile = int(images.shape[1])
@@ -1014,7 +1082,11 @@ class MovingScene:
                 int(labels[i]), images[i].astype(np.float32),
                 float(rng.uniform(self.tile, size - self.tile)),
                 float(rng.uniform(self.tile, size - self.tile)),
-                float(speed * np.sin(th)), float(speed * np.cos(th))))
+                float(speed * np.sin(th)), float(speed * np.cos(th)),
+                scale=1.0,
+                theta=float(rng.uniform(0, 2 * np.pi)) if spin else 0.0,
+                dscale=float(rng.uniform(-zoom, zoom)) if zoom else 0.0,
+                dtheta=float(rng.uniform(-spin, spin)) if spin else 0.0))
         self._bg = (clutter * 255.0 * rng.random((size, size))).astype(np.float32)
         self.t = 0
 
@@ -1025,8 +1097,9 @@ class MovingScene:
             r, c = int(round(o.row)), int(round(o.col))
             y0, x0 = max(r - h, 0), max(c - h, 0)
             y1, x1 = min(y0 + self.tile, self.size), min(x0 + self.tile, self.size)
+            tile = o.view()
             canvas[y0:y1, x0:x1] = np.maximum(canvas[y0:y1, x0:x1],
-                                              o.image[:y1 - y0, :x1 - x0])
+                                              tile[:y1 - y0, :x1 - x0])
         return canvas
 
     def step(self) -> np.ndarray:

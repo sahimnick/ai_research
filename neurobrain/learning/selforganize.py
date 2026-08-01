@@ -337,6 +337,142 @@ def develop_by_prediction(layer: WideV1, patches: Sequence[np.ndarray],
 # ---------------------------------------------------------------------------
 # Measuring what grew -- the way a physiologist would
 # ---------------------------------------------------------------------------
+def _seq_patches(frame: np.ndarray, rf: int, stride: int) -> np.ndarray:
+    """(n_pos, rf*rf) for any frame size.
+
+    :meth:`WideV1.patches` anchors to the layer's own ``image_shape``, and the
+    sequences are cropped at a different size from the frame the eye is later
+    evaluated on. A **tied** bank is ``(nf, rf*rf)`` and therefore independent
+    of image size, so training crop and evaluation frame do not have to match --
+    only the filter does.
+    """
+    a = np.asarray(frame, np.float32)
+    if a.max() > 1.5:
+        a = a / 255.0
+    n = a.shape[0]
+    ys = range(0, n - rf + 1, stride)
+    return np.stack([a[y:y + rf, x:x + rf].reshape(-1)
+                     for y in ys for x in ys]).astype(np.float32)
+
+
+def develop_v1_temporal(layer: WideV1, sequences: Sequence[np.ndarray],
+                        epochs: int = 3, lr: float = 0.02,
+                        lam_pred: float = 1.0, lam_var: float = 1.0,
+                        lam_dec: float = 0.1, tau: float = 0.02,
+                        predictive: bool = True, decorrelate: bool = True,
+                        seed: int = 0, verbose: bool = False) -> WideV1:
+    """Grow filters from **what stays the same while the world moves**.
+
+    :func:`develop_v1` is competitive learning on independent images and
+    :func:`develop_by_prediction` predicts the *current* input. Neither has any
+    notion of time, and that is the gap: Halvagal & Zenke (Nat Neuro 2023, the
+    LPL rule) report that Hebbian plasticity **alone fails to produce invariant
+    object representations**, which is this project's own measured result --
+    eleven interventions over cluster AUC 0.540-0.630 against the ear's 0.788.
+    Their fix is not a better spatial estimator but a predictive term over
+    *time*.
+
+    Three local terms, on ``z = W x`` for a patch ``x`` of one frame and the
+    same patch position of the frame before:
+
+    All three act on **z-scored** activity ``zc = (z - mu)/sd``, and the
+    decorrelation uses the running **correlation** rather than the covariance.
+    That is not a detail. Written with the raw covariance and a ``1/(var+eps)``
+    gain, the bank collapses completely -- effective dimension 0.00, all 36
+    filter pairs duplicate -- and the instrumented run says why: the variance
+    term ran at magnitude 1-3 against the decorrelation term's 0.001, and its
+    ``1/var`` gain is positive feedback, since shrinking variance raises the
+    gain that shrinks it further. Putting every term on a common scale is what
+    the rule requires to function at all, not a tuned constant.
+
+    * **predictive** ``-lam_pred * ((z_t - z_{t-1})/sd) x^T`` -- consecutive
+      views of one object are pulled to the same code. This is the term that
+      carries the hypothesis, and on its own it collapses everything.
+    * **variance** ``+lam_var * zc x^T`` -- a BCM-style variance-maximising
+      Hebbian term against that collapse. Scale-free, so the push weakens as
+      variance grows instead of exploding as it shrinks.
+    * **decorrelation** ``-lam_dec * (R zc) x^T`` with ``R`` the running
+      off-diagonal *correlation* -- keeps units from all learning the same thing.
+
+    Statistics are estimated in a **warm-up pass with the weights frozen**.
+    Starting from ``mu=0, var=1`` the first ~1/tau steps otherwise push every
+    unit along the same input with the same sign, which is collapse before the
+    decorrelation term has any statistics to object with.
+
+    Every term uses only a unit's own activity, its own running statistics, and
+    its layer-mates' activity. **No gradients, no autograd, no loss function** --
+    the constraint this project does not relax.
+
+    ``predictive=False`` and ``decorrelate=False`` are the ablations; with both
+    off this is a plain variance-driven Hebbian rule and should behave like the
+    static baseline, which is what makes them worth running.
+    """
+    rng = np.random.default_rng(seed)
+    n_pos, nf = layer.n_pos, layer.n_cells // layer.n_pos
+    if nf < 2:
+        raise ValueError("a hypercolumn needs at least 2 cells to compete.")
+    head = nf * n_pos
+    if not len(sequences):
+        return layer
+
+    W = layer.Wt[:head].reshape(nf, n_pos, -1)[:, 0, :].copy()
+    W /= np.maximum(np.linalg.norm(W, axis=1, keepdims=True), 1e-6)
+    mu = np.zeros(nf, np.float32)
+    var = np.ones(nf, np.float32)
+    C = np.zeros((nf, nf), np.float32)
+
+    def _pairs(order):
+        for si in order:
+            seq = np.asarray(sequences[si], np.float32)
+            P = [_seq_patches(f, layer.rf, layer.stride) for f in seq]
+            for t in range(1, len(P)):
+                e = np.linalg.norm(P[t], axis=1)
+                live = np.flatnonzero(e > 0.15 * (e.max() + 1e-9))
+                for p in rng.permutation(live):
+                    yield (P[t][p] / (np.linalg.norm(P[t][p]) + 1e-9),
+                           P[t - 1][p] / (np.linalg.norm(P[t - 1][p]) + 1e-9))
+
+    # warm-up: statistics only, weights frozen
+    for x, _xp in _pairs(rng.permutation(len(sequences))):
+        z = W @ x
+        mu += tau * (z - mu)
+        var += tau * ((z - mu) ** 2 - var)
+        C += tau * (np.outer(z - mu, z - mu) - C)
+
+    for _ in range(int(epochs)):
+        for x, xp in _pairs(rng.permutation(len(sequences))):
+            z, zp = W @ x, W @ xp
+            mu += tau * (z - mu)
+            var += tau * ((z - mu) ** 2 - var)
+            C += tau * (np.outer(z - mu, z - mu) - C)
+
+            sd = np.sqrt(var) + 1e-3
+            zc = (z - mu) / sd
+            d = lam_var * zc
+            if predictive:
+                d -= lam_pred * (z - zp) / sd
+            if decorrelate:
+                R = C / np.outer(sd, sd)
+                np.fill_diagonal(R, 0.0)
+                d -= lam_dec * (R @ zc)
+            W += lr * np.outer(d, x)
+            np.maximum(W, 0.0, out=W)
+            W /= np.maximum(np.linalg.norm(W, axis=1, keepdims=True), 1e-6)
+
+    layer.Wt[:head] = np.repeat(W[:, None, :], n_pos, axis=1).reshape(head, -1)
+    dm = getattr(layer, "dendrite_mask", None)
+    if dm is not None:
+        layer.Wt[:head] *= dm[:head]
+        layer.Wt[:head] /= np.maximum(
+            np.linalg.norm(layer.Wt[:head], axis=1, keepdims=True), 1e-6)
+    if verbose:
+        from ..tools.mapdebug import participation_ratio
+        print(f"   temporal bank: {nf} filters, effective "
+              f"{participation_ratio(W):.2f}, "
+              f"{filter_diversity(layer)['duplicate_pairs']} duplicate pairs")
+    return layer
+
+
 def _gratings(rf: int, n_orient: int = 16, n_phase: int = 4,
               lam: float = 5.0) -> Tuple[np.ndarray, np.ndarray]:
     """Drifting sinusoidal gratings: the standard probe for a visual cell."""
