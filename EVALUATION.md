@@ -3641,6 +3641,55 @@ attributing the result to architecture.**
 
 ---
 
+## 9.12 What the literature says about data-efficiency, and a pilot that refutes the obvious fix
+
+§9.11 measured the eye's real defect: **it cannot convert more experience into a
+better representation** (240 → 12 000 images moves cluster AUC 0.595 → 0.582,
+while a CNN over the same range gains +0.123). The literature has a direct
+answer to why, and a demonstration that local rules need not have this property.
+
+**Local rules can scale — the ceiling is not Hebbian learning.**
+[SoftHebb (Journé et al., ICLR 2023)](https://arxiv.org/abs/2209.11883) reaches
+**80.3% on CIFAR-10** with five hidden layers, no backpropagation, no feedback,
+no target and no error signal. That is far above anything this project has
+produced and it is achieved under the same constraint this project holds.
+
+**The theory of why.**
+[Moraitis et al., *Neuromorph. Comput. Eng.* 2022](https://arxiv.org/abs/2107.05747)
+prove that a **soft** winner-take-all network under Hebbian plasticity maintains
+a *Bayesian generative model* of its input and minimises cross-entropy to the
+data distribution **without any loss function**. A density estimator keeps
+refining as data grows. A hard winner-take-all rule is **vector quantization**:
+k centroids that converge and then stop. `develop_v1` is the latter —
+`argmax` plus a Kohonen neighbourhood — which is a textbook self-organising map.
+
+That made a clean hypothesis: the flatness is caused by hard WTA.
+
+### The pilot refutes it
+
+Replacing the winner rule alone — softmax over the column at temperature 0.25 in
+place of `argmax` + neighbourhood, everything else identical
+(`benchmarks/soft_wta_pilot.py`):
+
+| rule | 240 img | 2 400 img | 12 000 img | slope |
+|---|---|---|---|---|
+| hard-WTA *(current)* | 0.5951 | 0.5614 | 0.5817 | −0.0134 |
+| soft-WTA | 0.5851 | 0.5661 | 0.5145 | **−0.0706** |
+
+Soft-WTA is not merely flat, it is **worse** with more data. So the single
+component that the theory identifies as the difference does not, on its own,
+produce the property it is credited with.
+
+**The lesson is about method, not about SoftHebb.** SoftHebb is a *system*: soft
+WTA plus an anti-Hebbian term for non-winners, plus a specific weight
+normalisation, plus adaptive per-neuron learning rates, plus depth, plus a
+particular convolutional widening. Extracting one mechanism and expecting its
+headline property to come with it is the same error as citing a number measured
+under different conditions — and this project has now made both. Any adoption of
+this line has to be **faithful and whole, or not attempted**.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
