@@ -62,14 +62,25 @@ from neurobrain.vision.localspatial import LocalSpatialEye
 from neurobrain.vision.widev1 import PopulationAdaptation
 
 sys.path.insert(0, "benchmarks")
-from pathways import FRAME, cluster_auc, place                # noqa: E402
+from pathways import cluster_auc                              # noqa: E402
 from real_binding import split                                # noqa: E402
 from neurobrain.sensing.natural import load_audiovisual       # noqa: E402
 
 SEEDS = (0, 1, 2, 3)
 N_IMAGES = 240
 SHIFT = 5
-OBJ = 32                       # the photographs are 32 px in a 48 px frame
+OBJ = 32                       # the photographs are 32 px
+#: A 64 px frame, not `pathways.FRAME`'s 48. A 32 px object in a 48 px frame has
+#: only 16 px of travel, and the jitter below plus the 5 px shift need more than
+#: that: at dx=+8 the shifted copy was clipped back to the same place and moved
+#: **0 px of the 5 requested**, which inflated the within-image error to 1.66 px
+#: and flipped H11's answer. 64 px leaves 32 px of travel, and an assertion
+#: below fails if any placement still clips. (This is the second time a frame
+#: too small for its own shift has flattered a result in this project -- see
+#: `phase10_2.py`.) Arms here are compared only against each other, so the
+#: larger frame costs nothing but comparability with `pathways.py`'s absolute
+#: numbers, which is not what this benchmark is for.
+FRAME = 64
 #: How far each photograph is displaced from centre, drawn per image. Without
 #: this the whole benchmark is vacuous, and the first version of it was: with
 #: every object at dx=0 the object's true centre IS the frame centre, so the
@@ -79,7 +90,7 @@ OBJ = 32                       # the photographs are 32 px in a 48 px frame
 #: arms -- 0.661/0.661, 0.573/0.573, 0.651/0.651, 0.633/0.633 -- which is what
 #: identity by construction looks like, not what a perfect estimator looks
 #: like. An oracle that never has to locate anything tests nothing.
-JITTER = 8                     # dx, dy each drawn from [-JITTER, +JITTER]
+JITTER = 10                    # dx, dy each drawn from [-JITTER, +JITTER]
 
 
 def place2(im, dx=0, dy=0, frame=FRAME):
@@ -144,6 +155,14 @@ def run_seed(images, y, seed):
     assert o0.std(0).max() > 1.0, (
         "oracle origin does not vary across images -- the arms are the same "
         "computation and this benchmark tests nothing")
+    # And the shift has to actually happen. A frame too small for its own shift
+    # clips the objects nearest the edge back to where they were, so `self+5`
+    # is partly measuring images that never moved.
+    moved_px = (oS - o0)[:, 1]
+    assert np.allclose(moved_px, SHIFT), (
+        f"the {SHIFT}px shift is being clipped: objects moved "
+        f"{moved_px.min():.0f}..{moved_px.max():.0f}px. Widen FRAME or "
+        f"shrink JITTER.")
     eye, flat = build(seed, frames)
 
     arms = {
@@ -248,36 +267,73 @@ def main():
     spec = np.array([r["local-spatial"]["cluster_auc"] for r in rows])
     absl = np.array([r["local-absolute"]["cluster_auc"] for r in rows])
     orac = np.array([r["oracle-centroid"]["cluster_auc"] for r in rows])
-    gap = absl - spec                     # what removing the frame recovers
-    got = orac - spec                     # what a perfect origin recovers
-    frac = float(got.mean() / gap.mean()) if abs(gap.mean()) > 1e-9 else 0.0
-    print(f"  removing the object frame recovers  {gap.mean():+.4f}")
-    print(f"  a PERFECT origin recovers           {got.mean():+.4f} "
-          f"(d={got.mean()/(got.std(ddof=1)+1e-12):+.2f}, "
-          f"{int((got > 0).sum())}/{len(got)})")
-    print(f"  fraction of the gap the estimator explains: {frac:.1%}")
-    # The same bar `ear_config.py` uses: an effect has to explain a quarter of
-    # the gap it was proposed to explain, not merely reach significance.
-    res["H10_estimator_explains"] = round(frac, 4)
-    res["H10_holds"] = bool(frac >= 0.25 and (got > 0).sum() >= 3)
-    print(f"  H10 holds (>=25% of the gap, >=3/4 seeds): {res['H10_holds']}")
+
+    # Reported as three DIRECT contrasts, not as a fraction of a gap. The first
+    # version expressed the result as "what fraction of the gap between
+    # `local-absolute` and `local-spatial` does a perfect origin recover", which
+    # is only meaningful while that gap is positive. It was +0.043 when every
+    # object sat at the frame centre and turns NEGATIVE once objects actually
+    # move -- the object frame then helps rather than hurts -- so the ratio
+    # printed -292% and the verdict read "FALSIFIED" off a sign flip in its own
+    # denominator. A contrast that changes sign with the condition cannot be a
+    # denominator.
+    def stat(g):
+        return (g.mean(), g.mean() / (g.std(ddof=1) + 1e-12),
+                int((g > 0).sum()), len(g))
+
+    contrasts = {
+        "oracle - estimator": orac - spec,      # does a perfect origin help?
+        "oracle - absolute": orac - absl,       # is the frame worth having?
+        "estimator - absolute": spec - absl,    # is it worth having AS BUILT?
+    }
+    res["H10_contrasts"] = {}
+    for name, g in contrasts.items():
+        m, d, w, n = stat(g)
+        res["H10_contrasts"][name] = {"delta": round(float(m), 4),
+                                      "cohens_d": round(float(d), 2),
+                                      "wins": w, "n": n}
+        print(f"  {name:<22}{m:>+8.4f}  d={d:>+5.2f}  {w}/{n}")
+
+    inv_o = np.array([r["oracle-centroid"]["self_shift"] for r in rows])
+    inv_s = np.array([r["local-spatial"]["self_shift"] for r in rows])
+    print(f"  invariance: oracle {inv_o.mean():.3f} against the estimator's "
+          f"{inv_s.mean():.3f}")
+
+    # H10 says the ESTIMATOR is what limits the pathway. That is exactly the
+    # claim "a perfect origin, everything else identical, does better" -- and it
+    # needs the project's usual bar rather than a bare sign.
+    m, d, w, n = stat(orac - spec)
+    res["H10_holds"] = bool(d >= 0.8 and w >= 0.75 * n)
+    print(f"  H10 holds (a perfect origin beats the estimated one, "
+          f"d>=0.8, >=75% seeds): {res['H10_holds']}")
 
     inv = np.array([r["oracle-centroid"]["self_shift"] for r in rows])
     inv_s = np.array([r["local-spatial"]["self_shift"] for r in rows])
     print(f"\n  invariance kept by the oracle: {inv.mean():.3f} "
           f"against the estimator's {inv_s.mean():.3f}")
 
+    worth = res["H10_contrasts"]["oracle - absolute"]
+    built = res["H10_contrasts"]["estimator - absolute"]
     if res["H10_holds"]:
-        print("\n  The estimator IS the limiting factor: with the origin "
-              "handed to it, the object-centred frame recovers most of what\n"
-              "  removing it recovered. The architecture's idea is not what "
-              "failed -- locating the object without a label is.")
+        print("\n  The LIMITING FACTOR is the origin estimate. Everything else "
+              "held identical -- same filters, same bank, same binning,\n"
+              "  same patches -- handing the frame the object's true position "
+              f"is worth {res['H10_contrasts']['oracle - estimator']['delta']:+.4f} "
+              "clustering and takes\n"
+              f"  invariance from {inv_s.mean():.3f} to {inv_o.mean():.3f}. The "
+              "object-centred idea is not what failed: with a perfect origin "
+              "the frame\n"
+              f"  beats having no frame by {worth['delta']:+.4f}, while as "
+              f"built it manages {built['delta']:+.4f}. Locating the object "
+              "without a label is\n  what this architecture cannot do, and it "
+              "is the whole of the shortfall.")
     else:
-        print("\n  H10 is FALSIFIED. A perfect origin does not buy the "
-              "clustering back, so the centroid estimator is not what limits\n"
-              "  this pathway. The cost is in the object-centred frame itself, "
-              "not in how the centre is measured, and EVALUATION.md's\n"
-              "  stated mechanism is wrong.")
+        print("\n  H10 is FALSIFIED. A perfect origin, with everything else "
+              "held identical, does not beat the estimated one, so the\n"
+              "  centroid estimator is not what limits this pathway. The cost "
+              "is in the object-centred frame itself rather than in how\n"
+              "  the centre is measured, and EVALUATION.md's stated mechanism "
+              "is wrong.")
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")
