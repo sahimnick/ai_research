@@ -2396,6 +2396,8 @@ world and not the rule.
 
 ### Phase 10.3 — seeking *disagreeing* evidence works, and the basis is why
 
+*(Filed here beside Phase 9's arms because it shares their benchmark; it is part of the Phase 10 roadmap summarised in §9.5.)*
+
 The rule: after each glance, keep the candidate whose response most
 **challenges** what the mind currently believes rather than the one that most
 agrees with it. Measured against an oracle that draws 6 candidates per glance
@@ -2447,6 +2449,30 @@ the trend*, not a usable eye.
 
 ## 9.5 Real sensors, and Phase 10
 
+> **Phase 10 in one place.** The sections below were written as the work
+> happened and the later ones correct the earlier ones. The settled account:
+>
+> | sub-phase | verdict |
+> |---|---|
+> | **10.1** — concept feedback re-teaching V1 | **Refuted, not merely failed.** Its premise is false: V1 filters already respond to 271 of 360 photographs before any intervention, so the single-image binding it was designed to break does not exist here. Two rules were tried, one of them verified to carry its teacher; a *deliberately misleading* teacher scores as well as the correct one under both. |
+> | **10.2** — the shift test | **Premise confirmed far harder than stated; numeric target not met, and the collapse repaired.** A 5-px shift takes concept-waking from 0.290 to **0.021**, below the 0.167 chance rate. The predicted 0.55–0.60 was never reached (best 0.264), but the collapse is repaired two independent ways: pooling chosen fixations (gap 0.267 → 0.017) and `relational_code` (gap → 0.005, single look). |
+> | **10.3** — disagreement-seeking gaze | **Met**, once scored over the concept cells as specified rather than over class prototypes: +0.0163 at k=5, d=+0.89, 7/8, growing with the number of looks while agreement-seeking gets worse. |
+>
+> Two earlier sections below — "Phase 10.1 — concept feedback to V1 does not
+> work, and the rule is why" and "Phase 10.1 finished, and the aperture
+> hypothesis with it" — attribute the failure to the *rule's shape* (collinear
+> updates in a retinotopic bank). That diagnosis is correct about the delta rule
+> and **superseded as an explanation**: the reconstructive rule fixed the
+> collinearity, provably carried its teacher, and still did nothing, because the
+> target was never the problem. See "Phase 10.1's premise was false".
+>
+> The eye's ceiling has now survived **ten** controlled interventions — width,
+> aperture, depth, whitening, resolution, capacity, two teaching rules, tying,
+> fixation choice, second-order spatial statistics — with centred cluster AUC
+> ranging over 0.540–0.605 against the ear's 0.788. Everything that buys
+> robustness costs discrimination; nothing raises discrimination.
+
+
 ### The mind on cameras that are showing something right now
 
 Every measurement above ran on an archive. `neurobrain/sensing/live.py` points
@@ -2494,6 +2520,8 @@ combination of anything it saw.
 
 ### Phase 10.1 — concept feedback to V1 does not work, and the rule is why
 
+> **Superseded in part.** The rule-shape diagnosis below is right about the delta rule and is not why concept feedback fails — see *Phase 10.1's premise was false*.
+
 `align_v1` moves each filter by `ΔWt[c] = lr · (target[c] − rate[c]) ·
 patch[pos_c]` with the target supplied by the merged concept layer — no labels,
 the mind's own opinion as teacher. `benchmarks/align.py`, 4 seeds:
@@ -2524,6 +2552,8 @@ gradient-free, and it gives each cell a different effective direction. Recorded
 as the specific next thing to try.
 
 ### Phase 10.1 finished, and the aperture hypothesis with it
+
+> **Superseded in part.** The rule-shape diagnosis below is right about the delta rule and is not why concept feedback fails — see *Phase 10.1's premise was false*.
 
 The delta rule could not carry a teacher at all. The **reconstructive** rule can
 -- verified before it was tested, by measuring that two different targets leave
