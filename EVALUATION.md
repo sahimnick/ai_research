@@ -2469,7 +2469,7 @@ the trend*, not a usable eye.
 > The eye's ceiling has now survived **ten** controlled interventions — width,
 > aperture, depth, whitening, resolution, capacity, two teaching rules, tying,
 > fixation choice, second-order spatial statistics — with centred cluster AUC
-> ranging over 0.540–0.605 against the ear's 0.788. Everything that buys
+> ranging over 0.540–0.605 against the ear's 0.788 (§9.9 shows 0.063 of that gap is the class set, not the sense). Everything that buys
 > robustness costs discrimination; nothing raises discrimination.
 
 
@@ -3365,6 +3365,129 @@ Every false verdict here came from a **gate**, not from the data. The benchmark
 now asserts that the oracle origin varies, asserts that the shift is not
 clipped, warns if two arms score identically, and reports direct contrasts
 instead of ratios.
+
+---
+
+## 9.9 Time was not it either — and the target it was aimed at was mismeasured
+
+§9.8 ended with the eye's limiting factor localised to an origin estimate whose
+error is correlated with image content. The literature says that whole line of
+attack was aimed at the wrong thing.
+[Halvagal & Zenke, *Nat Neuro* 2023](https://www.nature.com/articles/s41593-023-01460-y)
+report that Hebbian plasticity **alone fails to produce invariant object
+representations** — this project's own measured result, reached independently —
+and their remedy is not a better estimator but a **predictive term over time**.
+Every image this project had ever trained a filter bank on was static and
+independent.
+
+So the machinery was built: objects that translate, **rotate and loom**
+(`streams.warp_tile`, tested in `tests/test_warp.py`), sequences that follow one
+object with no label read (`sensing/sequences.py`), and `develop_v1_temporal` —
+the three LPL terms, all local, no gradients.
+
+### The rule had to be repaired before it could be tested
+
+The first version **collapsed completely**: effective dimension 0.00, all 36
+filter pairs identical. Instrumenting the three terms said why rather than
+leaving it to guesswork — the variance term ran at magnitude 1–3 against the
+decorrelation term's 0.001, and its `1/(var+eps)` gain is positive feedback,
+since shrinking variance raises the gain that shrinks it further. Putting every
+term on a common scale (z-scored activity, **correlation** rather than
+covariance) and estimating the statistics in a frozen warm-up pass is what makes
+the rule run at all.
+
+**H15 confirmed:** the decorrelation term is load-bearing. Ablate it and the
+bank still collapses to effective dimension **0.00**.
+
+### H14 is falsified — and it survives a power check
+
+240 photographs, 4 seeds, the bar registered in `temporal_invariance.py` before
+the run.
+
+| arm | cluster AUC | self ±5 px | code PR |
+|---|---|---|---|
+| **static** *(the current rule)* | **0.591** | **0.350** | 23.2 |
+| temporal | 0.585 | 0.253 | 33.6 |
+| shuffled-time *(control)* | 0.580 | 0.279 | 25.9 |
+| temporal: no-predictive | 0.581 | 0.253 | 35.4 |
+| temporal: no-decorrelation | 0.577 | 0.088 | 67.7 |
+
+* **temporal − static −0.0062** (d=−0.19, 1/4) — no gain
+* **temporal − shuffled-time +0.0048** (d=+0.19, 2/4) — ordering buys nothing
+* the registered bar was missed by −0.0454
+* **not a collapse artifact** — the temporal code's participation ratio (33.6)
+  *exceeds* the static rule's (23.2)
+* the effect it most directly predicted **reversed**: shift-invariance fell from
+  0.350 to 0.253. The term meant to buy invariance reduced it.
+
+A null from an instrument too blunt to see the effect would be worthless, and
+this project has produced three such verdicts. So the power was measured: the
+predictive term receives a **2.4× different signal** on ordered against shuffled
+sequences (mean `|z_t − z_{t−1}|` = 0.0333 against 0.0796). The distinction goes
+into the rule and does not come out of the representation. **That is a
+falsification, not a null.**
+
+### H16: capacity is not the constraint either, and the gap reverses
+
+`pathways.py`'s configuration gives a *tied* bank `4096 // 441 = 9` distinct
+filters, where LPL in the paper is a deep network with thousands. Only
+`n_cells` was varied; rule, data and evaluation held identical.
+
+| filters | static | temporal | shuffled | temporal − shuffled |
+|---|---|---|---|---|
+| 9 | 0.586 | 0.583 | 0.573 | +0.0099 (d=+0.36, 2/3) |
+| 27 | 0.583 | 0.582 | 0.590 | −0.0081 (d=−1.15, 0/3) |
+| 55 | 0.579 | 0.580 | 0.593 | **−0.0135** (d=−2.87, 0/3) |
+
+Six times the filters moves the representation **not at all** (static 0.586 →
+0.579), and the temporal rule's gap against its own control goes the *wrong*
+way, until at 55 filters the shuffled control beats it 0/3. Capacity was never
+the binding constraint.
+
+### The control that should have been run first
+
+Thirteen interventions have now landed in 0.540–0.630. Two numbers that were
+never measured put that band in its place:
+
+| | cluster AUC |
+|---|---|
+| **raw pixels**, no V1 at all | **0.524** |
+| the eye's best arm ever (`local-absolute`) | 0.630 |
+| **the ear, on the 6 audiovisual classes** | **0.716** |
+| the ear, on `heard_world.py`'s 6 easiest classes | 0.779 |
+
+**The eye is not doing nothing:** it adds **+0.106** over the raw pixels. And
+the project's headline framing — *"the eye at 0.63 against the ear's 0.788"*,
+which motivated eleven interventions — is **partly a cross-condition
+comparison**. `heard_world.py` selects the six ESC-50 classes *with the most
+clips*; the eye is judged on the six *audiovisual* classes, three of which are
+animal vocalisations. Holding the metric, the split and the code path fixed and
+changing only the class set moves the ear by **0.063**. The matched gap is
+**0.086, not 0.158** — the ear still leads, but by a little over half of what
+was claimed.
+
+> A correction to this section's own first draft, which is the reason it is
+> stated at all: the pixel control initially put the ear at **0.623** and I very
+> nearly reported that the eye now *exceeds* it. That run omitted
+> `PopulationAdaptation`, which `heard_world.py` documents as not optional —
+> without it, belt codes sit at same-class cosine 0.986 against different-class
+> 0.976. The corrected figure is 0.716. A measurement that flatters your current
+> hypothesis is exactly the one to re-run before publishing it.
+
+### What is now excluded, and what is not
+
+Three classes of explanation for the eye's ceiling have been tested and
+excluded: **geometry** (§9.8 — the origin estimate, content-correlated),
+**time** (H14, with power), and **capacity** (H16, six-fold). The one variable
+never changed across all thirteen interventions is **the input itself** — 32-px
+luminance tiles. The ear receives a time × frequency map in which pooling over
+time discards a genuine nuisance dimension and keeps identity; 32 × 32 pixels
+offer no such factorisation, which is the argument `WideV1.relational_code`
+already makes and which nothing since has resolved.
+
+That is where the evidence points, and it is named rather than acted on: per
+this project's own discipline, a falsified hypothesis is not replaced with the
+next architectural idea in the same breath.
 
 ---
 
