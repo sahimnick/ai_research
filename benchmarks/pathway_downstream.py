@@ -334,7 +334,8 @@ def main():
     for p in PATHWAYS:
         g = np.array([r[p]["no_dream: see->name"] - r[p]["1nn"] for r in rows])
         per[p] = float(g.mean())
-        print(f"    {p:<16}{g.mean():>+8.4f}  d={g.mean()/(g.std(ddof=1)+1e-12):>5.2f}"
+        d = (g.mean() / (g.std(ddof=1) + 1e-12) if len(g) > 1 else float("nan"))
+        print(f"    {p:<16}{g.mean():>+8.4f}  d={d:>5.2f}"
               f"  {int((g > 0).sum())}/{len(g)} seeds")
     res["H6_layer_minus_1nn"] = {k: round(v, 4) for k, v in per.items()}
     res["H6_layer_beats_1nn"] = bool(float(np.mean(list(per.values()))) > 0.02)
@@ -370,29 +371,39 @@ def main():
     if shut:
         print(f"  payback channel CLOSED (stored <= 0, nothing concludable): "
               f"{', '.join(shut)}")
-    agree = all(res["arms"][p]["replay against"]
-                >= res["arms"][p]["replay believe"] for p in open_)
-    fair = all(res["arms"][p]["replay against"]
-               >= res["arms"][p]["replay believe fixed"] for p in open_)
-    res["H7_holds"] = bool(agree)
-    res["H7_holds_against_fixed"] = bool(fair)
-    print(f"  where the channel is open ({len(open_)} of {len(PATHWAYS)}):")
-    print(f"    learning-against >= believing ....................... {agree}")
-    print(f"    ... and >= believing the UNDISTORTED fantasy ........ {fair}")
-    # Which way the correction moved it matters more than either boolean: if
-    # removing the space bug WIDENS the gap, the bug was flattering the arm the
-    # claim is made against, and the claim was understated rather than
-    # manufactured.
-    moved = float(np.mean([res["arms"][p]["replay believe"]
-                           - res["arms"][p]["replay believe fixed"]
-                           for p in open_]))
-    res["H7_correction_widens_gap"] = bool(moved > 0)
-    print(f"    correcting the space bug moved `believe` by {-moved:+.4f} -> "
-          f"the gap {'WIDENS' if moved > 0 else 'NARROWS'}")
-    if not fair:
-        print("    At least one open pathway flips once the fantasy is "
-              "undistorted; the claim does not hold universally and the "
-              "per-pathway numbers above are the result, not the boolean.")
+    if not open_:
+        # `all([])` is True, so without this branch the verdict prints a pass
+        # over zero pathways -- a vacuous True, which is the same error as
+        # letting a closed channel veto the result, with the sign flipped.
+        res["H7_holds"] = res["H7_holds_against_fixed"] = None
+        res["H7_void_reason"] = "no pathway has an open payback channel"
+        print("  NO pathway has an open payback channel: replaying real pairs "
+              "helps nowhere, so nothing here can test what to do with an\n"
+              "  imagining. H7 is UNTESTED -- not confirmed and not refuted.")
+    else:
+        agree = all(res["arms"][p]["replay against"]
+                    >= res["arms"][p]["replay believe"] for p in open_)
+        fair = all(res["arms"][p]["replay against"]
+                   >= res["arms"][p]["replay believe fixed"] for p in open_)
+        res["H7_holds"] = bool(agree)
+        res["H7_holds_against_fixed"] = bool(fair)
+        print(f"  where the channel is open ({len(open_)} of {len(PATHWAYS)}):")
+        print(f"    learning-against >= believing ................... {agree}")
+        print(f"    ... and >= believing the UNDISTORTED fantasy .... {fair}")
+        # Which way the correction moved it matters more than either boolean:
+        # if removing the space bug WIDENS the gap, the bug was flattering the
+        # arm the claim is made against, and the claim was understated rather
+        # than manufactured.
+        moved = float(np.mean([res["arms"][p]["replay believe"]
+                               - res["arms"][p]["replay believe fixed"]
+                               for p in open_]))
+        res["H7_correction_widens_gap"] = bool(moved > 0)
+        print(f"    correcting the space bug moved `believe` by {-moved:+.4f}"
+              f" -> the gap {'WIDENS' if moved > 0 else 'NARROWS'}")
+        if not fair:
+            print("    At least one open pathway flips once the fantasy is "
+                  "undistorted; the claim does not hold universally and the "
+                  "per-pathway numbers above are the result, not the boolean.")
 
     print(f"\n--- H8: is leaving the span algebraic? ---")
     print(f"{'pathway':<16}{'mix':>10}{'crossing':>12}")

@@ -111,12 +111,24 @@ def fold(votes, merged):
     return votes
 
 
+#: How often `bind_contrastive`'s negative phase actually fired, per arm. The
+#: rule only unlearns when the completion wakes a DIFFERENT cell from the real
+#: pair -- `if win_n != win_p` -- so when the sound channel identifies a place
+#: uniquely, the completion lands on the same cell every time, nothing is
+#: unlearned, and `imagined_as_error` silently becomes `stored`. That happened
+#: on a live run here and produced two arms identical to four decimals, which
+#: the verdict read as the archived result reproducing. An arm that has
+#: degenerated into its own control has to be caught rather than reported.
+FIRED = {}
+
+
 def night(a, votes, V, A, y, idx, arm, seed):
     if arm == "no_dream":
         return votes
     rng = np.random.default_rng(seed + 101)
     waking, a.novelty_rate = a.novelty_rate, DREAM_NOVELTY_RATE
     order = [int(rng.choice(idx)) for _ in range(REPLAYS)]
+    fired = tried = 0
     for i in order:
         if arm == "stored":
             w = a.bind(V[i], A[i])
@@ -131,10 +143,14 @@ def night(a, votes, V, A, y, idx, arm, seed):
             v_hat = a.imagine_from_sound(A[i], temperature=1.0, rng=rng)
             w = a.bind(v_hat * a.v_sd + a.v_mu, A[i])
         else:
-            w, _, _ = a.bind_contrastive(V[i], A[i], temperature=1.0, rng=rng)
+            w, wn, _ = a.bind_contrastive(V[i], A[i], temperature=1.0, rng=rng)
+            tried += 1
+            fired += int(wn != w)
         votes.setdefault(w, {})
         votes[w][int(y[i])] = votes[w].get(int(y[i]), 0) + 1
     a.novelty_rate = waking
+    if tried:
+        FIRED.setdefault(arm, []).append(fired / tried)
     return votes
 
 
@@ -284,6 +300,28 @@ def main():
     res["gate"] = gate
 
     print("\n=== does the inner world pay back on LIVE input? ===")
+    # Only an exact zero is void -- see `payback.main` for why a small non-zero
+    # rate is a measurement rather than a defect.
+    rate = {k: float(np.mean(v)) for k, v in FIRED.items()}
+    res["negative_phase_fire_rate"] = {k: round(v, 4) for k, v in rate.items()}
+    worst = min(rate.values()) if rate else 0.0
+    print(f"  negative phase fired on {worst:.2%} of replays "
+          f"(~{worst * REPLAYS:.0f} of {REPLAYS} per seed)")
+    if 0.0 < worst < 0.05:
+        print(f"  Every error-path number below rests on those "
+              f"~{worst * REPLAYS:.0f} plasticity events -- rare, not weak.")
+    if worst <= 0.0:
+        print("  `bind_contrastive` only unlearns when the completion wakes a "
+              "different cell from the real pair. It did not, so\n"
+              "  `imagined_as_error` performed the positive phase and nothing "
+              "else -- it IS `stored`, and any gap between them is zero by\n"
+              "  construction. Nothing below tests whether learning against an "
+              "imagining pays; the run is VOID for that question.")
+        res["pays_back_live"] = []
+        res["void_reason"] = "negative phase never fired; error arm == stored"
+        json.dump(res, open(out_path, "w"), indent=1)
+        print(f"\nwrote {out_path}")
+        return res
     key = "name_to_place"
     f, e, me = (gate["imagined_as_fact"][key], gate["imagined_as_error"][key],
                 gate["merged+error"][key])

@@ -2634,14 +2634,23 @@ possible.
 | **`imagined_as_error`** — learn against it | **+0.0236 d=+4.33 4/4** | **+0.0165 d=+3.50 4/4** |
 | `merged+error` | +0.0047 d=+0.50 3/4 | −0.0519 d=−1.77 0/4 |
 
-> **Correction pending a live re-run.** §9.7 found that `imagined_as_fact`
-> double-preps the fantasy it binds, here as in `payback.py`. The corrected arm
-> `imagined_as_fact_fixed` is now in `live_mind.py`, but this table predates it
-> and cannot be re-measured from an archive — live cameras are showing something
-> else now. On the archive the correction moved the arm by −0.0012 and left
-> every conclusion in place, so the expectation is that the row above is
-> slightly *flattering* to believing; that is an expectation, not a measurement,
-> and it is marked as one until the benchmark is run against live cameras again.
+> **A live re-run does not reproduce this, and the reason is not the weather.**
+> Re-run months later with the corrected arm added (§9.7), `stored` and
+> `imagined_as_error` came back **identical to four decimals** — 0.6683 /
+> 0.9784 / 110.5 cells, the same deltas and the same win counts. Two arms that
+> differ only through `bind_contrastive`'s negative phase cannot be identical
+> unless that phase never fired, and on that run it did not: the sound channel
+> is the camera's *own name*, which identifies a place uniquely, so the
+> completion woke the storing cell every time and there was nothing to unlearn.
+> `imagined_as_error` was `stored`, and the verdict printed "the archived
+> result reproduces on live sensors" — reading a tie with the positive control
+> as a reproduction.
+>
+> The table above is **not** retracted: its two arms *differ*, which is only
+> possible if the negative phase fired, so that run measured something the
+> re-run did not. What is retracted is any claim that the live result has been
+> reproduced. `live_mind.py` now counts the fire rate and refuses to report
+> when it is zero.
 
 **The archived result reproduces on live sensors**, and reproduces in the part
 that matters most: *learning against what the mind imagines beats replaying what
@@ -3075,6 +3084,34 @@ than the rule they were meant to isolate, and fixing it changed nothing about
 what the benchmark concluded. That is the outcome worth recording — a found bug
 whose correction leaves the result standing is evidence *for* the result, and it
 is only visible because the corrected arm was run rather than reasoned about.
+
+#### How rarely the error rule actually fires, which nothing had measured
+
+Instrumenting the arms turned up something larger than the space bug.
+`bind_contrastive` unlearns **only** where the completion wakes a different cell
+from the real pair — `if win_n != win_p` — and that is deliberate: a
+well-predicted pair should teach nothing, which is the defining property of an
+error-driven rule. Nothing had ever counted how often the condition is met.
+
+On the archive it is **1.35% of replays — about 5 events of 400 per seed.**
+
+The layer holds roughly one cell per experience, so hearing a sound wakes the
+cell that stored that pair and the completion is nearly always *right*. The
+mechanism that produces the project's largest effect therefore fires about five
+times a night. That does not invalidate the effect — every arm replays the same
+400 pairs in the same order, and the controls are unaffected — but it means
+**+0.0833 is the product of five plasticity events, not four hundred**, and the
+rule is *rare* rather than weak. It also predicts where the effect should grow:
+a layer that generalises has more completions to get wrong, which is exactly the
+shape of the superadditivity already measured (`merged` +0.0255 and error
++0.0208 alone, +0.0833 together).
+
+The counter is now permanent in `payback.py` and `live_mind.py`, and an **exact
+zero is treated as void**: at zero the error arm performs the positive phase and
+nothing else, so it *is* `stored` and any gap between them is zero by
+construction. A first version of that guard voided at <2% and threw away this
+finding as a defect; the threshold is now zero, with a loud warning below 5%,
+because a small non-zero rate is the measurement rather than a fault.
 
 The one pathway that flips is `relational`, and its **positive control is
 negative**: replaying *real stored pairs* scores −0.0052 there, so the payback

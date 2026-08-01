@@ -73,6 +73,16 @@ ARMS = ("no_dream", "stored", "imagined_as_fact", "imagined_as_fact_fixed",
         "imagined_as_error", "merged", "merged+error")
 
 
+#: How often `bind_contrastive`'s negative phase actually fired, per arm. It
+#: unlearns only where the completion wakes a different cell from the real pair
+#: (`if win_n != win_p`), so a layer whose completions always land on the right
+#: cell turns `imagined_as_error` into `stored` with no sign that anything is
+#: wrong. That is not hypothetical: on a live run in `live_mind.py` the two arms
+#: came back identical to four decimals and the verdict read it as the result
+#: reproducing. Measured and gated here for the same reason.
+FIRED = {}
+
+
 def fold(votes, merged):
     for old, new in merged.items():
         while new in merged:
@@ -96,7 +106,7 @@ def wake(V, A, y, tr, seed):
     return a, votes
 
 
-def night(a, votes, V, A, y, tr, arm, seed):
+def night(a, votes, V, A, y, tr, arm, seed, label=None):
     """Every arm replays the same pairs in the same order, drawn from one
     generator seeded identically -- so the arms differ in the RULE and not in
     what they saw.
@@ -121,6 +131,7 @@ def night(a, votes, V, A, y, tr, arm, seed):
     rng = np.random.default_rng(seed + 101)
     waking, a.novelty_rate = a.novelty_rate, DREAM_NOVELTY_RATE
     order = [int(rng.choice(tr)) for _ in range(REPLAYS)]
+    fired = tried = 0
     for i in order:
         if arm == "stored":
             w = a.bind(V[i], A[i])
@@ -131,10 +142,18 @@ def night(a, votes, V, A, y, tr, arm, seed):
             v_hat = a.imagine_from_sound(A[i], temperature=1.0, rng=rng)
             w = a.bind(v_hat * a.v_sd + a.v_mu, A[i])
         else:                                   # believed nothing; learned from
-            w, _, _ = a.bind_contrastive(V[i], A[i], temperature=1.0, rng=rng)
+            w, wn, _ = a.bind_contrastive(V[i], A[i], temperature=1.0, rng=rng)
+            tried += 1
+            fired += int(wn != w)
         votes.setdefault(w, {})
         votes[w][int(y[i])] = votes[w].get(int(y[i]), 0) + 1
     a.novelty_rate = waking
+    if tried:
+        # keyed on the CALLER's arm name, not the rule name: `merged+error`
+        # runs the same rule and must be counted separately, because whether
+        # merging raises the fire rate is the mechanism behind its
+        # superadditivity.
+        FIRED.setdefault(label or arm, []).append(fired / tried)
     return votes
 
 
@@ -165,7 +184,7 @@ def run_seed(V, Vs, A, y, n_cls, seed):
             votes = fold(votes, a.consolidate_ranked(keep=KEEP))
         votes = night(a, votes, V, A, y, tr,
                       "imagined_as_error" if arm == "merged+error" else arm,
-                      seed)
+                      seed, label=arm)
         out[arm] = probe(a, votes, V, Vs, A, y, tr, te, n_cls)
     return out
 
@@ -218,6 +237,34 @@ def main():
     res["gate"] = gate
 
     print("\n=== does the inner world pay back? ===")
+    # How often the negative phase fired. Only an EXACT zero is void: at zero
+    # the error arm performed the positive phase and nothing else, so it is
+    # `stored` and any gap between them is zero by construction. A small
+    # non-zero rate is not void -- it is the size of the thing being measured,
+    # and it is worth printing loudly because it is easy to read a +0.0833 as
+    # the product of 400 replays when it is the product of five.
+    rate = {k: float(np.mean(v)) for k, v in FIRED.items()}
+    res["negative_phase_fire_rate"] = {k: round(v, 4) for k, v in rate.items()}
+    worst = min(rate.values()) if rate else 0.0
+    for k in sorted(rate):
+        print(f"  negative phase fired on {rate[k]:>6.2%} of replays "
+              f"(~{rate[k] * REPLAYS:>3.0f} of {REPLAYS} per seed)   {k}")
+    if worst <= 0.0:
+        print("  THE RULE NEVER RAN: `imagined_as_error` performed the "
+              "positive phase and nothing else, so it IS `stored` and any\n"
+              "  gap between them is zero by construction. Nothing below "
+              "tests the claim; the run is VOID for that question.")
+        res["pays_back"] = []
+        res["void_reason"] = "negative phase never fired; error arm == stored"
+        json.dump(res, open(out_path, "w"), indent=1)
+        print(f"\nwrote {out_path}")
+        return res
+    if worst < 0.05:
+        print(f"  Every error-path number below rests on those "
+              f"~{worst * REPLAYS:.0f} plasticity events. The rule fires only "
+              f"where the completion wakes a\n  different cell from the real "
+              f"pair, and this layer's completions are usually right -- so the "
+              f"effect is rare, not weak.")
     fact = gate["imagined_as_fact"]["see_to_name"]
     fixed = gate["imagined_as_fact_fixed"]["see_to_name"]
     err = gate["imagined_as_error"]["see_to_name"]
