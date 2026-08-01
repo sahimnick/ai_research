@@ -2570,6 +2570,73 @@ restores the pooling contract but the invariant codes it produces are weak
 (0.233 against 0.773 for position-specific). That is a property of the
 representation's construction rather than of any rule applied to it.
 
+### The whole mind on live cameras — what reproduces and what cannot be resolved
+
+`payback.py`'s result was measured on archives. `benchmarks/live_mind.py` runs
+the same protocol on **live traffic cameras** over a real time gap, with text as
+the second modality — the camera's own name, which is honest metadata rather
+than a label invented for the benchmark. Concepts are bound on the early rounds
+and every number is measured on the last, minutes later.
+
+**24 of 24 cameras genuinely changed** over 450 s (same camera later 0.592
+against an encode-twice floor of 0.909), so this is a generalisation test rather
+than a re-read.
+
+| arm | cells | name→place | place→name |
+|---|---|---|---|
+| `no_dream` | 31.0 | 0.375 | **0.802** |
+| `stored` | 38.5 | 0.385 | 0.802 |
+| `imagined_as_fact` | 49.0 | 0.396 | **0.594** |
+| `imagined_as_error` | 39.0 | 0.385 | 0.802 |
+| `merged+error` | 30.5 | **0.417** | 0.802 |
+
+Chance is 0.042. **The mind hears a name and pictures the place at 9× chance,
+and names a place it has never seen in that state at 19× chance** — on public
+cameras, through the same eye, ear-substitute and concept layer as everything
+else in this document.
+
+**What reproduces**: believing an imagining is harmful, and more so here than on
+the archive — **−0.2083** on place recognition, 0 of 4 seeds, against −0.0174
+archived.
+
+**What cannot be resolved**: the payback effect. `merged+error` gains +0.0417 on
+name→place in 4 of 4 seeds — but one camera *is* 0.0417 in a 24-place world, so
+that is one camera, and an effect of the archived size (+0.0833) would be two.
+24 places × 3 observations cannot separate that from nothing however many seeds
+are averaged. The direction is right and the magnitude is at the measurement
+floor; I am not claiming it reproduced.
+
+> **A number I nearly published.** The first version of this reported
+> `d = +41666666666.67` and a verdict of "the archived result reproduces on live
+> sensors". That d came from `delta / (sd + 1e-12)` where every seed had given
+> the *identical* delta, so the spread was exactly zero — Cohen's d is undefined
+> there, and the guard turned it into a figure that reads as overwhelming
+> evidence for what is really an absence of variance. Now reported as `d=n/a`
+> with the effect expressed in **cameras**, and the acceptance gate refuses any
+> effect smaller than 1.5 of them.
+
+### The bug this found, which was silently degrading every held-out visual result
+
+`set_stats` floored the divisor at an absolute `std + 1e-6`. When a feature has
+**no** variance across the training set — a V1 cell that never fired for any of
+them — every held-out sample gets that feature multiplied by a million, and the
+prepared code becomes nothing but dead dimensions.
+
+Measured on 24 live cameras with 12288-d codes: the 1st percentile of `v_sd` sat
+at exactly 1e-6, and **20 of 24 held-out frames woke an *uncommitted* concept
+cell** — the read-out was answering with random rows.
+
+| divisor floor | held-out frames waking an unbound cell | place recognition |
+|---|---|---|
+| `+1e-6` (as shipped) | **20 of 24** | 0.167 |
+| 1% of the mean std | **4 of 24** | **0.833** |
+
+Training samples are unaffected — their value in a zero-variance feature *is*
+the mean, so the ratio is 0/floor either way — which is exactly why this never
+appeared on a training-set probe and only surfaced when something genuinely new
+was presented. It is fixed, and it is the reason the live figures above are
+0.802 rather than 0.000.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

@@ -73,11 +73,34 @@ class AssociationArea:
         self._rng = rng
         self.v_mu = self.v_sd = self.a_mu = self.a_sd = None
 
-    def set_stats(self, V: np.ndarray, A: np.ndarray) -> None:
+    def set_stats(self, V: np.ndarray, A: np.ndarray,
+                  rel_floor: float = 0.01) -> None:
         """Learn each modality's feature statistics so the concept cells compare
-        codes on an equal footing (divisive normalisation -- what cortex does)."""
-        self.v_mu, self.v_sd = V.mean(0), V.std(0) + 1e-6
-        self.a_mu, self.a_sd = A.mean(0), A.std(0) + 1e-6
+        codes on an equal footing (divisive normalisation -- what cortex does).
+
+        The floor on the divisor is **relative**, and an absolute one was a real
+        bug rather than a detail. ``std + 1e-6`` looks harmless until a feature
+        has *no* variance across the training set -- a V1 cell that never fired
+        for any of them -- and then every held-out sample gets that feature
+        multiplied by a million and the code is nothing but those dead
+        dimensions.
+
+        Measured on 24 live cameras, 12288-d codes: the 1st percentile of
+        ``v_sd`` sat at exactly 1e-6, and **20 of 24 held-out frames woke an
+        uncommitted concept cell** -- the read-out was answering with random
+        rows. Flooring at 1% of the mean standard deviation instead: 4 of 24,
+        and place-recognition 0.167 -> **0.833**.
+
+        Training samples are unaffected (their value in a zero-variance feature
+        *is* the mean, so the ratio is 0/floor either way), which is why this
+        never showed up on a training-set probe and only appeared once
+        something genuinely new was presented.
+        """
+        vs, as_ = V.std(0), A.std(0)
+        self.v_mu = V.mean(0)
+        self.v_sd = np.maximum(vs, max(rel_floor * float(vs.mean()), 1e-6))
+        self.a_mu = A.mean(0)
+        self.a_sd = np.maximum(as_, max(rel_floor * float(as_.mean()), 1e-6))
 
     def prep_v(self, v: np.ndarray) -> np.ndarray:
         return _unit(v if self.v_mu is None else (v - self.v_mu) / self.v_sd)
