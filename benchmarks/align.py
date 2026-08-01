@@ -79,6 +79,12 @@ SEEDS = (0, 1, 2, 3)
 N_CONCEPT = 256
 KEEP = 0.6
 EPOCHS, LR = 2, 0.02
+# The reconstructive rule normalises its update by the position's total rate,
+# so its effective step is ~1/8 of a small residual and it needs a much larger
+# nominal rate. Swept: at 0.5 two different targets leave filters 0.03 apart
+# (the teacher is not being transmitted); at 8.0 they are 0.34 apart, filters
+# diversify within a position (cosine 0.971 -> 0.633) and the bank stays alive.
+REC_LR = 8.0
 SHIFT = 5
 ARMS = ("no align", "align to concept", "align to own rate",
         "align to wrong concept", "reconstruct concept",
@@ -190,7 +196,7 @@ def run_seed(images, waves, y, n_cls, seed):
         # align on the LUMINANCE channel, which is the one develop_v1 grew on
         if arm in timg:
             align_v1_reconstructive(b.v1, [opponent(im)[0] for im in ims_tr],
-                                    timg[arm], epochs=EPOCHS, lr=0.05)
+                                    timg[arm], epochs=EPOCHS, lr=REC_LR)
         else:
             align_v1(b.v1, [opponent(im)[0] for im in ims_tr],
                      [t[:b.v1.n_cells] for t in tgt[arm]],

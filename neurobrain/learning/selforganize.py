@@ -697,10 +697,28 @@ def align_v1_reconstructive(layer: WideV1, images: Sequence[np.ndarray],
             P = layer.patches(im)                     # (n_pos, rf*rf)
             T = layer.patches(tim)
             # reconstruct each position from the cells that look at it
+            # Both sides of the residual have to be in the same units, and
+            # they are not by default: rates come out with a standard deviation
+            # near 25 while patches live in [0, 1], so a raw
+            # ``sum_c r[c] Wt[c]`` overshoots the patch by orders of magnitude,
+            # the residual is hugely negative, rectification zeroes whole rows
+            # and the bank dies on the first step. Measured before this guard:
+            # within-position filter cosine 0.822 -> 0.000 and rate std
+            # 25.73 -> 0.0000 at every learning rate tried.
+            #
+            # So the reconstruction is a *weighted mean* of unit-norm filters
+            # rather than a sum, and the target patch is unit-normalised to
+            # match. The residual is then dimensionless and the rule is scale
+            # free, which is what it has to be when the two quantities being
+            # compared are a firing rate and a pixel.
+            w = np.maximum(np.bincount(layer.cell_pos, weights=r,
+                                       minlength=layer.n_pos), 1e-6)
             recon = np.zeros_like(P)
             np.add.at(recon, layer.cell_pos, r[:, None] * layer.Wt)
-            E = T - recon                             # (n_pos, rf*rf)
-            layer.Wt += lr * r[:, None] * E[layer.cell_pos]
+            recon /= w[:, None]
+            Tn = T / np.maximum(np.linalg.norm(T, axis=1, keepdims=True), 1e-6)
+            E = Tn - recon                            # (n_pos, rf*rf)
+            layer.Wt += lr * (r / w[layer.cell_pos])[:, None] * E[layer.cell_pos]
             np.maximum(layer.Wt, 0.0, out=layer.Wt)
             layer.Wt /= np.maximum(
                 np.linalg.norm(layer.Wt, axis=1, keepdims=True), 1e-6)
