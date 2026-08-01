@@ -3456,6 +3456,30 @@ never measured put that band in its place:
 | **the ear, on the 6 audiovisual classes** | **0.716** |
 | the ear, on `heard_world.py`'s 6 easiest classes | 0.779 |
 
+#### And the class set moves the ear more than the whole gap does
+
+The correction above is the weak form. Drawing **eight random 6-class subsets**
+of ESC-50 and measuring the ear on each, holding metric, split and code path
+fixed:
+
+| | cluster AUC |
+|---|---|
+| 8 random 6-class draws | **0.695 – 0.836**, mean 0.757 |
+| `heard_world.py`'s chosen 6 | 0.779 |
+| the 6 audiovisual classes | 0.716 |
+| the eye's best arm | 0.630 |
+
+**The spread caused by class choice alone is 0.141 — larger than the entire
+matched eye-ear gap of 0.086.** Which six categories you happen to test on moves
+the ear more than the difference between the two senses does. The comparison
+that motivated thirteen interventions is dominated by task selection, and the
+audiovisual set the eye is judged on sits *below* the random-draw mean.
+
+This does not mean the eye is fine. It means "the eye is far behind the ear" was
+never a measurement of the eye: it was a measurement of two different tasks, and
+the honest statement is that on the one task where both are measured identically
+the ear leads by 0.086, which is inside the range that class choice alone spans.
+
 **The eye is not doing nothing:** it adds **+0.106** over the raw pixels. And
 the project's headline framing — *"the eye at 0.63 against the ear's 0.788"*,
 which motivated eleven interventions — is **partly a cross-condition

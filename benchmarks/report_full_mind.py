@@ -14,6 +14,8 @@ panel shows a limitation, the limitation is what the run produced.
     05_imagination.jpg   recall, composition and factored crossing, with the
                          span residual that separates them
     06_findings.jpg      the measured results this project ends on
+    07_upgrade.jpg       the upgrade taken from the 2023-24 literature, and
+                         exactly how much of it survived measurement
 
 Usage:  python3 benchmarks/report_full_mind.py --outdir reports
 """
@@ -458,6 +460,127 @@ def panel_findings(S, out):
 CACHE = os.environ.get("FULLMIND_CACHE", "")
 
 
+def panel_upgrade(S, out):
+    """What the literature suggested, and what measuring it actually gave."""
+    fig = plt.figure(figsize=(13, 7.6))
+    fig.suptitle("7 · The upgrade taken from the literature — and how much of "
+                 "it survived measurement", fontsize=13, color=INK, y=0.99)
+    gs = GridSpec(2, 3, figure=fig, hspace=0.46, wspace=0.3,
+                  height_ratios=[1, 1.05])
+
+    def load(p):
+        try:
+            return json.load(open(p))
+        except Exception:
+            return None
+
+    # --- H14: the temporal rule against its own controls -------------------
+    a = fig.add_subplot(gs[0, 0])
+    t = load("out_temporal.json")
+    if t:
+        ks = ["static", "temporal", "shuffled-time"]
+        lab = ["static\n(current)", "temporal\n(LPL)", "shuffled\n(control)"]
+        v = [t["arms"][k]["cluster_auc"] for k in ks]
+        a.bar(lab, v, color=[ACC, "#2563eb", "#94a3b8"], width=0.6)
+        for i, x in enumerate(v):
+            a.text(i, x + 0.002, f"{x:.3f}", ha="center", fontsize=8.5)
+        a.set_ylim(0.55, 0.61)
+        a.set_ylabel("cluster AUC", fontsize=8.5)
+    a.set_title("H14 · does temporal continuity help?\nit does not — and the "
+                "control ties it", fontsize=9.5, color=INK)
+    a.tick_params(labelsize=8)
+
+    # --- H16: capacity -----------------------------------------------------
+    a = fig.add_subplot(gs[0, 1])
+    c = load("out_temporal_capacity.json")
+    if c:
+        nfs = sorted(int(k) for k in c["capacity"])
+        a.plot(nfs, [c["capacity"][str(n)]["temporal"] for n in nfs], "o-",
+               color="#2563eb", label="temporal")
+        a.plot(nfs, [c["capacity"][str(n)]["shuffled-time"] for n in nfs],
+               "s--", color="#94a3b8", label="shuffled control")
+        a.plot(nfs, [c["capacity"][str(n)]["static"] for n in nfs], "^:",
+               color=ACC, label="static")
+        a.legend(fontsize=7.5)
+        a.set_xlabel("distinct filters in the tied bank", fontsize=8)
+        a.set_ylabel("cluster AUC", fontsize=8.5)
+    a.set_title("H16 · is capacity the constraint?\n6x the filters moves "
+                "nothing", fontsize=9.5, color=INK)
+    a.tick_params(labelsize=8)
+
+    # --- the control that reframes the whole band --------------------------
+    a = fig.add_subplot(gs[0, 2])
+    bars = [("raw pixels\n(no V1)", 0.524, "#94a3b8"),
+            ("eye, best\never", 0.630, ACC),
+            ("ear, SAME\n6 classes", 0.716, OK_)]
+    a.bar([b[0] for b in bars], [b[1] for b in bars],
+          color=[b[2] for b in bars], width=0.55)
+    for i, b in enumerate(bars):
+        a.text(i, b[1] + 0.006, f"{b[1]:.3f}", ha="center", fontsize=8.5)
+    # the ear across EIGHT random 6-class draws of ESC-50: the spread caused by
+    # class choice alone, drawn as the band it is
+    lo, hi, mean = 0.695, 0.836, 0.757
+    a.add_patch(plt.Rectangle((2.62, lo), 0.76, hi - lo, fc="#a7f3d0",
+                              ec="#059669", lw=1.2, alpha=0.85))
+    a.plot([2.62, 3.38], [mean, mean], color="#065f46", lw=1.6)
+    a.text(3.0, hi + 0.008, f"{hi:.3f}", ha="center", fontsize=8)
+    a.text(3.0, lo - 0.022, f"{lo:.3f}", ha="center", fontsize=8)
+    a.text(3.0, mean, " mean .757", ha="center", va="bottom", fontsize=7.5,
+           color="#065f46")
+    a.set_xticks([0, 1, 2, 3])
+    a.set_xticklabels(["raw pixels\n(no V1)", "eye, best\never",
+                       "ear, SAME\n6 classes", "ear, 8 RANDOM\n6-class draws"])
+    a.axhline(0.524, color="#64748b", ls=":", lw=1)
+    a.set_xlim(-0.6, 3.7)
+    a.set_ylim(0.45, 0.88)
+    a.set_ylabel("cluster AUC", fontsize=8.5)
+    a.set_title("the control run 13 interventions late\nchoosing the CLASSES "
+                "moves the ear 0.141 — more than the\nwhole eye-ear gap of "
+                "0.086", fontsize=9.5, color=INK)
+    a.tick_params(labelsize=7.5)
+
+    # --- the ledger --------------------------------------------------------
+    a = fig.add_subplot(gs[1, :])
+    a.axis("off")
+    rows = [
+        ("USED", "#2563eb",
+         "Halvagal & Zenke, Nat Neuro 2023 — Hebbian plasticity alone fails at "
+         "invariance; add a PREDICTIVE term over time (LPL)"),
+        ("BUILT", "#2563eb",
+         "the 3 LPL terms as a local rule: predictive + variance + "
+         "decorrelation · no gradients, no loss function · plus rotating and "
+         "looming objects to make the sequences"),
+        ("RESULT", BAD,
+         "FALSIFIED. temporal − static −0.0062 (d=−0.19) · temporal − shuffled "
+         "+0.0048 (d=+0.19) · shift-invariance FELL 0.350 → 0.253"),
+        ("AND", BAD,
+         "not a weak test: the predictive term provably receives a 2.4× "
+         "different signal on ordered vs shuffled input and still yields the "
+         "same code"),
+        ("KEPT", OK_,
+         "H15 — the decorrelation term is load-bearing: remove it and the bank "
+         "collapses to effective dimension 0.00"),
+        ("KEPT", OK_,
+         "the correction it forced: matched gap is 0.086, not 0.158 — and 8 "
+         "random 6-class draws move the ear over 0.695–0.836, a spread of "
+         "0.141"),
+        ("SO", ACC,
+         "which classes you test on moves the ear MORE than the entire "
+         "eye-vs-ear difference. The comparison that drove 13 interventions "
+         "is dominated by task selection."),
+    ]
+    for k, (tag, col, txt) in enumerate(rows):
+        yy = 0.94 - k * 0.165
+        a.text(0.004, yy, tag, fontsize=8.5, color="white", weight="bold",
+               va="center",
+               bbox=dict(boxstyle="round,pad=0.32", fc=col, ec="none"))
+        a.text(0.085, yy, txt, fontsize=8.8, color="#334155", va="center")
+    _save(fig, os.path.join(out, "07_upgrade.jpg"),
+          "The paper's claim was implemented as specified and did not transfer "
+          "to this architecture. What it did buy is a load-bearing "
+          "decorrelation term and a corrected baseline.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--outdir", default="reports")
@@ -479,6 +602,7 @@ def main():
     panel_crossmodal(S, args.outdir)
     panel_imagination(S, args.outdir)
     panel_findings(S, args.outdir)
+    panel_upgrade(S, args.outdir)
     print("done", flush=True)
 
 
