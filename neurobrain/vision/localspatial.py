@@ -210,11 +210,22 @@ class LocalSpatialEye:
         return np.array([float((w * ys).sum() / t),
                          float((w * xs).sum() / t)], np.float32)
 
-    def grid(self, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Patch origins and centres, laid out in whichever frame is in use."""
+    def grid(self, image: np.ndarray,
+             origin: Optional[np.ndarray] = None) -> Tuple[np.ndarray,
+                                                           np.ndarray]:
+        """Patch origins and centres, laid out in whichever frame is in use.
+
+        ``origin`` overrides :meth:`image_centroid`. It exists as a **diagnostic
+        instrument, not an architecture**: `benchmarks/limiting_factor.py` hands
+        it the object's true position, which the benchmark knows because it
+        placed the object itself, in order to ask whether the estimator is what
+        limits the object-centred frame. Nothing in the mind can supply this,
+        and no arm that uses it is a proposal.
+        """
         if not (self.resample and self.centred):
             return self.origins, self.centres
-        c = self.image_centroid(image)
+        c = (self.image_centroid(image) if origin is None
+             else np.asarray(origin, np.float32))
         rel = self.centres - np.array([self.H / 2.0, self.W / 2.0], np.float32)
         centres = rel + c
         origins = np.rint(centres - self.patch / 2.0).astype(int)
@@ -243,7 +254,8 @@ class LocalSpatialEye:
             out.append(p)
         return out
 
-    def features(self, image: np.ndarray) -> np.ndarray:
+    def features(self, image: np.ndarray,
+                 origin: Optional[np.ndarray] = None) -> np.ndarray:
         """(n_feat, n_patch) -- what each patch sees, sparsened.
 
         kWTA per patch is the competitive step and it is not decoration: without
@@ -251,7 +263,7 @@ class LocalSpatialEye:
         contains, the outer product below sums those, and the code becomes an
         image-energy map that says nothing about which features occurred.
         """
-        origins, _ = self.grid(image)
+        origins, _ = self.grid(image, origin)
         if self.local:
             out = np.empty((self.n_feat, self.n_patch), np.float32)
             for k, p in enumerate(self.patch_images(image, origins)):
@@ -320,16 +332,22 @@ class LocalSpatialEye:
                     out[yy * self.bins + xx, k] += wy * wx
         return out
 
-    def code(self, image: np.ndarray) -> np.ndarray:
-        """The pathway, end to end: what, and where in the object."""
-        A = self.features(image)
+    def code(self, image: np.ndarray,
+             origin: Optional[np.ndarray] = None) -> np.ndarray:
+        """The pathway, end to end: what, and where in the object.
+
+        ``origin`` is the diagnostic override described in :meth:`grid`.
+        """
+        A = self.features(image, origin)
         if self.resample and self.centred:
             # the grid was already laid out from the centroid, so each patch's
             # offset is its fixed place in the object and needs no re-measuring
-            origin = np.array([self.H / 2.0, self.W / 2.0], np.float32)
+            org = np.array([self.H / 2.0, self.W / 2.0], np.float32)
+        elif origin is not None:
+            org = np.asarray(origin, np.float32)
         else:
-            origin = self.centroid(A)
-        B = self.position_code(origin)
+            org = self.centroid(A)
+        B = self.position_code(org)
         return _unit((A @ B.T).reshape(-1))
 
     def develop(self, images: Sequence[np.ndarray], epochs: int = 3,
