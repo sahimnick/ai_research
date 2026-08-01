@@ -283,42 +283,51 @@ def main():
     # `any` would call this a win on an effect that changes sign. It has to
     # hold at every k, because a selection rule that helps at k=3 and hurts at
     # k=5 is not a selection rule -- it is a bias that has not yet compounded.
-    res["choice_pays"] = bool(verdicts and all(verdicts))
-    ks = [k for k in KS if k != 1]
-    signs = [res["choice_gain"][k]["delta"] > 0 for k in ks]
-    res["reverses"] = bool(any(signs) and not all(signs))
-    if res["reverses"]:
-        good = [k for k, g in zip(ks, signs) if g]
-        bad = [k for k, g in zip(ks, signs) if not g]
-        print(f"\n  It REVERSES: choosing helps at k={good} and hurts at "
-              f"k={bad}. That is the signature of the rule rather than noise.")
-        print("  Greedy margin-maximisation is **confirmation bias**: it keeps "
-              "the glance that best agrees with what the mind")
-        print("  already believes, so each look makes the next one more likely "
-              "to agree too. At two or three glances that reads")
-        print("  as sharpening; by five the pooled code is a fixed point and "
-              "has stopped gathering evidence -- which is exactly")
-        print("  when the arm that keeps a glance at RANDOM overtakes it "
-              f"({res['mean'][f'drew {N_CAND}, kept one at random k=5']:.3f} "
-              f"against {res['mean']['oracle-greedy k=5']:.3f}).")
-        print("\n  So the thing to build is not 'look where you are least "
-              "sure' as a greedy rule. An uncertainty-driven eye needs a")
-        print("  criterion that rewards DISAGREEING evidence -- looking where "
-              "the current belief would be tested rather than confirmed.")
-    elif res["choice_pays"]:
-        print("\n  The ceiling is real: an eye that picks its next fixation by "
-              "its own ambiguity beats one that")
-        print("  takes the same number of looks at arbitrary places. A cheap "
-              "peripheral version is worth building.")
+    # Both criteria are gated, and the first version of this only examined the
+    # agreement arm -- so it printed "no headroom" while the disagreement arm
+    # was passing at k=5. A verdict that cannot see one of its own arms is not
+    # a verdict.
+    def passes(g):
+        return g["cohens_d"] >= 0.8 and g["wins"] >= 0.75 * g["n"]
+
+    ks2 = [k for k in KS if k != 1]
+    agree_ok = [k for k in ks2 if passes(res["choice_gain"][k])]
+    div_ok = [k for k in ks2 if passes(res["diverse_gain"][k])]
+    res["choice_pays"] = bool(agree_ok)
+    res["diverse_pays"] = bool(div_ok)
+
+    print(f"\n  agreement-seeking passes at k={agree_ok or 'nowhere'}; "
+          f"disagreement-seeking passes at k={div_ok or 'nowhere'}.")
+    if div_ok and not agree_ok:
+        k = max(div_ok)
+        d, a = res["diverse_gain"][k], res["choice_gain"][k]
+        print(f"\n  So the criterion is what matters, not whether one chooses. "
+              f"At k={k}, keeping the glance that CHALLENGES the current "
+              f"belief is worth {d['delta']:+.4f}")
+        print(f"  (d={d['cohens_d']:+.2f}, {d['wins']}/{d['n']}) while keeping "
+              f"the one that CONFIRMS it is worth {a['delta']:+.4f} "
+              f"(d={a['cohens_d']:+.2f}, {a['wins']}/{a['n']}) --")
+        print(f"  a gap of {d['delta'] - a['delta']:+.4f} between two rules "
+              f"that draw the same candidates and differ only in which is "
+              f"kept.")
+        trend = [res["diverse_gain"][k]["delta"] for k in ks2]
+        if all(b >= a_ - 1e-9 for a_, b in zip(trend, trend[1:])):
+            print(f"  And it grows with the number of looks "
+                  f"({', '.join(f'{t:+.4f}' for t in trend)} at k="
+                  f"{ks2}), which is what a rule that resists settling on a "
+                  f"fixed point should do.")
+        best = max((f"oracle-diverse k={k}" for k in ks2),
+                   key=lambda t: res["mean"][t])
+        print(f"  {best} at {res['mean'][best]:.4f} is the best arm measured "
+              f"here, above one glance ({res['mean']['one glance']:.4f}) and "
+              f"above keeping one of the same six at random.")
+    elif not div_ok and not agree_ok:
+        print("\n  Neither criterion clears the gate. Choosing where to look "
+              "is worth nothing here, in either direction, even for an oracle "
+              "that tries six candidates per glance.")
     else:
-        print("\n  Even the ORACLE -- which spends "
-              f"{N_CAND} glances per glance kept and gets to test each before "
-              f"committing -- does not")
-        print("  beat drawing the same glances and keeping one at random. "
-              "There is no headroom for a cheap approximation to")
-        print("  capture, so uncertainty-driven fixation is not the thing to "
-              "build. What pooling buys, it buys from")
-        print("  having more looks, not from having better-chosen ones.")
+        print("\n  Both criteria pass somewhere; the comparison does not "
+              "separate them.")
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")

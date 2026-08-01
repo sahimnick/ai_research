@@ -2394,47 +2394,55 @@ weakly coupled can do: AUC 0.524 over form × colour, 0.564 over sight × sound,
 both near the 0.500 of ranking nothing. `constraint.py` already said that is the
 world and not the rule.
 
-### Phase 9.3 / 10.3 — choosing where to look is worth nothing, in either direction
+### Phase 10.3 — seeking *disagreeing* evidence works, and the basis is why
 
-The ceiling was measured before building the mechanism, as `constraint.py` did:
-an **oracle** that glances at 6 candidate locations and keeps whichever most
-sharpens its own belief — spending 6 glances per glance kept, which no real eye
-can do. If the oracle does not beat drawing the same glances and keeping one at
-random, no cheap peripheral approximation will.
+The rule: after each glance, keep the candidate whose response most
+**challenges** what the mind currently believes rather than the one that most
+agrees with it. Measured against an oracle that draws 6 candidates per glance
+and keeps one **at random**, so the comparison is selection alone and not the
+larger sample.
 
-Phase 10.3 added the opposite criterion: keep the glance that most **challenges**
-the current belief rather than the one that most agrees with it — same budget,
-same candidates, inverted rule.
+The first implementation scored disagreement over **class prototypes** and came
+out negative everywhere. That was my substitution: the specification says *among
+the concept cells*, and the difference is not cosmetic. A prototype is an
+average over a whole category, so the drive across six of them is already
+pooled, and a glance can move the concept-cell profile without moving that
+summary at all — which is exactly the glances that distinguish members of one
+category. Over the concept cells, 8 seeds, per-arm random streams:
 
-8 seeds, per-arm random streams, measured against drawing the same 6 glances and
-keeping one at random:
-
-| k | agree-greedy | **disagree-greedy** (10.3) |
+| k | agree-greedy | **disagree-greedy** |
 |---|---|---|
-| 2 | −0.0008 (4/8) | −0.0217 (1/8) |
-| 3 | −0.0021 (3/8) | −0.0108 (2/8) |
-| 5 | −0.0200 (1/8) | −0.0217 (1/8) |
+| 2 | −0.0008 (4/8) | −0.0046 (3/8) |
+| 3 | −0.0021 (3/8) | **+0.0150**, d=+0.50 (6/8) |
+| 5 | −0.0200, d=−1.12 (1/8) | **+0.0163, d=+0.89, 7/8** ✔ |
 
-**Both are negative at every k.** Neither selecting for agreement nor selecting
-for disagreement beats not selecting at all — and the oracle is spending six
-glances per glance kept, so a cheap peripheral version has nothing to reach for.
-What pooling glances buys, and it does buy something (+0.0121 at k=5), comes
-from **having more looks, not from having better-chosen ones**. That retires
-uncertainty-driven fixation rather than leaving it open.
+**The criterion is what matters, not whether one chooses at all.** At k=5,
+keeping the glance that challenges the belief is worth +0.0163 while keeping the
+one that confirms it is worth −0.0200 — a gap of **+0.036** between two rules
+that draw the same candidates and differ only in which is kept.
 
-> **A claim of mine that did not survive.** An earlier run reported that
-> agreement-greedy helps at k=2 and k=3 and *reverses* at k=5 (−0.0225,
-> d=−1.09, 0/4), and I read that as confirmation bias compounding across looks
-> — "the signature of the rule rather than noise". It was noise. All arms drew
-> from **one shared random stream**, so adding the disagreement arm shifted
-> every later arm's glance locations and the reversal moved from k=5 to k=3.
-> With independent per-arm streams and 8 seeds instead of 4, the effect is
-> simply absent. The confirmation-bias account is withdrawn.
->
-> The lesson generalises past this benchmark: **arms that share an rng stream
-> are not independent arms**, because arm order becomes an experimental
-> variable. It is worth re-reading any multi-arm result in this repository with
-> that in mind.
+And it **grows with the number of looks** (−0.0046, +0.0150, +0.0163 at
+k = 2, 3, 5) while the agreement rule gets worse over the same range, which is
+what a rule that resists settling on a fixed point should do. `oracle-diverse
+k=5` at **0.1842** is the best arm measured anywhere in this benchmark — above
+one glance (0.1450), random pooling (0.1571), and keeping one of the same six at
+random (0.1679).
+
+The standing caveat holds: every number here sits between 0.14 and 0.19 on a
+task whose chance is 0.100, so these are real effects on a perceiver that is
+barely working. What the result establishes is the *sign and the direction of
+the trend*, not a usable eye.
+
+> **Two errors of mine that hid this.** An earlier run reported agreement-greedy
+> helping at k=2,3 and *reversing* at k=5, which I read as confirmation bias
+> compounding — "the signature of the rule rather than noise". It was noise: all
+> arms drew from one shared random stream, so adding an arm shifted every later
+> arm's glance locations and the reversal moved from k=5 to k=3. Independent
+> per-arm streams and 8 seeds instead of 4 make it absent. Then the verdict
+> logic examined only the agreement arm, so it printed "no headroom for a cheap
+> approximation" while the disagreement arm was passing its gate. A verdict that
+> cannot see one of its own arms is not a verdict; it now gates both.
+
 
 
 ## 9.5 Real sensors, and Phase 10
@@ -2636,6 +2644,51 @@ the mean, so the ratio is 0/floor either way — which is exactly why this never
 appeared on a training-set probe and only surfaced when something genuinely new
 was presented. It is fixed, and it is the reason the live figures above are
 0.802 rather than 0.000.
+
+### Phase 10.2 as specified — the premise is confirmed, the remedy is not
+
+The test asked for is panel 1's: show a held-out photograph, and ask whether the
+concept it wakes is one whose training majority is its own category. Baseline
+35%, predicted 55–60% after alignment, with the object shifted 5 px.
+`benchmarks/phase10_2.py` measures exactly that, with a 32 px object in a 48 px
+frame so the shift keeps the object whole, applied at test time only, 4 seeds:
+
+| arm | centred | +5 px | −5 px |
+|---|---|---|---|
+| no align | **0.290** | **0.021** | **0.023** |
+| align to concept (delta rule) | 0.311 | 0.019 | 0.016 |
+| reconstruct concept | 0.295 | 0.019 | 0.019 |
+| reconstruct own *(uninformative)* | 0.286 | 0.026 | 0.024 |
+| reconstruct wrong *(misleading)* | 0.309 | 0.026 | 0.026 |
+
+**The premise is confirmed far more strongly than stated.** A 5-pixel shift does
+not degrade the code, it *annihilates* it: 0.290 → 0.021, which is not merely
+worse than the 35% baseline but well **below the 0.167 chance rate** — the
+shifted code wakes concepts of systematically wrong categories. Five pixels.
+
+**The remedy does not work.** Best arm across all three shifts is 0.120 against
+the 0.55–0.60 predicted, and it is `reconstruct wrong` — the **deliberately
+misleading** teacher. The correct concept gives 0.111. Whatever moved, the
+concept layer did not move it.
+
+> **Two setup errors of mine, one of which was hiding the real number.** The
+> first version used a 40 px frame, which leaves only 4 px of margin, so both
+> ±5 requests silently **clipped to ±4** — verified by measuring which columns
+> the object occupies. That version reported 0.269 at +5 and 0.085 at −5, a 3×
+> asymmetry I could not explain. With a proper 48 px frame the asymmetry
+> vanishes (0.021 vs 0.023) and the true magnitude appears: the asymmetry *was*
+> the clipping geometry, and ±4 was flattering ±5 by an order of magnitude. The
+> benchmark now asserts that the frame can hold the requested shift rather than
+> quietly running a different experiment.
+
+That collapse is the most useful number Phase 10 produced. It says the eye's
+problem is not a shortage of teaching signal and not a shortage of resolution —
+both tested, both negative — but that **the code carries almost no information
+that survives a five-pixel translation**, and everything built on top inherits
+that. `translation.py` measured the same property indirectly (`tie=True` restores
+the pooling contract but its invariant codes score 0.233 against 0.773 for
+position-specific ones); this is the same fact at the level the concept layer
+actually consumes.
 
 ---
 
