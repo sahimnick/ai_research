@@ -37,6 +37,14 @@ the magnitude and the distribution and destroys the link to content. Matching
 size; beating it means the estimator's errors are systematically worse than
 their size implies.
 
+**H13 (the damage is dose-dependent in the correlated component).** H12 is a
+single contrast, and a single contrast is consistent with causes it does not
+test. If content correlation is what does the damage, scaling the correlated
+error should scale the damage while an equally large *uncorrelated* error
+should stay flat -- a dose-response curve with a matched control at every dose.
+Both curves falling together falsifies H12 and puts the cause back on
+magnitude.
+
 **H11 (the jitter is between images, not within one).** The mechanism claims two
 things at once, and they are separately measurable: the centroid should track a
 *shifted copy of one photograph* well (small within-image error) and scatter
@@ -217,6 +225,31 @@ def run_seed(images, y, seed):
         print("    WARNING: oracle and absolute arms scored identically -- "
               "check they are not the same computation", flush=True)
 
+    # ---- H13: is the damage DOSE-DEPENDENT in the correlated component? ----
+    # H12 compared one dose of content-correlated error against one dose of
+    # content-independent error. That is a single contrast, and a single
+    # contrast is consistent with causes it does not test. If content
+    # correlation is really what does the damage, then scaling the correlated
+    # error should scale the damage while scaling an equally large uncorrelated
+    # error should not -- a dose-response curve with a matched control at every
+    # dose. If both curves fall together, H12's conclusion is wrong and the
+    # cause is magnitude after all.
+    #
+    # The endpoints already exist and are not recomputed: alpha=0 is
+    # `oracle-centroid`, alpha=1 correlated is exactly `local-spatial` (the
+    # estimate IS true + err), and alpha=1 shuffled is
+    # `oracle+shuffled-error`. Only the interior doses are new.
+    e_real, e_shuf = est_pre - o0, (est_pre - o0)[perm]
+    for a in (0.25, 0.5, 0.75):
+        for tag, e in (("correlated", e_real), ("shuffled", e_shuf)):
+            org = o0 + a * e
+            V = codes(np.array([eye.code(frames[i], origin=org[i])
+                                for i in range(len(frames))], np.float32))
+            rng = np.random.default_rng(seed)
+            out[f"dose {a} {tag}"] = {
+                "cluster_auc": cluster_auc(V[te], y[te], V[tr], y[tr], rng),
+                "self_shift": float("nan")}
+
     # ---- H11: where does the estimator's error actually live? --------------
     est0 = np.array([eye.image_centroid(f) for f in frames], np.float32)
     estS = np.array([eye.image_centroid(s) for s in shifted], np.float32)
@@ -367,6 +400,62 @@ def main():
         print("  Shuffling the errors does WORSE, so the estimator's errors "
               "are better placed than random ones of the\n  same size. Its "
               "magnitude overstates its damage.")
+
+    print(f"\n--- H13: is the damage dose-dependent in the CORRELATED part? ---")
+    doses = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+    def at(a, tag):
+        """alpha=0 is the oracle; alpha=1 correlated IS `local-spatial` and
+        alpha=1 shuffled IS `oracle+shuffled-error`. Reusing them rather than
+        recomputing keeps the curve's endpoints identical to the arms above."""
+        if a == 0.0:
+            return orac
+        if a == 1.0:
+            return spec if tag == "correlated" else shuf
+        return np.array([r[f"dose {a} {tag}"]["cluster_auc"] for r in rows])
+
+    print(f"  {'alpha':>7}{'correlated':>13}{'shuffled':>11}{'difference':>13}")
+    curve = {}
+    for a in doses:
+        cr, sf = at(a, "correlated"), at(a, "shuffled")
+        curve[a] = {"correlated": round(float(cr.mean()), 4),
+                    "shuffled": round(float(sf.mean()), 4)}
+        print(f"  {a:>7.2f}{cr.mean():>13.3f}{sf.mean():>11.3f}"
+              f"{cr.mean() - sf.mean():>+13.4f}")
+    res["H13_dose_curve"] = curve
+
+    cr_all = np.array([curve[a]["correlated"] for a in doses])
+    sf_all = np.array([curve[a]["shuffled"] for a in doses])
+    # Spearman by hand -- a monotone trend is the claim, not a linear one.
+    def rho(v):
+        rx = np.argsort(np.argsort(np.array(doses, float)))
+        ry = np.argsort(np.argsort(v))
+        rx, ry = rx - rx.mean(), ry - ry.mean()
+        return float((rx @ ry) / (np.sqrt((rx**2).sum() * (ry**2).sum()) + 1e-12))
+    r_cr, r_sf = rho(cr_all), rho(sf_all)
+    drop_cr = float(cr_all[0] - cr_all[-1])
+    drop_sf = float(sf_all[0] - sf_all[-1])
+    res["H13"] = {"rho_correlated": round(r_cr, 3), "rho_shuffled": round(r_sf, 3),
+                  "drop_correlated": round(drop_cr, 4),
+                  "drop_shuffled": round(drop_sf, 4)}
+    print(f"  correlated: rank correlation with dose {r_cr:+.2f}, "
+          f"falls {drop_cr:+.4f} from alpha=0 to alpha=1")
+    print(f"  shuffled  : rank correlation with dose {r_sf:+.2f}, "
+          f"falls {drop_sf:+.4f}")
+    res["H13_holds"] = bool(r_cr <= -0.6 and drop_cr > 0.02
+                            and drop_cr > 2 * abs(drop_sf))
+    print(f"  H13 holds (correlated falls monotonically, shuffled does not): "
+          f"{res['H13_holds']}")
+    if res["H13_holds"]:
+        print("  Dose-response, with a matched control at every dose. The "
+              "correlated component causes the damage; an equally large\n"
+              "  uncorrelated one does not. H12's conclusion survives a test "
+              "that could have overturned it.")
+    else:
+        print("  NO dose-response. H12 rested on a single contrast and this "
+              "was the test that could overturn it -- the correlated and\n"
+              "  uncorrelated curves do not separate as claimed, so "
+              "'content-correlation, not imprecision' is NOT established.")
 
     worth = res["H10_contrasts"]["oracle - absolute"]
     built = res["H10_contrasts"]["estimator - absolute"]
