@@ -215,6 +215,67 @@ class WideV1:
         return Wt
 
     # -- the forward path ---------------------------------------------------
+    def relational_code(self, image, offsets=((0, 0), (0, 2), (2, 0),
+                                              (0, -2), (-2, 0), (2, 2),
+                                              (-2, -2), (0, 4), (4, 0)),
+                        n_feat=None):
+        """A code that discards *absolute* position but keeps *relative* layout.
+
+        The ear outperforms the eye in this project by a wide margin (cluster
+        AUC 0.788 against 0.578) and nine interventions on the eye have moved
+        that by 0.016. `ear_config.py` closed the last configuration difference
+        between them, which leaves a difference of *kind*:
+
+        A cochleagram is a **time x frequency** map, and the same sound
+        occurring later fills different columns of the same rows. So when
+        :class:`AuditoryBelt` pools over time it is discarding a genuine
+        nuisance dimension and keeping the thing that identifies the sound --
+        its frequency profile. The retinotopic grid has no such split. Pooling
+        over position discards *everything* spatial and returns a bag of
+        features, which is why `translation.py` measured fully pooled codes at
+        0.233 against 0.773 for position-specific ones: invariance bought at the
+        cost of the structure that made the code worth having.
+
+        This is the operation the ear's actually corresponds to. For each
+        relative displacement in ``offsets``, how much does feature *f* at some
+        location co-occur with feature *g* one displacement away, **summed over
+        all locations**:
+
+            C[k, f, g] = sum_p  A[f, p] * A[g, p + offsets[k]]
+
+        Summing over ``p`` is what makes it translation-invariant -- shifting
+        the image shifts every ``p`` and leaves the sum alone -- while the
+        offset index keeps *how the parts are arranged relative to each other*,
+        which a bag of features throws away. Second-order statistics over
+        relative position, and nothing here is learned or differentiated: it is
+        products and sums of the drive the layer already produces.
+
+        Requires a **tied** bank (``develop_v1(tie=True)``) for the same reason
+        `pooling_index` does: ``f`` has to mean the same filter at every
+        location or the co-occurrence is between unrelated cells.
+        """
+        # cell i sits at position i % n_pos and carries filter i // n_pos, so
+        # the (filter, position) map is a reshape ONLY when n_cells divides
+        # evenly. It usually does not -- 512 cells over 169 positions is 3.03
+        # per column -- so the trailing partial row is dropped rather than
+        # reshaped into a shape that silently mixes filters with positions.
+        d = self.drive(image)
+        per = self.n_cells // self.n_pos
+        if per < 1:
+            raise ValueError(f"{self.n_cells} cells over {self.n_pos} "
+                             f"positions leaves under one filter per column")
+        A = d[:per * self.n_pos].reshape(per, self.n_pos)
+        if n_feat is not None and n_feat < per:
+            A = A[np.argsort(-A.sum(1))[:int(n_feat)]]
+            per = A.shape[0]
+        # the position grid is n_rows x n_cols and is not necessarily square
+        G = A.reshape(per, self.n_rows, self.n_cols)
+        out = []
+        for dy, dx in offsets:
+            B = np.roll(np.roll(G, -int(dy), axis=1), -int(dx), axis=2)
+            out.append((G.reshape(per, -1) @ B.reshape(per, -1).T).reshape(-1))
+        return _unit(np.concatenate(out).astype(np.float32))
+
     def reconstruct(self, rate: np.ndarray) -> np.ndarray:
         """Turn a population code back into a picture, so it can be looked at.
 

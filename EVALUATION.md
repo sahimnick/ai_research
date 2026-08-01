@@ -2829,6 +2829,52 @@ building a visual representation with an explicit nuisance dimension, which is a
 change of architecture rather than of configuration, and it is where the
 evidence points rather than where a benchmark could take it.
 
+### The ear's trick done properly: invariance that keeps *relative* structure
+
+`ear_config.py` closed the last configuration difference between the senses,
+leaving a difference of kind. A cochleagram is a **time × frequency** map, so
+pooling time discards a real nuisance dimension and keeps what identifies the
+sound. The retinotopic grid has no such split — pooling position discards
+everything spatial and returns a bag of features, which is why `translation.py`
+measured fully pooled codes at 0.233 against 0.773.
+
+`WideV1.relational_code` is the operation that actually corresponds:
+
+    C[k, f, g] = Σ_p  A[f, p] · A[g, p + offset_k]
+
+Summing over *p* is what makes it translation-invariant — shift the image and
+every *p* shifts, leaving the sum alone — while the offset index keeps **how the
+parts are arranged relative to each other**. Second-order statistics over
+relative position; nothing learned, nothing differentiated.
+
+| code | dim | cluster AUC | centred | shifted | **gap** |
+|---|---|---|---|---|---|
+| rate *(the eye now)* | 12288 | **0.605** | 0.290 | 0.036 | 0.254 |
+| pooled *(`pooling_index`)* | 30 | 0.540 | 0.280 | 0.251 | 0.029 |
+| **relational** | 2187 | 0.560 | 0.285 | **0.280** | **0.005** |
+
+**What it delivers.** The best translation invariance in the project: a
+centred-to-shifted gap of **0.005** against 0.254 for the standard code, and
+shifted concept-waking **0.036 → 0.280, d = +7.0, 4 of 4**. It does that with a
+*single look*, matching what pooling five chosen fixations achieved (0.280
+against 0.264) at a fifth of the compute — and confirming from a second
+direction that the 10.2 collapse is a property of the representation rather than
+of the eye's sampling.
+
+**What it does not.** Cluster AUC 0.560 sits below the position-specific code's
+0.605. It recovers about **30%** of the structure plain pooling throws away
+(0.540 → 0.560) and no more. So relative arrangement is *partly* recoverable
+structure and not a replacement for absolute position — the invariance is real
+and it is still bought at a price, a smaller one than before.
+
+That is the tenth intervention, and the pattern across all of them is now hard
+to miss: **everything that makes this eye robust costs it discrimination, and
+nothing raises discrimination at all.** Centred cluster AUC has ranged over
+0.540–0.605 across width, aperture, depth, whitening, resolution, capacity, two
+teaching rules, tying, fixation choice and now second-order spatial statistics.
+The ear sits at 0.788 on its own material. Whatever separates them is not on the
+list of things this architecture lets one vary.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
