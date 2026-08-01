@@ -648,3 +648,64 @@ def align_v1(layer: WideV1, images: Sequence[np.ndarray],
             print(f"    align epoch {ep + 1}: mean |error| "
                   f"{moved / max(len(images), 1):.4f}")
     return layer
+
+
+def align_v1_reconstructive(layer: WideV1, images: Sequence[np.ndarray],
+                            target_images: Sequence[np.ndarray],
+                            epochs: int = 2, lr: float = 0.05,
+                            verbose: bool = False) -> WideV1:
+    """Re-tune V1 so its reconstruction looks like what the concept expects.
+
+    :func:`align_v1` failed for a structural reason: this bank is retinotopic,
+    8 cells share each position, and ``dWt[c] = lr * e[c] * patch[pos_c]`` gives
+    all 8 an update along one shared direction differing only by a scalar. A
+    target *code* differs across those cells and the update cannot express it,
+    which is why a correct teacher, an uninformative one and a deliberately
+    misleading one all produced the same result.
+
+    The repair is to make the error a **vector over the patch** rather than a
+    scalar per cell. Each position reconstructs what it saw from the cells that
+    look at it, and the residual against a *target patch* drives learning:
+
+        recon[p]  = sum over cells c at p of r[c] * Wt[c]
+        dWt[c]    = lr * r[c] * (target_patch[p] - recon[p])
+
+    This is the sparse-coding dictionary update (Olshausen & Field 1996), local
+    and gradient-free, with one change that makes it a *teacher* rather than
+    plain unsupervised reconstruction: the target is not the patch the eye
+    actually received, it is **the patch the concept layer expects** -- the mean
+    over everything that concept came to hold. So V1 is asked to reconstruct the
+    category's average appearance at each location rather than this particular
+    photograph's.
+
+    Two cells at one position still receive collinear *increments* on any single
+    step, but they are now weighted by their **own activity** rather than by an
+    error defined on a code they cannot jointly reach. Different cells are
+    active for different inputs, so the bank diversifies across steps -- which
+    is exactly how sparse coding produces varied dictionaries and is the
+    property the delta-rule version lacked.
+
+    ``target_images`` are ordinary images: pass the concept's mean member.
+    """
+    if len(images) != len(target_images):
+        raise ValueError("one target image per input image")
+    rf2 = layer.rf * layer.rf
+    for ep in range(int(epochs)):
+        resid = 0.0
+        for im, tim in zip(images, target_images):
+            r = layer.rate(im)
+            P = layer.patches(im)                     # (n_pos, rf*rf)
+            T = layer.patches(tim)
+            # reconstruct each position from the cells that look at it
+            recon = np.zeros_like(P)
+            np.add.at(recon, layer.cell_pos, r[:, None] * layer.Wt)
+            E = T - recon                             # (n_pos, rf*rf)
+            layer.Wt += lr * r[:, None] * E[layer.cell_pos]
+            np.maximum(layer.Wt, 0.0, out=layer.Wt)
+            layer.Wt /= np.maximum(
+                np.linalg.norm(layer.Wt, axis=1, keepdims=True), 1e-6)
+            resid += float(np.abs(E).mean())
+        if verbose:
+            print(f"    reconstructive epoch {ep + 1}: mean |residual| "
+                  f"{resid / max(len(images), 1):.4f}")
+    return layer

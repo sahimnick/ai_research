@@ -65,7 +65,9 @@ import sys
 import numpy as np
 
 from neurobrain.cognition.multimodal import AssociationArea, _unit
-from neurobrain.learning.selforganize import align_v1, develop_v1
+from neurobrain.learning.selforganize import (align_v1,
+                                             align_v1_reconstructive,
+                                             develop_v1)
 from neurobrain.sensing.natural import load_audiovisual
 from neurobrain.sensing.streams import StreamingBrain
 from neurobrain.vision.widev1 import PopulationAdaptation, _nearest_prototype
@@ -79,7 +81,8 @@ KEEP = 0.6
 EPOCHS, LR = 2, 0.02
 SHIFT = 5
 ARMS = ("no align", "align to concept", "align to own rate",
-        "align to wrong concept")
+        "align to wrong concept", "reconstruct concept",
+        "reconstruct own", "reconstruct wrong")
 
 
 def shift(im, dx):
@@ -156,17 +159,26 @@ def run_seed(images, waves, y, n_cls, seed):
     # in the association area's prep_v space is the recurring bug in this
     # project and would silently teach the eye nonsense.
     cmean = {c: R[m].mean(0) for c, m in owner.items() if m}
+    # the reconstructive rule needs a target *image*, not a target code: the
+    # mean luminance frame over everything the concept came to hold
+    lum = np.array([opponent(im)[0] for im in images], np.float32)
+    cimg = {c: lum[m].mean(0) for c, m in owner.items() if m}
     cells = sorted(cmean)
     rng = np.random.default_rng(seed + 5)
     tgt = {"align to concept": [], "align to own rate": [],
            "align to wrong concept": []}
+    timg = {"reconstruct concept": [], "reconstruct own": [],
+            "reconstruct wrong": []}
     for i in tr:
         c = assoc.concept_from_vision(V[i])
         c = c if c in cmean else cells[0]
+        other = int(rng.choice([d for d in cells if d != c] or cells))
         tgt["align to concept"].append(cmean[c])
         tgt["align to own rate"].append(R[i])
-        other = [d for d in cells if d != c] or cells
-        tgt["align to wrong concept"].append(cmean[int(rng.choice(other))])
+        tgt["align to wrong concept"].append(cmean[other])
+        timg["reconstruct concept"].append(cimg[c])
+        timg["reconstruct own"].append(lum[i])
+        timg["reconstruct wrong"].append(cimg[other])
 
     out["no align"] = measure(base.v1, images, y, tr, te, n_cls, seed)
     ims_tr = [images[i] for i in tr]
@@ -176,9 +188,13 @@ def run_seed(images, waves, y, n_cls, seed):
         develop_v1(b.v1, [opponent(im)[0] for im in images], epochs=3,
                    seed=seed)
         # align on the LUMINANCE channel, which is the one develop_v1 grew on
-        align_v1(b.v1, [opponent(im)[0] for im in ims_tr],
-                 [t[:b.v1.n_cells] for t in tgt[arm]],
-                 epochs=EPOCHS, lr=LR)
+        if arm in timg:
+            align_v1_reconstructive(b.v1, [opponent(im)[0] for im in ims_tr],
+                                    timg[arm], epochs=EPOCHS, lr=0.05)
+        else:
+            align_v1(b.v1, [opponent(im)[0] for im in ims_tr],
+                     [t[:b.v1.n_cells] for t in tgt[arm]],
+                     epochs=EPOCHS, lr=LR)
         out[arm] = measure(b.v1, images, y, tr, te, n_cls, seed)
     out["_cells"] = len(cells)
     return out
@@ -238,6 +254,10 @@ def main():
     g = gate["align to concept"][key]
     own = gate["align to own rate"][key]
     wrong = gate["align to wrong concept"][key]
+    rg = gate["reconstruct concept"][key]
+    ro = gate["reconstruct own"][key]
+    rw = gate["reconstruct wrong"][key]
+    print(f"  -- the delta rule (scalar error per cell) --")
     print(f"  align to concept      {g['delta']:+.4f} "
           f"(d={g['cohens_d']:+.2f}, {g['wins']}/{g['n']})")
     print(f"  align to own rate     {own['delta']:+.4f} "
@@ -246,6 +266,25 @@ def main():
     print(f"  align to wrong concept{wrong['delta']:+.4f} "
           f"(d={wrong['cohens_d']:+.2f}, {wrong['wins']}/{wrong['n']})"
           f"   <- same rule, teacher misleading")
+
+    print(f"\n  -- the reconstructive rule (error is a vector over the patch) --")
+    print(f"  reconstruct concept   {rg['delta']:+.4f} "
+          f"(d={rg['cohens_d']:+.2f}, {rg['wins']}/{rg['n']})")
+    print(f"  reconstruct own       {ro['delta']:+.4f} "
+          f"(d={ro['cohens_d']:+.2f}, {ro['wins']}/{ro['n']})"
+          f"   <- teacher says nothing new")
+    print(f"  reconstruct wrong     {rw['delta']:+.4f} "
+          f"(d={rw['cohens_d']:+.2f}, {rw['wins']}/{rw['n']})"
+          f"   <- teacher misleading")
+    res["reconstructive_teaches"] = bool(
+        rg["cohens_d"] >= 0.8 and rg["wins"] >= 0.75 * rg["n"]
+        and rg["delta"] > ro["delta"] and rg["delta"] > rw["delta"])
+    if res["reconstructive_teaches"]:
+        print("\n  The reconstructive rule DOES carry the teacher: a correct "
+              "target beats an uninformative and a misleading one.")
+    else:
+        print("\n  The reconstructive rule does not carry it either -- correct,"
+              " uninformative and misleading targets still agree.")
 
     beats = (g["cohens_d"] >= 0.8 and g["wins"] >= 0.75 * g["n"]
              and g["delta"] > own["delta"] and g["delta"] > wrong["delta"])
