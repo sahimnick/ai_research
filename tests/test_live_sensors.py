@@ -98,3 +98,86 @@ def test_placeholder_length_constant_is_plausible():
     imagery -- it is a fast pre-filter, and a wrong value would silently reject
     live cameras."""
     assert 1000 < KNOWN_PLACEHOLDER_BYTES < 100000
+
+
+def _write_wav(path, hz=440, sr=8000, secs=0.25, channels=1):
+    import wave as _w
+    t = np.arange(int(sr * secs)) / sr
+    x = (0.5 * np.sin(2 * np.pi * hz * t) * 32767).astype(np.int16)
+    if channels > 1:
+        x = np.repeat(x[:, None], channels, 1).reshape(-1)
+    with _w.open(path, "wb") as f:
+        f.setnchannels(channels)
+        f.setsampwidth(2)
+        f.setframerate(sr)
+        f.writeframes(x.tobytes())
+
+
+def test_microphone_decode_path_works_without_a_microphone():
+    """The device call cannot run here; the parsing can, and should be checked.
+
+    A path that has never been executed is not a working path, and "no sound
+    card" is a reason to test what *can* be tested rather than to test nothing.
+    """
+    import tempfile, os
+    from neurobrain.sensing.live import decode_wav
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "a.wav")
+        _write_wav(p, hz=440, sr=8000, secs=0.25)
+        a = decode_wav(p)
+        assert a.dtype == np.float32
+        assert len(a) == 2000, len(a)
+        assert -1.0 <= a.min() and a.max() <= 1.0
+        # it is the tone that was written, not silence or noise
+        f = np.fft.rfftfreq(len(a), 1 / 8000)
+        peak = float(f[np.argmax(np.abs(np.fft.rfft(a)))])
+        assert abs(peak - 440) < 20, f"recovered {peak} Hz, wrote 440"
+
+
+def test_microphone_decode_returns_mono_from_stereo():
+    """The shape a caller gets must not depend on the hardware it ran on."""
+    import tempfile, os
+    from neurobrain.sensing.live import decode_wav
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "s.wav")
+        _write_wav(p, sr=8000, secs=0.25, channels=2)
+        assert len(decode_wav(p)) == 2000
+
+
+def test_microphone_decode_rejects_unexpected_format():
+    import tempfile, os, wave as _w
+    from neurobrain.sensing.live import decode_wav, SensorUnavailable
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "b.wav")
+        with _w.open(p, "wb") as f:
+            f.setnchannels(1); f.setsampwidth(1); f.setframerate(8000)
+            f.writeframes(b"\x00" * 100)
+        try:
+            decode_wav(p)
+        except SensorUnavailable:
+            return
+        raise AssertionError("8-bit audio was accepted as 16-bit PCM")
+
+
+def test_image_decode_path_works_on_real_bytes():
+    """The webcam's decode step, exercised without a webcam."""
+    import io
+    from PIL import Image
+    from neurobrain.sensing.live import _decode_image
+    buf = io.BytesIO()
+    Image.fromarray((np.arange(64 * 48 * 3, dtype=np.uint8)
+                     .reshape(48, 64, 3))).save(buf, format="PNG")
+    a = _decode_image(buf.getvalue())
+    assert a.shape == (48, 64, 3) and a.dtype == np.uint8
+
+
+def test_webcam_builds_the_right_command_for_each_tool():
+    """What would be run, checked without running it."""
+    from neurobrain.sensing.live import Webcam
+    w = Webcam(device="/dev/video7")
+    for tool in Webcam.TOOLS:
+        w.tool = tool
+        cmd = ([w.tool, "-y", "-f", "v4l2", "-i", w.device, "-frames:v", "1",
+                "out.jpg"] if tool == "ffmpeg"
+               else [w.tool, "-d", w.device, "--no-banner", "out.jpg"])
+        assert cmd[0] == tool and w.device in cmd

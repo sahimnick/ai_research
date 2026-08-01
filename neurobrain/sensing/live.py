@@ -30,9 +30,17 @@ is not attempted without it.
 Where this can and cannot run
 -----------------------------
 Measured in the container this was developed in: **no ``/dev/video*``, no
-``/dev/snd``, no ``cv2``, no ``sounddevice``** -- so the webcam and microphone
-paths are written and unit-tested but cannot be *exercised* here, and say so.
-The network path works and is what the live benchmark uses. On a laptop the same
+``/dev/snd``, and none of ``ffmpeg``, ``fswebcam``, ``arecord``, ``cv2`` or
+``sounddevice``**. So the device *call* cannot be exercised here -- but that is
+not the same as the path being untested, and the difference is worth insisting
+on. What can be exercised is exercised: :func:`decode_wav` is checked against a
+synthesised 440 Hz tone (the recovered peak has to come back at 440 Hz, not
+merely "some array"), against a stereo file, and against an 8-bit file it must
+reject; :func:`_decode_image` against real encoded bytes; and the command each
+tool would be handed against what it should be. What remains unverified is one
+subprocess invocation per sensor, and the report says which.
+
+The network path works and is what the live benchmarks use. On a laptop the same
 code takes the webcam instead, with no change to anything downstream.
 """
 
@@ -95,6 +103,28 @@ def _decode_image(raw: bytes) -> np.ndarray:
     import io
     return np.asarray(Image.open(io.BytesIO(raw)).convert("RGB"),
                       dtype=np.uint8)
+
+
+def decode_wav(path: str) -> np.ndarray:
+    """16-bit PCM WAV -> float32 in [-1, 1], mono.
+
+    Split out of :meth:`Microphone.read` so it can be *tested*. The device call
+    cannot be exercised on a host with no sound card -- this container has
+    neither ``/dev/snd`` nor ``arecord`` nor ``ffmpeg`` -- but the parsing is
+    ordinary code, and "written but never run" is a worse position than
+    "verified except for the driver call". A stereo file is averaged to mono so
+    the shape a caller receives does not depend on the hardware.
+    """
+    with wave.open(path, "rb") as w:
+        if w.getsampwidth() != 2:
+            raise SensorUnavailable(
+                f"{path}: expected 16-bit PCM, got "
+                f"{8 * w.getsampwidth()}-bit")
+        a = np.frombuffer(w.readframes(w.getnframes()), np.int16)
+        ch = w.getnchannels()
+    if ch > 1:
+        a = a.reshape(-1, ch).mean(1)
+    return (a.astype(np.float32) / 32768.0)
 
 
 class CctvCamera:
@@ -220,9 +250,7 @@ class Microphone:
             subprocess.run(cmd, capture_output=True, timeout=60)
             if not os.path.exists(p) or os.path.getsize(p) < 64:
                 raise SensorUnavailable(f"{self.tool} recorded nothing")
-            with wave.open(p, "rb") as w:
-                a = np.frombuffer(w.readframes(w.getnframes()), np.int16)
-            return Reading("audio", (a.astype(np.float32) / 32768.0), True,
+            return Reading("audio", decode_wav(p), True,
                            f"microphone {self.tool}")
 
 
