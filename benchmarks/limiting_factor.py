@@ -28,6 +28,15 @@ The oracle arm should land near `local-absolute` on cluster AUC and near
 is innocent, the object-centred frame costs clustering for some other reason,
 and the limiting factor is the frame itself rather than how it is measured.
 
+**H12 (the error's SIZE is the whole story).** If H10 holds, the next question
+is whether *how far* the estimate lands from the object is all that matters, or
+whether it also matters *which* pictures it misjudges. Displacing a perfect
+origin by the estimator's own error vectors, dealt to the wrong images, keeps
+the magnitude and the distribution and destroys the link to content. Matching
+`local-spatial` means the limiting factor is fully described by the error's
+size; beating it means the estimator's errors are systematically worse than
+their size implies.
+
 **H11 (the jitter is between images, not within one).** The mechanism claims two
 things at once, and they are separately measurable: the centroid should track a
 *shifted copy of one photograph* well (small within-image error) and scatter
@@ -165,6 +174,18 @@ def run_seed(images, y, seed):
         f"shrink JITTER.")
     eye, flat = build(seed, frames)
 
+    # ---- H12: does the error's SIZE account for the shortfall? -------------
+    # Take the estimator's own error vectors and shuffle which image each one
+    # lands on. Magnitude and distribution are preserved exactly; any link
+    # between an error and the picture that produced it is destroyed. If this
+    # arm matches `local-spatial`, the limiting factor is fully described by
+    # how far the estimate lands from the object -- nothing about *which*
+    # pictures it misjudges matters. If it does BETTER, the estimator's errors
+    # are systematically worse than their size implies.
+    est_pre = np.array([eye.image_centroid(f) for f in frames], np.float32)
+    perm = np.random.default_rng(seed + 31).permutation(len(frames))
+    oN = o0 + (est_pre - o0)[perm]
+
     arms = {
         # the specification: origin estimated from image contrast
         "local-spatial": (lambda i: eye.code(frames[i]),
@@ -172,6 +193,11 @@ def run_seed(images, y, seed):
         # the ablation that won in pathways.py: no object frame at all
         "local-absolute": (lambda i: flat.code(frames[i]),
                            lambda i: flat.code(shifted[i])),
+        # H12: a perfect origin displaced by the estimator's own errors, dealt
+        # to the wrong images
+        "oracle+shuffled-error": (lambda i: eye.code(frames[i], origin=oN[i]),
+                                  lambda i: eye.code(shifted[i],
+                                                     origin=oN[i] + [0, SHIFT])),
         # the instrument: the object frame with a PERFECT origin
         "oracle-centroid": (lambda i: eye.code(frames[i], origin=o0[i]),
                             lambda i: eye.code(shifted[i], origin=oS[i])),
@@ -225,12 +251,14 @@ def main():
     print(f"{len(images)} photographs, {len(names)} categories, "
           f"{FRAME}px frame, {SHIFT}px shift\n", flush=True)
 
+    ARMS = ("local-spatial", "local-absolute", "oracle+shuffled-error",
+            "oracle-centroid")
     rows = []
     for sd in SEEDS:
         print(f"  seed {sd}", flush=True)
         r = run_seed(images, y, sd)
         rows.append(r)
-        for k in ("local-spatial", "local-absolute", "oracle-centroid"):
+        for k in ARMS:
             print(f"    {k:<18} AUC {r[k]['cluster_auc']:.3f}   "
                   f"self+{SHIFT} {r[k]['self_shift']:.3f}", flush=True)
         c = r["_centroid"]
@@ -238,7 +266,6 @@ def main():
               f"between-image {c['between_image_spread_px']:.2f}px  "
               f"bias {c['bias_vs_truth_px']:.2f}px", flush=True)
 
-    ARMS = ("local-spatial", "local-absolute", "oracle-centroid")
     res = {"seeds": list(SEEDS), "per_seed": rows, "arms": {}}
     for a in ARMS:
         res["arms"][a] = {
@@ -311,6 +338,35 @@ def main():
     inv_s = np.array([r["local-spatial"]["self_shift"] for r in rows])
     print(f"\n  invariance kept by the oracle: {inv.mean():.3f} "
           f"against the estimator's {inv_s.mean():.3f}")
+
+    print(f"\n--- H12: is the error's SIZE the whole story? ---")
+    shuf = np.array([r["oracle+shuffled-error"]["cluster_auc"] for r in rows])
+    g = shuf - spec
+    m12, d12, w12, n12 = stat(g)
+    res["H12_shuffled_minus_estimator"] = {"delta": round(float(m12), 4),
+                                           "cohens_d": round(float(d12), 2),
+                                           "wins": w12, "n": n12}
+    print(f"  a perfect origin displaced by the estimator's own errors, dealt "
+          f"to the wrong images: {shuf.mean():.3f}")
+    print(f"  the estimator itself:                                            "
+          f"          {spec.mean():.3f}")
+    print(f"  difference {m12:+.4f}  d={d12:+.2f}  {w12}/{n12}")
+    # "Matches" is the interesting outcome here, so it needs a stated interval
+    # rather than a failure to reach significance -- absence of evidence is not
+    # what confirms H12.
+    res["H12_size_is_the_whole_story"] = bool(abs(d12) < 0.8)
+    if res["H12_size_is_the_whole_story"]:
+        print("  They match. The limiting factor is fully described by HOW FAR "
+              "the estimate lands from the object;\n  nothing about which "
+              "pictures it misjudges adds to the cost.")
+    elif m12 > 0:
+        print("  Shuffling the errors does BETTER. The estimator's mistakes "
+              "are systematically worse than their size\n  implies -- it "
+              "misjudges the pictures where misjudging costs most.")
+    else:
+        print("  Shuffling the errors does WORSE, so the estimator's errors "
+              "are better placed than random ones of the\n  same size. Its "
+              "magnitude overstates its damage.")
 
     worth = res["H10_contrasts"]["oracle - absolute"]
     built = res["H10_contrasts"]["estimator - absolute"]
