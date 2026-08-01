@@ -67,6 +67,15 @@ The oracle is an **instrument, not a proposal**. Nothing in the mind can supply
 the true object position; an arm that uses it is not an architecture and is not
 reported as one. It exists to localise the fault.
 
+And it has a limit worth stating up front, which H13 measured rather than
+assumed: the oracle returns the centre of the 32 px **tile** this benchmark
+placed, not the centre of the *object inside that tile*. A CIFAR subject is not
+centred in its own frame -- the 1.60 px gap between the contrast centroid and
+the tile centre is that offset -- so the oracle is not the ceiling, and at
+alpha=0.25 the correlated arm beats it (+0.0106, d=+0.82, 3/4). Numbers
+attributed to "a perfect origin" are therefore **lower bounds** on what a true
+object-locator would be worth.
+
 Usage:  python3 benchmarks/limiting_factor.py out_limiting_factor.json
 """
 import json
@@ -449,8 +458,20 @@ def main():
     if res["H13_holds"]:
         print("  Dose-response, with a matched control at every dose. The "
               "correlated component causes the damage; an equally large\n"
-              "  uncorrelated one does not. H12's conclusion survives a test "
-              "that could have overturned it.")
+              "  uncorrelated one does not, at ANY dose tested. H12's "
+              "conclusion survives a test that could have overturned it.")
+        # The curve is not monotone at the bottom, and that is a finding rather
+        # than noise to smooth over: a quarter-dose of the estimator's own error
+        # beats a perfect origin, because the "perfect" origin is the centre of
+        # the TILE and not of the object inside it.
+        low = curve[0.25]["correlated"] - curve[0.0]["correlated"]
+        if low > 0:
+            print(f"  But it is NOT monotone at the bottom: alpha=0.25 beats a "
+                  f"perfect origin by {low:+.4f}. The oracle knows where the\n"
+                  f"  TILE was placed, not where the object sits inside it, so "
+                  f"a little contrast-derived correction moves the origin\n"
+                  f"  toward the object. The oracle is not the ceiling, and "
+                  f"every 'perfect origin' number here is a LOWER BOUND.")
     else:
         print("  NO dose-response. H12 rested on a single contrast and this "
               "was the test that could overturn it -- the correlated and\n"

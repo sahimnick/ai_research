@@ -3219,7 +3219,9 @@ axes, one developed bank shared by every arm so they differ only in the origin.
 
 A perfect origin — same filters, same bank, same binning, same patches — is
 worth **+0.0435 (d=1.50, 4/4)** over the estimated one, and takes invariance
-from 0.981 to 0.996. With a perfect origin the object frame beats having no
+from 0.981 to 0.996. (H13 below shows this is a **lower bound**: the oracle
+knows where the *tile* was placed, not where the object sits inside it, and an
+origin better than the oracle's exists.) With a perfect origin the object frame beats having no
 frame by **+0.0759 (d=1.64, 4/4)**; as built it manages +0.0325 (d=0.64, 3/4).
 **The object-centred idea is not what failed. Locating the object without a
 label is.**
@@ -3275,6 +3277,69 @@ the limiting factor, and it is a property of the estimator's definition rather
 than of its tuning.** No amount of sharpening a content-derived origin fixes it;
 the fix would have to be an origin that does not read the content, which is a
 different architecture and is deliberately not proposed here.
+
+### H13 — the dose–response, which survives the test but qualifies the oracle
+
+H12 rested on a **single contrast**, and a single contrast is consistent with
+causes it does not test. H13 is the experiment that could overturn it: scale the
+estimator's error by α, with a **matched shuffled control at every dose**. If
+content correlation is the cause, the correlated curve falls with α while the
+uncorrelated one stays flat. Both falling together would put the cause back on
+magnitude and withdraw the section above.
+
+α=0 *is* `oracle-centroid`, α=1 correlated *is* `local-spatial`, α=1 shuffled
+*is* `oracle+shuffled-error` — the endpoints are the arms already reported, not
+recomputations of them.
+
+| α | correlated | shuffled | correlated − shuffled |
+|---|---|---|---|
+| 0.00 | 0.617 | 0.617 | 0.0000 |
+| 0.25 | **0.627** | 0.607 | **+0.0198** d=+2.31, 4/4 |
+| 0.50 | 0.611 | 0.612 | −0.0008 |
+| 0.75 | 0.584 | 0.612 | −0.0283 d=−0.54, 2/4 |
+| 1.00 | 0.573 | 0.619 | −0.0454 d=−0.89, 1/4 |
+
+**The control is flat at every dose** — 0.607 to 0.619 across the whole range,
+rank correlation with dose +0.40. Uncorrelated displacement up to the full size
+of the estimator's own error costs nothing at any magnitude. That is H12's core
+claim and it is now measured at five points rather than one: **imprecision as
+such is not the limiting factor.**
+
+**The correlated curve falls, but not monotonically**, and the exception is the
+interesting part. Rank correlation −0.90, dropping 0.0434 from α=0 to α=1, and
+cleanly monotone above α=0.5 (0.611 → 0.584 → 0.573) against a control that
+does not move (0.612 → 0.612 → 0.619). But at **α=0.25 the correlated error
+beats a perfect origin** by +0.0106 (d=+0.82, 3/4) and beats its own matched
+control by +0.0198 (d=+2.31, **4/4**). A quarter of the estimator's error is
+better than none.
+
+#### What that says about the oracle, which is a limitation of the instrument
+
+The oracle returns the centre of the **32 px tile** the benchmark placed — not
+the centre of the *object inside it*. A CIFAR subject is not centred in its own
+frame, and the measured 1.60 px bias between the contrast centroid and the tile
+centre is that offset. So a small dose of contrast-derived correction moves the
+origin *toward the object* and away from the tile, which is why α=0.25 wins.
+
+Two consequences, and both are corrections to how §9.8's earlier numbers should
+be read:
+
+* **"A perfect origin" means perfect knowledge of tile position, not of the
+  object.** The oracle is not the ceiling — α=0.25 exceeds it — so the +0.0435
+  attributed to the origin estimate is a **lower bound** on what a true
+  object-locator would be worth, not an estimate of it.
+* **The limiting factor is unchanged and better supported.** Origin quality
+  dominates this pathway, uncorrelated error of the same size is free at every
+  dose tested, and the damage tracks the correlated component specifically. What
+  the α=0.25 point adds is that the relationship is not "less content in the
+  origin is better" — a little content helps, and a lot destroys.
+
+The conclusion therefore stands as stated: a contrast-weighted centroid cannot
+serve as an object frame's origin, because **contrast is image content and the
+statistic is the nuisance**. What H13 adds is that this is a matter of degree —
+the failure is not that content enters the origin at all, but that at full
+strength it dominates it. Per the loop's failure branch, no replacement
+estimator is proposed here.
 
 ### What was wrong with this benchmark three times before it was right
 
