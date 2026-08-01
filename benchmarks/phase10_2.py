@@ -53,7 +53,11 @@ sys.path.insert(0, "benchmarks")
 from real_binding import opponent, split                     # noqa: E402
 
 SEEDS = (0, 1, 2, 3)
-FRAME = 40                 # 32-px object in a 40-px frame, so +-5px keeps it whole
+# 32-px object in a 48-px frame. 40 was the first choice and it was wrong: it
+# leaves only (48-32)//2 = 4px of margin, so a requested +-5 CLIPS to +-4 and the
+# specified shift is silently not delivered. Verified by measuring which columns
+# the object occupies. 48 gives 8px of margin, so +-5 is exact.
+FRAME = 48
 N_CONCEPT = 256
 KEEP = 0.6
 EPOCHS = 2
@@ -180,7 +184,12 @@ def main():
     n_cls = len(names)
     print(f"{len(images)} real pairs, {n_cls} categories, chance "
           f"{1/n_cls:.3f}")
-    print(f"32px object in a {FRAME}px frame; shift applied at TEST time only\n",
+    margin = (FRAME - 32) // 2
+    assert margin >= max(abs(d) for d in SHIFTS), (
+        f"a {FRAME}px frame gives {margin}px of margin, so the requested "
+        f"shifts would clip -- the test would not be the one specified")
+    print(f"32px object in a {FRAME}px frame ({margin}px margin, so "
+          f"+-{max(SHIFTS)}px is exact); shift applied at TEST time only\n",
           flush=True)
 
     rows = [run_seed(images, waves, y, n_cls, sd) for sd in SEEDS]
