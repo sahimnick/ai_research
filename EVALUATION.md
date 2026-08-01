@@ -2782,6 +2782,53 @@ pooling several fixations closes 94% of the position sensitivity (gap 0.267 →
 0.017) with no change to V1 or the concept layer at all. **The eye needed to
 move, not to be taught.**
 
+### The last structural difference between the eye and the ear, measured
+
+The eye's wall is cluster AUC ≈ 0.578 and centred concept-waking ≈ 0.29,
+unmoved by eight classes of intervention. The ear reaches **0.788** on the same
+kind of task, and `selforganize.py` had already recorded a structural difference
+between them without anyone testing it as a *cause*: `AuditoryBelt` builds a
+`WideV1` and **never develops it**, so its bank stays tied at 0.978, while the
+eye's drifts to 0.454 per column after `develop_v1` — which is why
+`pooling_index`, that groups cells by index on the assumption that index means
+filter identity, works there and not here.
+
+`benchmarks/ear_config.py` gives the eye each configuration on identical
+photographs, 4 seeds:
+
+| configuration | tie | cluster AUC | wakes +0 px | +5 px | −5 px |
+|---|---|---|---|---|---|
+| developed, untied *(the eye now)* | 0.661 | 0.578 | 0.286 | 0.029 | 0.031 |
+| **developed, tied** | **1.000** | **0.594** | 0.288 | 0.052 | 0.049 |
+| undeveloped, tied *(the ear's exact setup)* | 0.983 | 0.583 | 0.299 | 0.038 | 0.038 |
+
+Tying passes the significance gate — +0.0164, d = +1.37, 4 of 4 — and **explains
+7.8% of the gap**. The distance to the ear is 0.210; tying the bank recovers
+0.016 of it. A reliable effect and a small one, which are different things.
+
+And the ear's *exact* configuration (undeveloped, tied) scores 0.583, **below**
+the developed-tied arm — so it is not the absence of development that helps
+either. The benchmark's verdict now requires an effect to account for at least a
+quarter of the gap it was proposed to explain, because "4 of 4 seeds" was about
+to be reported as though it had explained the wall.
+
+That closes the last structural difference this architecture makes available
+between its working sense and its broken one. The eye's ceiling is not per-column
+drift, not development, not width, aperture, depth, whitening, resolution,
+capacity, concept feedback, or fixation choice. **Nine classes of intervention,
+and the wall has moved by 0.016.**
+
+What that leaves is not another parameter. Hearing and vision differ in
+something this codebase does not expose as a setting: a cochleagram is already a
+*time × frequency* map in which the same sound at a different moment occupies
+different columns of the same rows, so the belt's pooling operates over a
+genuine nuisance dimension. The eye's retinotopic grid has no equivalent — a
+photograph's category is not a translation of anything — and the pooling that
+works for the ear is being asked to do a different job. Testing that means
+building a visual representation with an explicit nuisance dimension, which is a
+change of architecture rather than of configuration, and it is where the
+evidence points rather than where a benchmark could take it.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
