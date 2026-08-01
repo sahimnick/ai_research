@@ -2578,50 +2578,47 @@ restores the pooling contract but the invariant codes it produces are weak
 (0.233 against 0.773 for position-specific). That is a property of the
 representation's construction rather than of any rule applied to it.
 
-### The whole mind on live cameras — what reproduces and what cannot be resolved
+### The whole mind on live cameras — the payback reproduces
 
 `payback.py`'s result was measured on archives. `benchmarks/live_mind.py` runs
 the same protocol on **live traffic cameras** over a real time gap, with text as
-the second modality — the camera's own name, which is honest metadata rather
-than a label invented for the benchmark. Concepts are bound on the early rounds
-and every number is measured on the last, minutes later.
+the second modality — the camera's own name, honest metadata rather than a label
+invented for the benchmark. Concepts bind on the early rounds; every number is
+measured on the last, minutes later.
 
-**24 of 24 cameras genuinely changed** over 450 s (same camera later 0.592
-against an encode-twice floor of 0.909), so this is a generalisation test rather
-than a re-read.
+The first attempt used 25 camera ids and could not resolve the effect: one
+camera *is* 0.042 of the score in a 24-place world, so the archived effect
+(+0.0833) would have been two cameras. Scanning ids 380–519 found **104 distinct
+live cameras** — the rest serve a no-signal card the placeholder guard rejects
+by content — which puts the resolution at **0.0094** and makes the measurement
+possible.
 
-| arm | cells | name→place | place→name |
-|---|---|---|---|
-| `no_dream` | 31.0 | 0.375 | **0.802** |
-| `stored` | 38.5 | 0.385 | 0.802 |
-| `imagined_as_fact` | 49.0 | 0.396 | **0.594** |
-| `imagined_as_error` | 39.0 | 0.385 | 0.802 |
-| `merged+error` | 30.5 | **0.417** | 0.802 |
+**106 cameras, 318 observations (3 per place), 450 s gap, all scenes changed**
+(same camera later 0.712 against an encode-twice floor of 0.941). Chance 0.009.
 
-Chance is 0.042. **The mind hears a name and pictures the place at 9× chance,
-and names a place it has never seen in that state at 19× chance** — on public
-cameras, through the same eye, ear-substitute and concept layer as everything
-else in this document.
+| arm | name→place | place→name |
+|---|---|---|
+| `no_dream` | 0.755 | 0.915 |
+| `stored` — replay the real sight | **+0.0189** d=+2.45 4/4 | **+0.0165** d=+3.50 4/4 |
+| `imagined_as_fact` — believe it | +0.0024 d=+0.17 3/4 | **−0.0755 d=−4.90 0/4** |
+| **`imagined_as_error`** — learn against it | **+0.0236 d=+4.33 4/4** | **+0.0165 d=+3.50 4/4** |
+| `merged+error` | +0.0047 d=+0.50 3/4 | −0.0519 d=−1.77 0/4 |
 
-**What reproduces**: believing an imagining is harmful, and more so here than on
-the archive — **−0.2083** on place recognition, 0 of 4 seeds, against −0.0174
-archived.
+**The archived result reproduces on live sensors**, and reproduces in the part
+that matters most: *learning against what the mind imagines beats replaying what
+it actually saw* — +0.0236 against +0.0189 — while **believing the identical
+imaginings hurts** place recognition, 0 of 4 seeds. Same completions, same replay
+order, same number of plasticity events; the only difference is whether the
+fantasy is believed or learned against.
 
-**What cannot be resolved**: the payback effect. `merged+error` gains +0.0417 on
-name→place in 4 of 4 seeds — but one camera *is* 0.0417 in a 24-place world, so
-that is one camera, and an effect of the archived size (+0.0833) would be two.
-24 places × 3 observations cannot separate that from nothing however many seeds
-are averaged. The direction is right and the magnitude is at the measurement
-floor; I am not claiming it reproduced.
+The effect is +2.5 cameras of 106, above the 1.5-camera floor the benchmark
+imposes on itself, on both read-out directions and at 4 of 4 seeds each.
 
-> **A number I nearly published.** The first version of this reported
-> `d = +41666666666.67` and a verdict of "the archived result reproduces on live
-> sensors". That d came from `delta / (sd + 1e-12)` where every seed had given
-> the *identical* delta, so the spread was exactly zero — Cohen's d is undefined
-> there, and the guard turned it into a figure that reads as overwhelming
-> evidence for what is really an absence of variance. Now reported as `d=n/a`
-> with the effect expressed in **cameras**, and the acceptance gate refuses any
-> effect smaller than 1.5 of them.
+Forced consolidation does **not** add anything here (+0.0047), unlike on the
+archive where it was superadditive. 106 places with 3 observations each has far
+less within-category redundancy than 6 categories with ~36 members, and merging
+is the operation that redundancy feeds — so this is the expected shape rather
+than a contradiction.
 
 ### The bug this found, which was silently degrading every held-out visual result
 

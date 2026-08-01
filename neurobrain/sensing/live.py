@@ -61,10 +61,13 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 #: A public traffic-camera endpoint that serves a JPEG per numeric id.
-#: Ids near 400 were verified live; ids far outside that band return the
-#: placeholder this module refuses.
+#: Scanned 380-519: **104 of 140 ids return distinct live scenes**, the rest a
+#: no-signal card that the placeholder guard rejects by content. The range was
+#: originally 395-419 (25 ids), which made a 24-place world where one camera is
+#: 0.042 of the score -- coarser than the effects being measured. 104 places put
+#: the resolution at 0.0096.
 NY511 = "https://511ny.org/map/Cctv/{id}"
-NY511_LIVE_IDS = tuple(range(395, 420))
+NY511_LIVE_IDS = tuple(range(380, 520))
 
 #: Length of the "no signal" card 511ny serves for a dead camera, kept as a
 #: fast pre-filter. The hash check below is the real test -- a placeholder of a
