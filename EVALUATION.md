@@ -2515,6 +2515,61 @@ Wtᵀr)`. That is the sparse-coding dictionary update, equally local and equally
 gradient-free, and it gives each cell a different effective direction. Recorded
 as the specific next thing to try.
 
+### Phase 10.1 finished, and the aperture hypothesis with it
+
+The delta rule could not carry a teacher at all. The **reconstructive** rule can
+-- verified before it was tested, by measuring that two different targets leave
+the filters 0.341 apart rather than 0.030 -- and with it:
+
+| rule | correct target | uninformative | misleading |
+|---|---|---|---|
+| delta (scalar error per cell) | −0.0121 | −0.0148 | −0.0116 |
+| **reconstructive** (error is a vector over the patch) | **+0.0020** | **+0.0036** | **+0.0045** |
+
+All three within 0.003, the *misleading* target nominally highest. **Concept
+feedback does not teach this eye**, under a rule that demonstrably transmits its
+teacher. Phase 10.1 is closed as a negative.
+
+That is four independent attacks, and together they exhaust "adapt the filters
+better": §7.8's eleven mechanisms, concept feedback under two rules, and gaze
+selection in both directions. So I proposed the remaining easy explanation --
+that the constraint is what the eye *receives*, since 32×32 has been its input
+since it was built for MNIST and the live-camera panel shows a traffic scene
+reduced to mush at that size. CIFAR cannot test it (natively 32×32, so more
+resolution returns interpolation), but the live cameras are 240–576px native.
+
+`benchmarks/aperture.py`, 24 live cameras, cell count **held fixed**:
+
+| input | positions | separation | identity AUC |
+|---|---|---|---|
+| 32×32 | 169 | **0.818** | 0.972 |
+| 48×48 | 441 | 0.831 | 0.970 |
+| 64×64 | 841 | 0.825 | 0.970 |
+| 96×96 | 2025 | **0.789** | 0.969 |
+| *32×32 with 4× the cells* | 169 | 0.777 | 0.969 |
+
+**The hypothesis is wrong.** Three times the linear resolution makes the code
+slightly *worse* (−0.029), and capacity does not help either (−0.041 from four
+times the cells). Neither adaptation, nor field of view, nor capacity moves this
+representation.
+
+> **What this test cannot show, stated with it.** Identity AUC is at ceiling —
+> 0.003 of spread across a threefold change in resolution — so it could not have
+> revealed an improvement had one existed; `separation` is the unsaturated part
+> and it falls. And telling two *cameras* apart is an easier question than
+> telling two *categories* apart, which is the one that matters downstream and
+> needs labels the live world does not provide. This bounds the aperture
+> hypothesis rather than closing it.
+
+The convergent negative is now the finding: **five classes of intervention, none
+of which moves the visual code.** I do not have a sixth worth proposing on
+present evidence, and proposing one anyway is how the previous four got spent.
+What none of them touched is that this architecture has no operation that makes
+two different photographs of the same thing land near each other — `tie=True`
+restores the pooling contract but the invariant codes it produces are weak
+(0.233 against 0.773 for position-specific). That is a property of the
+representation's construction rather than of any rule applied to it.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
