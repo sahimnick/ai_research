@@ -3515,6 +3515,67 @@ next architectural idea in the same breath.
 
 ---
 
+## 9.10 The instrument, not the architecture — the project's largest win does not replicate
+
+§9.9 found that choosing which six ESC-50 classes to test on moves the ear by
+**0.141**, more than the entire matched eye-ear gap of 0.086. That raised an
+obvious question about the *eye*, and the answer invalidates this project's
+headline architectural result.
+
+`pathways.py` reported **local-absolute over rate: +0.058, d = 2.18, 4 of 4
+seeds**, written up in §9.6 as "the largest movement of this metric in the
+project". Re-run across **six random 6-class CIFAR subsets** (2 seeds each,
+everything else identical):
+
+| classes | rate | local-absolute | delta |
+|---|---|---|---|
+| 0,1,3,5,8,9 | 0.555 | 0.532 | **−0.0226** |
+| 0,1,4,5,8,9 | 0.540 | 0.530 | **−0.0104** |
+| 0,2,3,6,8,9 | 0.519 | 0.540 | +0.0208 |
+| 0,1,2,4,6,8 | 0.561 | 0.604 | +0.0429 |
+| 1,3,5,6,7,9 | 0.542 | 0.500 | **−0.0417** |
+| 1,2,3,5,8,9 | 0.535 | 0.561 | +0.0259 |
+
+**Mean +0.0025, range −0.042 to +0.043, positive on 3 of 6.** The effect is
+approximately zero and its *sign* depends on which categories are tested. The
+published +0.058 was one draw from a distribution centred on nothing.
+
+### Why the original looked so solid, and why that is a design error
+
+The four seeds varied the train/test split and the network initialisation. They
+did **not** vary the categories. So "4 of 4 seeds, d = 2.18" measured how
+*reproducible* the result was within one task, and reproducibility within a task
+says nothing about whether the effect exists across tasks. Four correlated
+samples from a single condition were reported as four independent confirmations.
+That is pseudo-replication, and it is not specific to this one result:
+
+> **Every one of the thirteen interventions in this project used the same six
+> audiovisual categories and varied only seeds.** The measured spread from class
+> choice alone is 0.104 for the eye and 0.141 for the ear, while the effects
+> being accepted and rejected were 0.015–0.058.
+
+The instrument's resolution was never established, and it is coarser than most
+of what was measured with it. This does not automatically reverse the thirteen
+conclusions — a *null* result is only reinforced by extra noise, so "intervention
+X changed nothing" mostly survives. What does not survive is the positive
+claims, and the largest of them is now measured at zero.
+
+### What this means for the eye
+
+The eye's real position, stated with what is actually known:
+
+* it adds **+0.106** over raw pixels (0.524 → 0.630), which is a genuine effect
+* the matched gap to the ear is **0.086**, inside the range class choice spans
+* **no architectural variant tested has a demonstrated advantage over any other**
+  once class set is treated as a random factor rather than a constant
+
+Thirteen interventions were run against a baseline whose measurement error was
+never quantified. The finding is not that the eye is fine, nor that the
+architectures were bad — it is that this project could not have told the
+difference, and did not know it.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
