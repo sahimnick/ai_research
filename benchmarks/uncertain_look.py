@@ -49,6 +49,7 @@ import sys
 
 import numpy as np
 
+from neurobrain.cognition.multimodal import AssociationArea
 from neurobrain.learning.selforganize import develop_v1
 from neurobrain.sensing.natural import load_cifar10
 from neurobrain.vision.widev1 import WideV1, _unit, _nearest_prototype
@@ -83,24 +84,25 @@ def margin(code, protos):
     return float(s[-1] - s[-2]) if len(s) > 1 else 0.0
 
 
-def diversity(kept, g, protos):
+def diversity(kept, g, protos, cells=None):
     """How much a candidate glance would CHALLENGE the current belief.
 
-    Phase 10.3. `margin` -- keep whatever most sharpens the belief -- was
-    measured to reverse at k=5 (-0.0225, d=-1.09, 0/4) because it is
-    confirmation bias: the glance kept is the one that most agrees with what is
-    already believed, so each look makes the next more likely to agree, and by
-    five the pooled code is a fixed point.
+    Phase 10.3, and the criterion is over the **concept cells** rather than over
+    class prototypes -- which is what was specified and is the sharper choice.
+    A class prototype is an average over a whole category, so the drive across
+    six of them is a coarse, already-pooled summary; the concept cells are the
+    units that actually compete, there are far more of them, and a glance can
+    move that profile without moving the class summary at all. Measuring
+    disagreement on the pooled quantity would miss exactly the glances that are
+    informative between members of one category.
 
-    This scores the opposite thing: how far the candidate's own read-out is from
-    the read-out the mind currently holds. A glance that says something new
-    changes the class profile; one that merely confirms leaves it where it was.
-    Formally the L2 distance between the softmax-free class-drive vectors, which
-    is the spread of the evidence rather than its agreement -- and it needs no
-    label, only the mind's own two opinions.
+    ``cells`` is the concept-cell weight matrix. Falls back to ``protos`` only
+    when no concept layer is available, and the two are reported separately so
+    the choice is visible rather than assumed.
     """
-    cur = protos @ _unit(np.mean(kept, 0))
-    new = protos @ g
+    basis = protos if cells is None else cells
+    cur = basis @ _unit(np.mean(kept, 0))
+    new = basis @ g
     return float(np.linalg.norm(new - cur))
 
 
@@ -126,6 +128,15 @@ def run_seed(X, y, Xt, yt, seed):
     B = np.stack([glance(v1, f, 0, 0) for f in frames])
     protos = np.stack([_unit(B[ytr == c].mean(0)) for c in np.unique(ytr)])
     classes = np.unique(ytr)
+    # the concept cells the disagreement criterion is specified over: a
+    # competitive layer grown on the same glances, so the basis is the mind's
+    # own units rather than six category averages
+    ca = AssociationArea(n_vis=B.shape[1], n_aud=B.shape[1],
+                         n_concept=256, seed=seed)
+    ca.set_stats(B, B)
+    for i in range(len(B)):
+        ca.bind(B[i], B[i])
+    cbasis = ca.Wv[np.flatnonzero(ca.wins > 0)]
 
     def score(Q):
         return float(np.mean(_nearest_prototype(B, ytr, np.stack(Q),
@@ -187,7 +198,7 @@ def run_seed(X, y, Xt, yt, seed):
                 best, best_d = None, -np.inf
                 for a, b in cands:
                     g = glance(v1, f, a, b)
-                    dv = diversity(kept, g, protos)
+                    dv = diversity(kept, g, protos, cbasis)
                     if dv > best_d:
                         best, best_d = g, dv
                 kept.append(best)
