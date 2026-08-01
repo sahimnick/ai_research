@@ -54,6 +54,7 @@ PYTHONPATH=. python3 benchmarks/heard_world.py       out_heard_world.json
 PYTHONPATH=. python3 benchmarks/scale.py             out_scale.json
 PYTHONPATH=. python3 benchmarks/pathways.py          out_pathways.json
 PYTHONPATH=. python3 benchmarks/pathway_downstream.py out_pathway_downstream.json
+PYTHONPATH=. python3 benchmarks/limiting_factor.py   out_limiting_factor.json
 ```
 
 | script | question | key control |
@@ -78,6 +79,7 @@ PYTHONPATH=. python3 benchmarks/pathway_downstream.py out_pathway_downstream.jso
 | `scale.py` | Is the exemplar store caused by the rule or by too little data? | 30x the data with everything else held fixed — pairs-per-cell answers it directly; the two rules see identical data in identical order and differ only in whether the negative phase runs |
 | `heard_world.py` | Does judging an imagining pay back, where perception works? | `crossed_judged` and `crossed_anti` draw the **same** candidates and invert only which is kept, so their gap is selection alone — and `stored` is the positive control that decides whether the payback channel is open at all |
 | `merger.py` | Does forcing the layer to generalise stop it returning memories? | a **sweep** over compression, not one setting — recall and purity reported at every level, because merging 82%-pure pairs still merges 18% wrong ones |
+| `limiting_factor.py` | What actually limits the object-centred frame? | an **oracle** origin — the object's true position, which the benchmark knows because it placed it — as an instrument rather than a proposal; and the arm that decides the answer is the oracle **displaced by the estimator's own errors, dealt to the wrong images**, which holds the error's size fixed and destroys only its link to content. A 1.48 px error costs nothing that way and 0.044 when it is real, so the fault is content-correlation, not imprecision. Asserts that the oracle origin varies and that the shift is not clipped, because both were silently false in earlier versions |
 | `pathway_downstream.py` | What do the pathways do once a concept layer, a night and an imagination sit on them? | a **1-NN floor** on raw codes beside every naming score, because the layer holds ~0.6 cells per pair and may be reading the representation straight back — reported per pathway, since averaging the four cancelled a +0.042 against a −0.050 into a fabricated null; and `stored` gates every replay claim, because a pathway where replaying *real* pairs does not help cannot decide anything about imagined ones |
 | `pathways.py` | Does a local-receptive-field pathway improve the representation? | the bar is **pre-registered** in `localspatial.py` and cluster AUC is computed from raw codes with no learning, so a gain cannot come from the read-out adapting; five ablations, each disabling one component, share an identically-developed bank so the ablation varies one thing |
 | `relational.py` | Can a code be translation-invariant without becoming a bag of features? | the **already-invariant** code (`pooling_index`) as the arm to beat, not the position-specific one — a new invariant code that ties plain pooling has bought nothing |

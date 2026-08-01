@@ -2975,6 +2975,15 @@ when the *same* photograph moves and inconsistent *between* photographs — so i
 cancels translation and adds between-image jitter, which is precisely the wrong
 trade for clustering.
 
+> **§9.8 measures this paragraph and corrects it.** Both halves of the mechanism
+> are real (within-image error 0.04 px, between-image spread 1.48 px), but
+> "jitter" is the wrong diagnosis: an error of *the same size* dealt to the
+> wrong images costs **nothing** (0.619 against a perfect origin's 0.617). The
+> cost comes from the error being a **function of image content**, not from its
+> magnitude. Note also that every object here sits at the frame centre, so the
+> frame has no translation to cancel and its error is pure cost; once position
+> genuinely varies the same comparison reverses.
+
 ### What the ablations did find, which is the useful part
 
 **H4 is confirmed, and it is the largest movement of this metric in the
@@ -3180,6 +3189,117 @@ direction as the representation and the same direction as the rejection. It is
 not rescued at the concept layer, not by any of the four night arms, and not by
 the imagination. **The rejection stands on the representation and on everything
 built above it.**
+
+---
+
+## 9.8 The limiting factor, measured — and it is not what §9.6 said
+
+§9.6 rejected `LocalSpatialEye` and explained the rejection by argument:
+
+> The centroid is estimated per image from contrast, and that estimate is
+> stable when the *same* photograph moves and inconsistent *between*
+> photographs — so it cancels translation and adds between-image jitter.
+
+No number in the project tested that. `benchmarks/limiting_factor.py` does, with
+an **oracle**: the object's true position, which the benchmark knows because it
+placed the object itself. The oracle is an *instrument, not a proposal* —
+nothing in the mind can supply it, and no arm using it is an architecture.
+
+4 seeds, 240 photographs, a 64 px frame, each object displaced ±10 px on both
+axes, one developed bank shared by every arm so they differ only in the origin.
+
+| arm | origin | cluster AUC | self +5 px |
+|---|---|---|---|
+| `local-absolute` | none (frame) | 0.541 | 0.788 |
+| `local-spatial` *(as built)* | estimated from contrast | 0.573 | 0.981 |
+| `oracle+shuffled-error` | true, displaced 1.48 px at random | **0.619** | **0.996** |
+| `oracle-centroid` | true | **0.617** | **0.996** |
+
+### H10 holds: the origin estimate is the limiting factor
+
+A perfect origin — same filters, same bank, same binning, same patches — is
+worth **+0.0435 (d=1.50, 4/4)** over the estimated one, and takes invariance
+from 0.981 to 0.996. With a perfect origin the object frame beats having no
+frame by **+0.0759 (d=1.64, 4/4)**; as built it manages +0.0325 (d=0.64, 3/4).
+**The object-centred idea is not what failed. Locating the object without a
+label is.**
+
+This does not contradict §9.6's measurement, and the two together are the
+finding. The object frame *cost* 0.043 in `pathways.py` and a perfect origin
+*gains* 0.043 here because those are the same estimator error in two
+conditions: when every object sits at the frame centre there is nothing for the
+frame to cancel and its jitter is pure cost; once position genuinely varies the
+frame earns its keep and the estimator caps it.
+
+### H11 holds as stated
+
+| | |
+|---|---|
+| within-image error (one photo, shifted 5 px) | **0.04 px** |
+| between-image spread (across one category) | **1.48 px** |
+| bias against the true centre | 1.60 px |
+
+The estimator tracks a moving photograph almost exactly and scatters ~1.5 px
+between photographs. Both halves of §9.6's asserted mechanism, now measured.
+
+### H12 refutes the obvious reading of H10, and this is the real conclusion
+
+"The estimator is the limiting factor" invites one repair — make it *more
+accurate*. H12 tests whether accuracy is what matters: take the estimator's own
+error vectors and deal them to the **wrong images**. Magnitude and distribution
+are preserved exactly; the link between an error and the picture that caused it
+is destroyed.
+
+**A 1.48 px error costs nothing when it is unrelated to the picture.**
+`oracle+shuffled-error` scores 0.619 against the perfect oracle's 0.617 —
++0.0020, d=0.06, 2/4, indistinguishable — while the estimator's *own* 1.48 px
+costs 0.044. Same magnitude, opposite consequence.
+
+> The damage is not that the centroid is **imprecise**. It is that its error is
+> a **function of image content**, so two photographs of one category are given
+> systematically different origins *because they look different* — which is
+> exactly the difference the category is supposed to survive.
+
+That separates two requirements this pathway conflated:
+
+* **invariance needs within-image consistency.** The shuffled arm keeps 0.996
+  despite a wrong origin, because the same wrong origin is used for both views
+  of one photograph, so translation still cancels.
+* **clustering needs content-independence.** Only the true origin and
+  content-independent noise reach ~0.618; a content-correlated error of the
+  same size loses 0.044.
+
+A contrast-weighted centroid cannot satisfy the second, because contrast *is*
+image content — the statistic and the nuisance are the same quantity. **That is
+the limiting factor, and it is a property of the estimator's definition rather
+than of its tuning.** No amount of sharpening a content-derived origin fixes it;
+the fix would have to be an origin that does not read the content, which is a
+different architecture and is deliberately not proposed here.
+
+### What was wrong with this benchmark three times before it was right
+
+Recorded because all three failures produced a confident verdict line, and none
+was caught by reading the code:
+
+1. **A vacuous oracle.** Every photograph placed at the frame centre makes the
+   object's true centre *be* the frame centre, so the oracle grid and the
+   frame-absolute grid are the same computation. It reported the oracle
+   recovering **100.0%** of the gap, with all four seeds identical to three
+   decimals in both arms. Caught on the exact-identity signature.
+2. **A sign-flipping denominator.** The verdict divided by "what removing the
+   object frame recovers" — positive when objects are centred, **negative** once
+   they move. It printed −292% and "H10 is FALSIFIED" while the direct
+   contrasts all pointed the other way.
+3. **A frame too small for its own shift.** 32 px of object in a 48 px frame
+   leaves 16 px of travel; ±8 px of jitter consumed it, so at dx=+8 the 5 px
+   shift moved the object **0 px**. Within-image error read 1.66 px instead of
+   0.04 px and H11 came back False. Second occurrence in this project —
+   `phase10_2.py` was the first.
+
+Every false verdict here came from a **gate**, not from the data. The benchmark
+now asserts that the oracle origin varies, asserts that the shift is not
+clipped, warns if two arms score identically, and reports direct contrasts
+instead of ratios.
 
 ---
 
