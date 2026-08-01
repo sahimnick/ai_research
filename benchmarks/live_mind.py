@@ -310,6 +310,25 @@ def main():
     if 0.0 < worst < 0.05:
         print(f"  Every error-path number below rests on those "
               f"~{worst * REPLAYS:.0f} plasticity events -- rare, not weak.")
+    # The fire rate is not the real detector, and assuming it was cost a wrong
+    # conclusion. On live cameras the rule fires ~1.6% of the time and the error
+    # arm is STILL identical to `stored` on every metric: ~5 perturbed cells out
+    # of ~111 never flip an argmax when one camera is 0.0095 of the score. What
+    # has to be checked is whether the arm differs from its own control at all.
+    same = res["arms"]["imagined_as_error"] == res["arms"]["stored"]
+    res["error_arm_identical_to_stored"] = bool(same)
+    if same and worst > 0.0:
+        print("  The negative phase FIRED but changed nothing measurable: "
+              "`imagined_as_error` is identical to `stored` on every metric,\n"
+              "  down to the cell count. The perturbation is real and smaller "
+              "than this world can resolve, so the comparison below is\n"
+              "  a tie with the positive control and not a reproduction of "
+              "anything. VOID for the payback question.")
+        res["pays_back_live"] = []
+        res["void_reason"] = "error arm identical to stored (effect below resolution)"
+        json.dump(res, open(out_path, "w"), indent=1)
+        print(f"\nwrote {out_path}")
+        return res
     if worst <= 0.0:
         print("  `bind_contrastive` only unlearns when the completion wakes a "
               "different cell from the real pair. It did not, so\n"

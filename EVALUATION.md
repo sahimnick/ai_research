@@ -2634,23 +2634,28 @@ possible.
 | **`imagined_as_error`** — learn against it | **+0.0236 d=+4.33 4/4** | **+0.0165 d=+3.50 4/4** |
 | `merged+error` | +0.0047 d=+0.50 3/4 | −0.0519 d=−1.77 0/4 |
 
-> **A live re-run does not reproduce this, and the reason is not the weather.**
-> Re-run months later with the corrected arm added (§9.7), `stored` and
-> `imagined_as_error` came back **identical to four decimals** — 0.6683 /
-> 0.9784 / 110.5 cells, the same deltas and the same win counts. Two arms that
-> differ only through `bind_contrastive`'s negative phase cannot be identical
-> unless that phase never fired, and on that run it did not: the sound channel
-> is the camera's *own name*, which identifies a place uniquely, so the
-> completion woke the storing cell every time and there was nothing to unlearn.
-> `imagined_as_error` was `stored`, and the verdict printed "the archived
-> result reproduces on live sensors" — reading a tie with the positive control
-> as a reproduction.
+> **A live re-run does not reproduce this.** Re-run with the corrected arm
+> added (§9.7), `stored` and `imagined_as_error` came back **identical on every
+> metric** — 0.631 / 0.9833 / 110.75 cells, the same deltas, the same win
+> counts. The verdict printed "the archived result reproduces on live sensors",
+> reading a tie with the positive control as a reproduction.
 >
-> The table above is **not** retracted: its two arms *differ*, which is only
-> possible if the negative phase fired, so that run measured something the
-> re-run did not. What is retracted is any claim that the live result has been
-> reproduced. `live_mind.py` now counts the fire rate and refuses to report
-> when it is zero.
+> My first reading of that identity was that the negative phase never fired.
+> **It is wrong, and the counter says so**: the phase fires on **1.63%** of
+> replays, about 5 of 300 per seed. It fires and changes nothing measurable —
+> five perturbed cells out of ~111 never flip an argmax when one camera is
+> 0.0095 of the score. The effect is real and smaller than this world can
+> resolve, which is a different failure from the rule not running, and only the
+> instrument distinguishes them.
+>
+> So the detector is not the fire rate. `live_mind.py` and `payback.py` now
+> check whether the error arm differs from its own control **at all**, and void
+> the payback question when it does not, whatever the counter says.
+>
+> The table above is **not** retracted: its two arms *differ*, which cannot
+> happen unless the negative phase both fired and moved a read-out, so that run
+> measured something this one did not. What is retracted is any claim that the
+> live result has been reproduced.
 
 **The archived result reproduces on live sensors**, and reproduces in the part
 that matters most: *learning against what the mind imagines beats replaying what
@@ -3093,7 +3098,13 @@ from the real pair — `if win_n != win_p` — and that is deliberate: a
 well-predicted pair should teach nothing, which is the defining property of an
 error-driven rule. Nothing had ever counted how often the condition is met.
 
-On the archive it is **1.35% of replays — about 5 events of 400 per seed.**
+On the archive it is **about 5 events of 400 per seed**, and counted separately
+per arm it says something the aggregate did not:
+
+| arm | negative phase fires on | events per seed |
+|---|---|---|
+| `imagined_as_error` | **1.21%** | ~5 of 400 |
+| `merged+error` | **1.50%** | ~6 of 400 |
 
 The layer holds roughly one cell per experience, so hearing a sound wakes the
 cell that stored that pair and the completion is nearly always *right*. The
@@ -3101,10 +3112,17 @@ mechanism that produces the project's largest effect therefore fires about five
 times a night. That does not invalidate the effect — every arm replays the same
 400 pairs in the same order, and the controls are unaffected — but it means
 **+0.0833 is the product of five plasticity events, not four hundred**, and the
-rule is *rare* rather than weak. It also predicts where the effect should grow:
-a layer that generalises has more completions to get wrong, which is exactly the
-shape of the superadditivity already measured (`merged` +0.0255 and error
-+0.0208 alone, +0.0833 together).
+rule is *rare* rather than weak.
+
+**The per-arm split is the superadditivity's mechanism, measured directly.**
+Forcing the layer to generalise raises the fire rate by a quarter, 1.21% →
+1.50%: a merged layer has more completions to get *wrong*, so the error rule has
+more occasions to run. That was the stated explanation for `merged` +0.0255 and
+error +0.0208 alone summing to +0.0463 but reaching +0.0833 together, and it had
+been an argument rather than an observation until the counter existed. The
+effect is modest and in the predicted direction; it is offered as consistency,
+not as a demonstration that the mechanism is *sufficient* — a 24% change in
+occasions does not by itself account for an 80% change in outcome.
 
 The counter is now permanent in `payback.py` and `live_mind.py`, and an **exact
 zero is treated as void**: at zero the error arm performs the positive phase and

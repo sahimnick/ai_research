@@ -265,6 +265,22 @@ def main():
               f"where the completion wakes a\n  different cell from the real "
               f"pair, and this layer's completions are usually right -- so the "
               f"effect is rare, not weak.")
+    # A non-zero fire rate does not mean the rule did anything: on live cameras
+    # it fires ~1.6% and the error arm is still identical to `stored` on every
+    # metric, because a handful of perturbed cells never flip an argmax. The
+    # detector is the comparison itself, not the counter.
+    same = res["arms"]["imagined_as_error"] == res["arms"]["stored"]
+    res["error_arm_identical_to_stored"] = bool(same)
+    if same:
+        print("  The negative phase changed nothing measurable: "
+              "`imagined_as_error` is identical to `stored` on every metric.\n"
+              "  Any gap between them is zero by construction; VOID for the "
+              "payback question.")
+        res["pays_back"] = []
+        res["void_reason"] = "error arm identical to stored"
+        json.dump(res, open(out_path, "w"), indent=1)
+        print(f"\nwrote {out_path}")
+        return res
     fact = gate["imagined_as_fact"]["see_to_name"]
     fixed = gate["imagined_as_fact_fixed"]["see_to_name"]
     err = gate["imagined_as_error"]["see_to_name"]
