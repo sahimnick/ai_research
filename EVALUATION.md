@@ -2737,6 +2737,54 @@ five other interventions hit. What has moved is that the eye no longer falls off
 a cliff when the world shifts by five pixels, which was the failure Phase 10.2
 was designed to expose.
 
+### Phase 10.1's premise was false — V1 was never single-image bound
+
+Every earlier test of Phase 10.1 measured a downstream quantity and came back
+negative. But the phase's own step 5 is a claim about V1 itself — *this should
+break V1's single-image binding* — and that had never been measured. A mechanism
+can do exactly what it was designed to do and still not produce the predicted
+benefit, and those are different failures.
+
+`benchmarks/phase10_1b.py` measures it three ways, 4 seeds, 360 photographs:
+
+| arm | top1 share | **participation** | lifetime kurtosis |
+|---|---|---|---|
+| **no align** | 0.026 | **271.0** | 10.5 |
+| align to concept | 0.074 | 250.6 | 25.6 |
+| reconstruct concept | 0.034 | 240.5 | 9.8 |
+| reconstruct own *(uninformative)* | 0.047 | **180.4** | 12.2 |
+| reconstruct wrong *(misleading)* | 0.025 | 242.5 | 7.2 |
+
+**The eye does not have the problem Phase 10.1 was built to fix.** Before any
+alignment, a filter already responds to **271 of 360 photographs** — 75% of
+everything it is shown — and its single best photograph accounts for 2.6% of its
+total response. That is a broadly-tuned filter bank, not a set of
+single-photograph detectors.
+
+And alignment pushes the wrong way. Participation *falls* under every arm — to
+240 with the concept teacher, to 180 with the uninformative one — so the rule
+makes filters **more** selective, not less. Lifetime kurtosis rises under the
+delta rule (10.5 → 25.6), the same direction. Whatever alignment does, it is the
+opposite of what step 5 asked for.
+
+This retires Phase 10.1 completely and explains why every variant of it failed,
+including the one that provably carried its teacher: **the remedy was aimed at a
+diagnosis that does not hold.** `Wv` is not "stuck to raw pixels" in the sense of
+being tied to individual images.
+
+#### What the eye's problem actually is, now that this one is excluded
+
+Phase 10.2 found it, and found it harder than it was stated: a **5-pixel shift**
+takes concept-waking from 0.290 to **0.021**, below the 0.167 chance rate. The
+filters are broadly tuned across *images* and catastrophically narrow across
+*positions*. Those are different axes, and every intervention that worked on the
+first axis was working on an axis that was never broken.
+
+The fix follows from the correct diagnosis rather than from more learning:
+pooling several fixations closes 94% of the position sensitivity (gap 0.267 →
+0.017) with no change to V1 or the concept layer at all. **The eye needed to
+move, not to be taught.**
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
