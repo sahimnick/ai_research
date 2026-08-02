@@ -54,9 +54,10 @@ VOT_DIR = sys.argv[2] if len(sys.argv) > 2 else "vot"
 N_SEQ = int(sys.argv[3]) if len(sys.argv) > 3 else 16
 SIZE = 224
 OBJ = 44
-PER_SEQ = 6
+PER_SEQ = int(sys.argv[4]) if len(sys.argv) > 4 else 6
 DIM = 40
 STAGES = ("V2", "pool", "V4")
+BOOT = 4000
 
 
 def load_seq(d, name, n):
@@ -154,6 +155,7 @@ def main():
     codes = {s: [] for s in STAGES}
     pix, ang = [], []
     seq_of = []
+    frame_seq = []
 
     for si, k in enumerate(keys):
         # distractor slot: a corner far from this sequence's first target
@@ -179,6 +181,7 @@ def main():
             M = one_pass(stream, frame)                 # <-- the single pass
             slots = [(ty, tx), (sy + OBJ / 2, sx + OBJ / 2)]
             true_rel = int(tx > sx + OBJ / 2)           # target right of it?
+            frame_seq.append(si)
             for s in STAGES:
                 pt = peak(M[s], tag_tgt[s], SIZE)
                 pd = peak(M[s], tag_dis[s], SIZE)
@@ -242,15 +245,45 @@ def main():
     best = {t: max(STAGES, key=lambda s: vals[t][s]) for t in allt}
     margin = {t: round(sorted(vals[t].values())[-1]
                        - sorted(vals[t].values())[-2], 4) for t in allt}
+    # A raw margin cannot say whether an argmax over three near-equal numbers is
+    # real -- §9.10's standing lesson. So the per-task read-outs get a PAIRED
+    # bootstrap over sequences: resample whole sequences, recompute both stages
+    # on the same resample, and ask how often the winner stays ahead. Pairing
+    # matters because sequences differ enormously in difficulty, and that
+    # variance is shared between the arms.
+    fs = np.asarray(frame_seq)
+    uniq = np.unique(fs)
+    rboot = np.random.default_rng(0)
+    ci = {}
+    for t in ("where", "which", "relation"):
+        w = best[t]
+        r = max([s for s in STAGES if s != w], key=lambda s: vals[t][s])
+        a = np.asarray(score[w][t], np.float32)
+        b = np.asarray(score[r][t], np.float32)
+        per = {u: (a[fs == u].mean() - b[fs == u].mean()) for u in uniq}
+        d = np.array([per[u] for u in uniq], np.float32)
+        draws = d[rboot.integers(0, len(d), (BOOT, len(d)))].mean(1)
+        ci[t] = {"runner_up": r, "diff": round(float(d.mean()), 4),
+                 "lo": round(float(np.percentile(draws, 2.5)), 4),
+                 "hi": round(float(np.percentile(draws, 97.5)), 4),
+                 "p_wins": round(float((draws > 0).mean()), 4)}
+    res["paired_bootstrap"] = ci
     res["best_stage_per_task"] = best
     res["margin_over_runner_up"] = margin
     res["n_distinct_winners"] = len(set(best.values()))
-    # An argmax over three near-equal numbers is decided by noise, which is
-    # §9.10's standing lesson here. The verdict is gated on the winners being
-    # separated at all, not merely on there being several of them.
-    res["margins_meaningful"] = bool(min(margin.values()) > 0.05)
+    sep = {t: bool(ci[t]["lo"] > 0.0) for t in ci}
+    res["separated"] = sep
+    res["margins_meaningful"] = bool(any(sep.values()))
     res["functionally_unified"] = bool(res["n_distinct_winners"] > 1
                                        and res["margins_meaningful"])
+
+    print(f"\n  paired bootstrap over {len(uniq)} sequences "
+          f"(winner minus runner-up, 95% CI):")
+    for t, c in ci.items():
+        star = "SEPARATED" if c["lo"] > 0 else "not separated"
+        print(f"    {t:<10}{best[t]:>5} vs {c['runner_up']:<5}"
+              f"{c['diff']:+.4f}  [{c['lo']:+.4f}, {c['hi']:+.4f}]  "
+              f"wins {c['p_wins']:.3f}  {star}")
 
     print(f"\n--- is this one eye, or one stage with scaffolding? ---")
     for t in allt:

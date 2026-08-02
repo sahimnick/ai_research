@@ -5294,6 +5294,11 @@ gives −0.030 ± 0.069 — better than §9.22's −0.14 to −0.26 and better t
 constant velocity, but still not above zero, and short of the +0.05 that was
 set in advance as the bar.
 
+> **Note added by §9.33**, which re-ran the integration test with a paired
+> bootstrap: the claim elsewhere in this section's neighbourhood that the
+> V2-locates / V4-sizes split "holds inside one eye" is withdrawn. `where` does
+> not reproduce V2 > V4 at adequate power.
+>
 > The limiting factor moves, and is now sharp: **the failure is iteration, not
 > horizon.** The same model predicts three steps ahead *directly* at +0.024 and
 > fails to reach that by iterating its own one-step predictions. A predicted
@@ -5307,6 +5312,76 @@ breath. It is worth recording that the diagnosis points at training on the
 model's *own* outputs, which is what the proposal called scheduled sampling —
 the idea was right about where the problem lives even though this
 implementation of it did not clear the bar.
+
+## 9.33 With enough power to test it, the functional-specialisation story mostly fails
+
+§9.32 reported the integration run as corroborating a split found in separate
+experiments — V2 best at locating, V4 best at size — while noting the margins
+were ~0.04 on 78 frames and the argmax was being decided by noise. That caveat
+was right, and the follow-up is what it demanded: more data and a **paired
+bootstrap over sequences**, which is the correct test because sequences differ
+enormously in difficulty and that variance is shared between the arms.
+
+33 sequences × 9 frames, one eye, one forward pass, four read-outs:
+
+| stage | where | which | relation | how big |
+|---|---|---|---|---|
+| V2 | 0.333 | 0.884 | 0.888 | 0.493 |
+| pool | **0.352** | **0.903** | **0.906** | 0.501 |
+| V4 | 0.337 | 0.876 | 0.832 | **0.532** |
+| control | 0.022 | 0.453 | 0.648 | 0.427 |
+| chance | ~0 | 0.500 | 0.500 | — |
+
+Winner minus runner-up, paired over 33 sequences, 95% CI:
+
+| task | comparison | difference | 95% CI | separated? |
+|---|---|---|---|---|
+| where | pool vs V4 | +0.0026 | [−0.0569, +0.0579] | **no** |
+| which | pool vs V2 | +0.0210 | [+0.0034, +0.0429] | **yes** (wins 0.978) |
+| relation | pool vs V2 | +0.0173 | [−0.0164, +0.0509] | **no** |
+
+### What this overturns, including in §9.32
+
+**Only one read-out has a separated winner.** `which` — selection under
+competition — is won by `pool`, and it is the only task where the interval
+excludes zero.
+
+**`where` does not reproduce V2 > V4.** V2 scores 0.333 and V4 **0.337**, so V4
+is marginally *ahead*, and the interval spans zero either way. §9.21 (0.943 vs
+0.614), §9.23 (0.834 vs 0.729) and §9.30 all found V2 beating V4 at locating,
+and §9.32 read this integration run as confirming it. **It does not.** Those
+earlier results were on composited unchanged objects and on static-camera CCTV;
+on VOT video with real appearance change the ordering is not recoverable at this
+power.
+
+So §9.32's sentence — that the split found in separate experiments "holds inside
+one eye on one pass" — is **withdrawn**. Half of it (V4 leading `how big`, 0.532
+vs 0.493) survives as an unseparated lead with no interval computed; the other
+half does not survive at all.
+
+**The strong unified-eye claim is therefore not established.** It rests on
+`pool` winning one task and `V4` leading another without a confidence interval,
+which is thinner than the verdict line in the benchmark says. What *is*
+established is weaker and worth stating exactly:
+
+> All four read-outs — locating a tagged object, selecting it under
+> competition, reading a spatial relation, and reading angular size — come out
+> of **one eye and one forward pass** on real video, each above its own control
+> (0.352 vs 0.022, 0.903 vs 0.453, 0.906 vs 0.648, 0.501 vs 0.427). The stages
+> are **not** shown to specialise; what is shown is that a single pass carries
+> all four kinds of information at once.
+
+### The one property that had never been measured
+
+**ارتباط (relations)** is measured here for the first time: 0.906 against a
+control of 0.648. The control is high because the distractor sits at a fixed
+corner, so the relation is often guessable from the layout alone — the effect is
++0.258 over that, not over 0.5. Read as: the relation *is* recoverable from the
+same pass, on a task where a positional prior already gets two-thirds of the way.
+
+That completes the goal's property list. Colour: falsified (§9.18). Distance:
+present within scenes, does not transfer (§9.31). Shadow: absent, at the pixel
+null (§9.31). Relations: present, above a strong positional control.
 
 ---
 
