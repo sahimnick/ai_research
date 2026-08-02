@@ -4561,6 +4561,81 @@ and §9.20's opposite finding is not overturned here. The columns compare arms
 within a representation. Deciding between representations needs a shared
 yardstick — predicting the next actual image — which this benchmark does not do.
 
+## 9.23 The tag survives the world changing, scored the way trackers are scored
+
+§9.21 left two caveats on its own positive result, and both are settled here.
+The object there was **pixel-identical** at every position, so the tag matched a
+perfect template — the easiest case that exists — and the scoring was one hit
+rate at one tolerance rather than what a tracking benchmark reports.
+
+A traffic camera is **static** and its content is not, which gives both at once:
+a region tagged at t0 and looked for ~105 s later is the *same place* — ground
+truth exact, because the camera did not move — while its pixels have genuinely
+changed. Nothing composited, nothing simulated. Measured on the run: the frame
+changed by **7.34/255** and the tagged region itself by **8.90/255**.
+
+Scored with the two standard summaries — precision at the usual 20 px operating
+point, and success AUC, the area under the overlap curve across IoU thresholds
+0–1. 16 cameras.
+
+| still — real change, no displacement | prec@20px | success AUC | median err |
+|---|---|---|---|
+| **eye-V2** | **0.938** | 0.834 | 1.5 px |
+| eye-V4 | 0.875 | 0.729 | 3.2 px |
+| pixels-NCC | 0.875 | **0.876** | **0.0 px** |
+| shuffled-tag *(chance)* | 0.062 | 0.083 | 81.7 px |
+
+| displaced — real change + 32 px | prec@20px | success AUC | median err |
+|---|---|---|---|
+| **eye-V2** | **0.938** | 0.751 | 4.0 px |
+| eye-V4 | 0.875 | 0.619 | 7.2 px |
+| pixels-NCC | 0.875 | **0.876** | **0.0 px** |
+| shuffled-tag *(chance)* | 0.062 | 0.089 | 77.7 px |
+
+**The tag survives.** eye-V2 reaches 0.834 success AUC against a shuffled-tag
+control at 0.083 — a tenfold separation — and holds 0.751 when displacement is
+added on top of the appearance change. §9.21's result was not an artefact of
+matching unchanged pixels: the tag is matching the *place*, through traffic
+moving across it and the light shifting.
+
+### Against the classical baseline, the two arms fail differently
+
+Pixel NCC and the eye are **not** separated by this data, and the interesting
+part is the shape of the difference rather than its size. NCC has a **median
+error of exactly 0.0 px** — when it works it is pixel-perfect — yet its
+precision@20px is 0.875, *below* the eye's 0.938. It either nails a region
+exactly or misses it altogether. The eye is the opposite: it is reliably close
+(median 1.5 px) but never exact, because a V2 cell is ~2.17 px and the map
+quantises the answer.
+
+So the eye wins the reliability measure and loses the overlap measure, and the
+overlap measure is where sub-pixel precision pays. Stated with the caution it
+needs: **n = 16**, so 0.938 against 0.875 is fifteen cameras against fourteen —
+one camera of difference, and nothing should be built on it. What the data does
+support is that the two are comparable, which is itself the first time in this
+document that this eye has matched a classical baseline on a real task.
+
+V2 beats V4 again, in both conditions (0.834 vs 0.729, 0.751 vs 0.619). Pooling
+discards the position that localisation needs, exactly as §9.21 found.
+
+### What this settles, and what it does not
+
+Settled: goal component **تعقیب و تمرکز در تصاویر متحرک بر اساس تگ** has a
+positive result on real imagery under real appearance change, scored with the
+metrics tracking benchmarks use.
+
+Not settled, and not to be read into it: these are **the metrics** of a modern
+tracking benchmark, not a modern tracking **dataset**. No OTB, LaSOT or VOT
+sequence is involved, and the comparison to published tracker numbers that those
+datasets exist to enable cannot be made from here. Component **ارزیابی بر اساس
+بنچمارکهای روز دنیا** remains open.
+
+Also untouched: this is localisation driven by a tag, which is the "where" half.
+Top-down attention in the sense that matters — the tag *biasing what the system
+does next*, gating the read-out or the next fixation — is a separate mechanism,
+and `attend()`, the one that would do it, is built on the averaged prototype
+§9.21 showed cannot localise.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
