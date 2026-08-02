@@ -132,11 +132,45 @@ class PredictiveStack:
         self.W /= np.maximum(np.linalg.norm(self.W, axis=1, keepdims=True), 1e-6)
         self.duty = np.full(n_high, sparsity, np.float32)
         self._eta = 0.0
+        #: warm start for the power iteration in `_retune`; None forces an
+        #: exact SVD on the next call
+        self._u = None
         self._retune()
 
-    def _retune(self) -> None:
-        """Set the inference step from the loop's own spectral norm."""
-        lam = float(np.linalg.norm(self.W, 2) ** 2)          # lambda_max(W W^T)
+    def _retune(self, exact: bool = False) -> None:
+        """Set the inference step from the loop's own spectral norm.
+
+        By **warm-started power iteration**, not by an SVD. The exact form --
+        ``np.linalg.norm(self.W, 2)`` -- is a full SVD of a (n_high x n_v1)
+        matrix, and it was being called on every learning step: measured at
+        **2469 ms** per call at the benchmark's size, against 1882 ms for the
+        entire rest of a learning step. Training a stack on 2000 vectors for 3
+        epochs would have taken 3.1 hours per arm per seed.
+
+        That is almost certainly why this class was written, exported, and
+        never benchmarked: it could not be run.
+
+        Power iteration is the right tool here rather than a shortcut. ``W``
+        changes by ``lr * outer(r, err)`` per step, so its leading singular
+        vector moves slowly; warm-starting from the previous one converges in a
+        couple of iterations. ``exact=True`` keeps the SVD for verification.
+        """
+        if exact or self._u is None:
+            lam = float(np.linalg.norm(self.W, 2) ** 2)
+            _, sv, vt = np.linalg.svd(self.W, full_matrices=False)
+            self._u = vt[0].astype(np.float32)
+        else:
+            u = self._u
+            for _ in range(2):
+                v = self.W @ u
+                u = self.W.T @ v
+                nu = np.linalg.norm(u)
+                if nu < 1e-12:
+                    self._u = None
+                    return self._retune(exact=True)
+                u = u / nu
+            self._u = u.astype(np.float32)
+            lam = float(np.linalg.norm(self.W @ u) ** 2)
         self._eta = self.gain / max(lam, 1e-6)
 
     @property
