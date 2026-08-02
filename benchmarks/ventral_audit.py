@@ -130,17 +130,20 @@ def main():
     # the one-stage eye every published number came from
     acc = {"auc": [], "probe": [], "pr": []}
     for sd in SEEDS:
+        # SAME canvas as the ventral stream. Measuring WideV1 on a 48px
+        # `place()` frame and the stream on a 96px one would compare across
+        # input scales -- the error §9.14 and §9.16 were both caught making.
         v1 = WideV1(n_cells=4096, window_ms=50, rf=7, stride=2,
-                    image_shape=(FRAME, FRAME), seed=sd)
-        develop_v1(v1, list(frames), epochs=3, tie=True, seed=sd)
-        R = np.array([v1.drive(f) for f in frames], np.float32)
+                    image_shape=(CANVAS, CANVAS), seed=sd)
+        develop_v1(v1, list(canvas), epochs=3, tie=True, seed=sd)
+        R = np.array([v1.drive(f) for f in canvas], np.float32)
         ad = PopulationAdaptation(R.shape[1])
         V = np.array([_unit(ad(r)) for r in R], np.float32)
         tr, te = split(y, sd)
         acc["auc"].append(cluster_auc_full(V[te], y[te], V[tr], y[tr]))
         acc["probe"].append(probe(V, y, tr, te, sd))
         acc["pr"].append(participation_ratio(V))
-    rows.append({"stage": "WideV1 (what every number used)",
+    rows.append({"stage": f"WideV1 @{CANVAS}px (one stage)",
                  "dim": int(V.shape[1]),
                  "cluster_auc": round(float(np.mean(acc["auc"])), 4),
                  "probe": round(float(np.mean(acc["probe"])), 4),

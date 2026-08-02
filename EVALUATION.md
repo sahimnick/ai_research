@@ -3978,6 +3978,61 @@ and it is the reason to believe the direction rather than the size.
 
 ---
 
+## 9.17 The four-stage eye, at a canvas it can actually use
+
+§9.15's table was measured at 32 px through a broken resize, and at 32 px this
+hierarchy has nothing left by V4 — `(44, 1, 1)`, one location, spike ceiling 12.
+Re-run at **96 px**, where V4 is `(44, 17, 17)`, the same stream reads
+completely differently:
+
+| stage | probe @32 px *(§9.15)* | probe @96 px | participation @32 | @96 |
+|---|---|---|---|---|
+| V1 complex | 0.354 | 0.365 | 20.8 | 47.4 |
+| **V2** | 0.358 | **0.420** | 66.8 | 208.1 |
+| pool | 0.288 | 0.413 | 35.0 | 189.6 |
+| **V4** | **0.246** | **0.406** | **7.9** | **195.6** |
+
+**V4 was never degenerate.** Its participation ratio goes from 7.9 to 195.6 and
+its spike count from 12 to 3 452 — the whole "V4 clusters below raw pixels and
+raises twelve spikes" finding was the canvas, and the explanation §9.15 built on
+top of it was explaining an artefact.
+
+The hierarchy is also worth something at this size: **V2 reaches 0.420** where
+the single-stage `WideV1` sits at 0.316 — though that comparison is across input
+scales until `ventral_audit.py` is re-run with `WideV1` on the same 96 px
+canvas, which is now what it does.
+
+### H17 falsified, and in an interesting direction
+
+Growing every area on photographs instead of line drawings (600 separate CIFAR
+images, same architecture, same widths, same rule, same sampler):
+
+| stage | probe, grown on drawings | grown on photographs |
+|---|---|---|
+| V1 complex | 0.365 | **0.399** |
+| V2 | **0.420** | 0.361 |
+| pool | **0.413** | 0.392 |
+| V4 | **0.406** | 0.354 |
+
+Photographs make the **edge stage** better and every stage above it **worse**.
+V4 loses 0.052 and V2 loses 0.059, while participation rises slightly
+everywhere — so the photograph-grown areas are using *more* dimensions to carry
+*less* category information, which is what learning texture instead of shape
+looks like.
+
+> The mid and high areas learn better from a curated, high-contrast, low-clutter
+> stimulus set than from the natural images they will be tested on.
+
+That is the opposite of the assumption behind H17, and it is a claim about
+*curriculum* rather than about architecture: a competitive rule with no error
+signal cannot tell which variance matters, so the variance it is shown is the
+variance it encodes. Line drawings contain almost nothing but shape.
+
+Registered before the run and reported as it fell — no replacement hypothesis is
+proposed here.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
