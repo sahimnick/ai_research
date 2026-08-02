@@ -4709,6 +4709,86 @@ The value here is that the eye's representation was finally asked a question by
 data this project did not choose, and the answer was worse than the answer it
 gave on data this project did choose.
 
+## 9.25 How much of the image survives, and whether the four stages are one eye
+
+Two goal components had never been measured directly, and one benchmark asks
+both: **استخراج حداکثر ویژگی ها و اطلاعات ممکن از تصویر** — how much information
+about the image does each area carry — and **بصورت چشم واحد عمل کنند** — do the
+four act as a *unified* eye, or is their union no better than its best member?
+
+Method: linear decodability. Fit a ridge map from an area's code back to a 56×56
+image and measure R² on held-out frames, everything reduced to the **same D** by
+PCA first, because §9.16 is this project's own record of what reading a 1764-d
+code against a 256-d one does to a conclusion. Frames are 360 VOT2019 stills —
+real photographs, in quantity, not chosen by this project.
+
+### Three defects in my own instrument, one of which reversed the answer
+
+Worth recording, because the first version of this table would have been
+published as three separate architectural claims.
+
+**The ridge penalised its own intercept.** As λ grew the prediction was pulled
+toward *zero* rather than toward the mean, so images with a mean of ~0.4
+produced R² of −4. Every heavily-regularised number was an artefact of the
+penalty.
+
+**The split put different videos on each side, silently.** Frames were taken
+sequentially per sequence, so train and test shared no scene. Every eye arm came
+out negative and the honest-looking conclusion was "the hierarchy discards the
+image". The same codes under a shuffled split score **+0.33 to +0.38**. Both
+splits are now reported, because they answer different questions and neither is
+the whole answer.
+
+**The `unified` arm was not a union.** Concatenating raw codes of very different
+scales means the PCA is dominated by whichever area carries the most variance —
+V2, at 381 924 dimensions — so "all four together" actually meant "V2, slightly
+perturbed". Scaling each area to the same mean row norm before concatenating
+**reverses the verdict**, from −0.023 against the best single area to +0.031 for
+it.
+
+### The result
+
+| at D=128 | within-video *(leaks; upper bound)* | by-video *(unseen scenes)* | participation |
+|---|---|---|---|
+| V1_complex | 0.390 | −0.861 | 44.8 |
+| V2 | 0.379 | −0.299 | 104.5 |
+| pool | **0.439** | −0.332 | 100.7 |
+| V4 | 0.404 | **−0.194** | 100.2 |
+| **unified** | **0.469** | −0.377 | 95.6 |
+| pixels *(ceiling, not a rival)* | 0.867 | 0.831 | 9.0 |
+
+The pixel arm is a **ceiling**: the decoding target is a block mean of the
+image, an exact linear function of that arm's own input, so it must win. What it
+says is that the task is 0.87-solvable at this width.
+
+**The eye carries real image information — 54% of that ceiling.** The first,
+buggy version of this benchmark said it carried none.
+
+**At matched width the four areas are complementary: 0.469 against the best
+single area's 0.439.** That is the unified-eye clause, and it is positive. The
+margin is small (+0.031) and it only appears once each area is allowed to
+contribute on equal footing, which is exactly the thing the unbalanced version
+got wrong.
+
+**Information does not fall monotonically with depth.** V2 is the trough (0.379)
+and `pool` the peak (0.439). But the whole range is 0.379–0.439, so the areas
+are not well separated by this measure and no ranking among them should be read
+as established.
+
+### The limitation that dominates everything above
+
+**Across unseen scenes, none of it transfers.** Every eye arm is negative on the
+by-video split — the decoder does worse than predicting the mean image — while a
+generic linear image basis stays at 0.83. The map from this eye's code back to
+image content is **scene-specific**: fit on eight videos, it is actively wrong on
+four others.
+
+That is the same shape of finding as §9.24, where the CCTV result did not
+transfer to VOT, and as §9.20, where the code did not survive translation. Three
+different measurements, one pattern: **this representation is reliable on the
+distribution it was developed on and does not carry beyond it.** Stated as the
+limiting factor and not worked around here.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
