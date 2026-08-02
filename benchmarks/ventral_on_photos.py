@@ -41,7 +41,8 @@ import torch.nn as nn
 from neurobrain.cognition.multimodal import _unit
 from neurobrain.sensing.natural import load_audiovisual, load_cifar10
 from neurobrain.vision.ventral import (build_ventral_stream,
-                                       build_ventral_stream_on)
+                                       build_ventral_stream_on, stage_extents,
+                                       upscale)
 from neurobrain.vision.widev1 import PopulationAdaptation
 
 sys.path.insert(0, "benchmarks")
@@ -51,7 +52,8 @@ from real_binding import split                                 # noqa: E402
 SEEDS = (0, 1, 2)
 N_PER_CLASS = 40
 N_DEVELOP = 600
-SZ = 56
+SZ = 96
+CANVAS = 96
 CID = {"airplane": 0, "automobile": 1, "bird": 2, "cat": 3, "dog": 5, "frog": 6}
 
 
@@ -117,8 +119,7 @@ def main():
     imgs, _w, y, names_cls = load_audiovisual(n_per_class=N_PER_CLASS, seed=0,
                                               grayscale=True, size=32)
     y = np.asarray(y, int)
-    canvas = [np.kron(np.asarray(im, np.float32),
-                      np.ones((SZ // 32, SZ // 32), np.float32)) for im in imgs]
+    canvas = [upscale(im, CANVAS) for im in imgs]
 
     # a separate pool of photographs to DEVELOP on -- never the evaluation set
     trX, trY, teX, teY = load_cifar10(n_train=50000, n_test=10000, seed=0,
@@ -128,8 +129,7 @@ def main():
     want = [CID[c] for c in names_cls]
     pool = np.concatenate([np.flatnonzero(Y == c)[-N_DEVELOP // 6:]
                            for c in want])
-    devel = np.stack([np.kron(np.asarray(X[i], np.float32),
-                              np.ones((SZ // 32, SZ // 32), np.float32))
+    devel = np.stack([upscale(X[i], CANVAS)
                       for i in pool])
     print(f"{len(imgs)} evaluation photographs; {len(devel)} SEPARATE "
           f"photographs to develop on\n", flush=True)

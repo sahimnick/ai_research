@@ -3848,6 +3848,30 @@ other visual number used.
 | pool | 324 | 0.570 | 0.288 | 35.0 | 0.89 | 214 |
 | **V4** | 44 | **0.526** | **0.246** | **7.9** | 0.66 | **12** |
 
+> ### CORRECTION — this section's diagnosis of V4 was wrong
+>
+> The "12 spikes" below is not near-silence. `SpikingConvLayer.forward` runs 12
+> timesteps and lets **exactly one map win per location**, so a layer's spike
+> ceiling is `locations × 12`. And the canvas was not what this section claims:
+> the upscaling was `np.kron(im, np.ones((56 // 32, 56 // 32)))`, and
+> **`56 // 32 == 1`** — a no-op. Every run here was at **32 px**, not 56.
+>
+> At 32 px this hierarchy runs out of space: V1 (k=11) → 22, pool → 11, V2
+> (k=5) → 7, pool → 3, V4 (k=3) → **1**. V4 is `(44, 1, 1)`, a **single
+> location**, ceiling `1 × 12 = 12`. So V4 was at **100% saturation**, not
+> nearly silent, and the "tuned to synthetic curvature, photographs don't
+> contain it" explanation below is unsupported.
+>
+> Measured ceilings by canvas: 32 px → 12, 56 px → 588, 96 px → 3 468, 128 px →
+> 7 500. V2 and V4 sit at **100% of ceiling at every size**, which is its own
+> problem and a different one.
+>
+> `upscale()` and `stage_extents()` in `neurobrain/vision/ventral.py` now do
+> the resize correctly and report each area's ceiling beside its count. The
+> tables in §9.15 and §9.16 are 32-px results and are kept as such; the real
+> lesson is the one the goal already named — **this architecture needs real
+> dimensions to function at all**, and at 32 px its last stage has one pixel.
+
 **No area is dead** — 0.66 to 0.89 of units fire somewhere across the set, so
 every stage does carry signal and a loop built on any of them would have
 something to work with. That was the thing worth checking before trusting any

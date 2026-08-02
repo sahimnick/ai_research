@@ -48,7 +48,7 @@ import torch.nn as nn
 
 from neurobrain.cognition.multimodal import _unit
 from neurobrain.sensing.natural import load_audiovisual
-from neurobrain.vision.ventral import build_ventral_stream
+from neurobrain.vision.ventral import build_ventral_stream, upscale, stage_extents
 from neurobrain.vision.widev1 import PopulationAdaptation
 from neurobrain.world.topdown import PredictiveStack
 
@@ -59,6 +59,7 @@ from real_binding import split                                 # noqa: E402
 SEEDS = (0, 1, 2)
 N_PER_CLASS = 40
 N_HIGH = 256
+CANVAS = 96
 STACK_BUDGET = 2000
 FRONTS = ("V2", "V4")
 ARMS = ("feedforward", "loop-1", "loop-20", "loop-20-noteach")
@@ -114,8 +115,7 @@ def main():
     print("building the four-stage ventral stream ...\n", flush=True)
     stream = build_ventral_stream(verbose=False)
     size = stream.size
-    canvas = [np.kron(np.asarray(im, np.float32),
-                      np.ones((size // 32, size // 32), np.float32))
+    canvas = [upscale(im, CANVAS)
               for im in imgs]
 
     res = {"seeds": list(SEEDS), "fronts": {}}

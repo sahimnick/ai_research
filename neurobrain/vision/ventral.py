@@ -1393,3 +1393,45 @@ def build_ventral_stream_on(images: np.ndarray, n_v1: int = 12, n_v2: int = 36,
     say(f"   V1 {len(v1_patches)} patches, V2 {len(v2_patches)}, "
         f"V4 {len(v4_patches)}")
     return VentralStream(V1, complex_, V2, pool, V4, hierarchy, size=size)
+
+
+def upscale(img: np.ndarray, size: int) -> np.ndarray:
+    """Nearest-neighbour resize to a square ``size``. NumPy only.
+
+    Exists because the obvious one-liner is wrong in a way that does not
+    announce itself: ``np.kron(img, np.ones((size // 32, size // 32)))`` is a
+    NO-OP whenever ``size < 64``, since ``56 // 32 == 1``. Three benchmarks in
+    this project used exactly that and silently ran at 32 px while reporting a
+    56 px canvas.
+
+    That mattered: this hierarchy loses spatial extent fast (V1 k=11, pool 2,
+    V2 k=5, pool 2, V4 k=3), and at 32 px input V4 comes out **(44, 1, 1)** --
+    a single location. Its spike ceiling is then ``1 x 12`` and the measured
+    "12 spikes per photograph" was **100% saturation**, not the near-silence it
+    was read as in EVALUATION.md §9.15.
+    """
+    a = np.asarray(img, np.float32)
+    n = a.shape[-1]
+    idx = (np.arange(size) * n // size).clip(0, n - 1)
+    return a[..., idx[:, None], idx[None, :]]
+
+
+def stage_extents(size: int) -> List[Tuple[str, Tuple[int, ...], int]]:
+    """``(name, output shape, spike ceiling)`` per area for a square canvas.
+
+    The ceiling is ``locations x T``: :meth:`SpikingConvLayer.forward` runs 12
+    timesteps and lets exactly one map win at each location, so a layer cannot
+    emit more than that however strongly it is driven. Reporting a spike count
+    without its ceiling is how 100% saturation gets read as silence.
+    """
+    out, h = [], int(size)
+    h = h - 11 + 1
+    h = h // 2
+    out.append(("V1_complex", (8, h, h), h * h * 12))
+    h = h - 5 + 1
+    out.append(("V2", (36, h, h), h * h * 12))
+    h = h // 2
+    out.append(("pool", (36, h, h), h * h * 12))
+    h = h - 3 + 1
+    out.append(("V4", (44, h, h), h * h * 12))
+    return out

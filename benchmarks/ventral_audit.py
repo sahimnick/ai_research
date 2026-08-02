@@ -52,7 +52,7 @@ import torch.nn as nn
 from neurobrain.cognition.multimodal import _unit
 from neurobrain.learning.selforganize import develop_v1
 from neurobrain.sensing.natural import load_audiovisual
-from neurobrain.vision.ventral import build_ventral_stream
+from neurobrain.vision.ventral import build_ventral_stream, upscale, stage_extents
 from neurobrain.vision.widev1 import PopulationAdaptation, WideV1
 
 sys.path.insert(0, "benchmarks")
@@ -61,6 +61,9 @@ from real_binding import split                                 # noqa: E402
 
 SEEDS = (0, 1, 2)
 N_PER_CLASS = 40
+#: The canvas the hierarchy is actually run on. 32px is too small for four
+#: stages: V4 comes out (44,1,1), one location, spike ceiling 12.
+CANVAS = 96
 
 
 def participation_ratio(X):
@@ -121,9 +124,7 @@ def main():
 
     stream = build_ventral_stream(verbose=True)
     size = stream.size
-    canvas = [np.asarray(np.kron(np.asarray(im, np.float32),
-                                 np.ones((size // 32, size // 32),
-                                         np.float32)), np.float32)
+    canvas = [np.asarray(upscale(im, CANVAS), np.float32)
               for im in imgs]
     frames = [place(im) for im in imgs]
 
