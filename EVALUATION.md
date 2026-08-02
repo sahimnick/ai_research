@@ -4937,6 +4937,59 @@ what §9.25 claimed. Its cause is still not resolved: breadth does not fix it,
 decoder capacity is not the reason, and no test here separates the architecture
 from the development rule. Per the loop protocol that is where this stops.
 
+## 9.28 Top-down attention as gating: the same image, a different cue, a different answer
+
+§9.21–§9.23 measured the *where* half of attention. The half named as missing in
+every summary since is **selection** — the cue biasing what the system picks out
+of a scene containing more than one thing. That is the goal's **توجه بالا به
+پایین**, and it is what `attend()` claims and cannot deliver, being built on the
+averaged prototype §9.21 measured at 0.000.
+
+Two real objects are composited into one real scene. **The image is identical
+across the two trials; only the cue changes.** No feed-forward pass can produce
+a different answer from identical input, so a stimulus-driven saliency arm has a
+switch rate of **0.000 by construction** — which is precisely why it is the arm
+to beat.
+
+Two design points that decide whether the result means anything. Each object is
+tagged from a reference frame on a **different background** from any test scene,
+so a tag cannot succeed by matching the surround instead of the object. And
+**which object occupies which slot is randomised per trial**, so "cue A" cannot
+be answered by a fixed positional bias.
+
+| arm | cue-following *(chance 0.5)* | switch rate |
+|---|---|---|
+| **cued tag** | **0.917** | **0.875** |
+| shuffled cue *(a third object, never present)* | 0.500 | 0.000 |
+| saliency, feed-forward | — | 0.000 |
+
+**This is biased competition.** The cued object is selected on 44 of 48 trials,
+and on 0.875 of scenes the answer *moves* when only the goal moves. The shuffled
+cue lands at exactly chance (0.500) with a switch rate of 0.000 — it always
+picks the same slot, so the switching is specific to the cue rather than a
+property of the machinery.
+
+> Goal-directed selection, driven by a stored spatial tag, on real scenes. It
+> works, and it works through the mechanism §9.21 identified as sound after
+> showing the shipped one was not.
+
+### The caveat that governs how far this goes
+
+The composited object is **pixel-identical** to the appearance its tag was taken
+from — only the background differs. That is the same easy condition as §9.21,
+and §9.24 is the record of what happens when it is relaxed: on VOT2019 video,
+where the target translates, rotates, changes scale and deforms, the identical
+localisation machinery fell from 0.943 to 0.094.
+
+So this establishes that the *selection mechanism* is sound and that biased
+competition is real in this architecture. It does **not** establish that
+attention would survive on video, and the honest expectation from §9.24 is that
+it would degrade the same way. That test is not run here.
+
+Exposed as `VentralStream.attention_map`, additively — `attend()` and
+`_attention_heatmap` are left alone, so no classification number published
+elsewhere in this document moves.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

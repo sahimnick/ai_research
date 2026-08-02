@@ -1199,6 +1199,30 @@ class VentralStream:
         c1 = max(int((x + w) * gw / iw) + 1, c0 + 1)
         return m[:, r0:r1, c0:c1]
 
+    def attention_map(self, image: np.ndarray, tag: np.ndarray,
+                      area: str = "V2", power: float = 3.0) -> np.ndarray:
+        """Top-down gain over ``image``, driven by a spatial ``tag``.
+
+        The "where to look for *this*" signal, on the area's own grid, ready to
+        multiply into the map. It is the counterpart of
+        :meth:`_attention_heatmap` and differs in the one way that matters: the
+        tag keeps its spatial layout instead of being averaged to a single
+        channel vector. §9.21 measured the averaged form at 0.000 finding a tag
+        in the tag's own frame; §9.28 measured this one selecting a cued object
+        out of a two-object scene at 0.917, with the answer changing on 0.875 of
+        scenes when only the cue changed -- biased competition, which no
+        feed-forward pass can produce.
+
+        ``power`` sharpens the gain the way :meth:`attend` does; the map is
+        normalised to a peak of 1.
+        """
+        m = self.area_map(image, area)
+        _, score = locate_template(m, tag)
+        g = np.maximum(score, 0.0) ** float(power)
+        peak = g.max()
+        g = g / peak if peak > 1e-9 else g
+        return self._upsample(g, m.shape[-2:])
+
     def locate(self, image: np.ndarray, tag: np.ndarray,
                area: str = "V2") -> Tuple[int, int]:
         """Where in ``image`` is ``tag``? Returns a pixel ``(y, x)`` centre.
