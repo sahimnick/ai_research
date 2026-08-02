@@ -1313,3 +1313,83 @@ def build_ventral_stream(n_v1: int = 12, n_v2: int = 36, n_v4: int = 44,
         f"({len(h_names)} classes, chance {100 // len(h_names)}%);  "
         f"IT cell purity {stream.it_purity:.0%}")
     return stream
+
+
+def build_ventral_stream_on(images: np.ndarray, n_v1: int = 12, n_v2: int = 36,
+                            n_v4: int = 44, size: int = 56,
+                            verbose: bool = False) -> VentralStream:
+    """The same four areas, grown on **real photographs** instead of drawings.
+
+    :func:`build_ventral_stream` develops each area on its own hand-made
+    stimulus set -- `oriented_edges` for V1, `corner_images` + `curve_images`
+    for V2, `curve_images` + `shape_images` for V4. Line drawings. It reaches
+    99% on shapes and 92% on complex objects, so the architecture works on what
+    it was built for.
+
+    On photographs it does not. Measured in EVALUATION.md §9.15, on CIFAR:
+
+        stage         probe   participation   spikes per photograph
+        V1 complex    0.354           20.8           254
+        V2            0.358           66.8           588
+        pool          0.288           35.0           214
+        V4            0.246            7.9            12
+
+    V4 -- the stage nearest object identity, the one the whole architecture
+    points at -- clusters *below raw pixels* and raises twelve spikes. Its
+    kernels are tuned to synthetic curvature and a photograph does not contain
+    it.
+
+    This builder changes exactly one thing: **every area is developed on the
+    images it will actually be asked about**. Same architecture, same widths,
+    same canvas, same competitive Hebbian rule, same patch sampler -- so a
+    difference between the two can only be the training stimuli.
+
+    The trace-invariance layer, the shape readout and the IT object cells are
+    deliberately **not** fitted here. They are supervised or shape-specific and
+    would confound the comparison; this returns a stream whose four feedforward
+    areas are photograph-grown and nothing else.
+    """
+    def say(*a):
+        if verbose:
+            print(*a, flush=True)
+
+    ims = np.asarray(images, np.float32)
+    if ims.max() > 1.5:
+        ims = ims / 255.0
+    if ims.ndim == 3:
+        ims = ims[:, None]                      # (n, 1, H, W)
+
+    say(f"V1: oriented cells from {len(ims)} real photographs ...")
+    v1_patches = []
+    rng = np.random.default_rng(0)
+    for im in ims:
+        m = im
+        for _ in range(1):
+            pass
+        C, H, W = m.shape
+        for _ in range(12):
+            y = rng.integers(0, H - 11 + 1)
+            x = rng.integers(0, W - 11 + 1)
+            p = m[:, y:y + 11, x:x + 11]
+            if float(p.max()) - float(p.min()) > 0.05:   # reject flat sky
+                v1_patches.append(p.copy())
+    V1 = SpikingConvLayer(1, n_v1, 11, stride=1, name="V1", lr=0.04, seed=1)
+    V1.train(np.stack(v1_patches), epochs=6, init="gabor")
+    complex_ = ComplexCellLayer(V1, n_orient=8, pool=2, name="V1_complex")
+
+    say("V2: from the complex-cell maps OF PHOTOGRAPHS ...")
+    v2_patches = _sample_patches(ims, [complex_], k=5, per_image=8, seed=4)
+    V2 = SpikingConvLayer(complex_.n_orient, n_v2, 5, name="V2", lr=0.03, seed=5)
+    V2.train(v2_patches, epochs=5, init="kmeans")
+    pool = SpikingPool(2, name="pool")
+
+    say("V4: over pooled V2 OF PHOTOGRAPHS ...")
+    v4_patches = _sample_patches(ims, [complex_, V2, pool], k=3, per_image=8,
+                                 seed=8)
+    V4 = SpikingConvLayer(n_v2, n_v4, 3, name="V4", lr=0.03, seed=9)
+    V4.train(v4_patches, epochs=5, init="kmeans")
+
+    hierarchy = VisionHierarchy().add(complex_).add(V2).add(pool).add(V4)
+    say(f"   V1 {len(v1_patches)} patches, V2 {len(v2_patches)}, "
+        f"V4 {len(v4_patches)}")
+    return VentralStream(V1, complex_, V2, pool, V4, hierarchy, size=size)
