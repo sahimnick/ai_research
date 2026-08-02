@@ -4984,11 +4984,82 @@ localisation machinery fell from 0.943 to 0.094.
 So this establishes that the *selection mechanism* is sound and that biased
 competition is real in this architecture. It does **not** establish that
 attention would survive on video, and the honest expectation from §9.24 is that
-it would degrade the same way. That test is not run here.
+it would degrade the same way.
+
+> **That expectation was tested in §9.29 and was wrong.** On real VOT video, with
+> the target's appearance genuinely changing, selection holds at 0.818 after 32
+> frames. The prediction recorded here is left standing as written, and the
+> refutation is the result.
 
 Exposed as `VentralStream.attention_map`, additively — `attend()` and
 `_attention_heatmap` are left alone, so no classification number published
 elsewhere in this document moves.
+
+## 9.29 Attention does survive on video — my own expectation, tested and refuted
+
+§9.28 ended by stating, without running the test, that top-down selection would
+probably not survive on video: "the honest expectation from §9.24 is that it
+would degrade the same way." An expectation asserted is not a result, and this
+one was wrong.
+
+Each scene holds **two competitors differing in exactly one way**. The *target*
+is a real VOT object tagged at frame 0, whose appearance then genuinely changes
+— it translates, rotates, scales, deforms and relights as the video runs. The
+*distractor* is a composited patch, pixel-identical at every frame. Both are
+cued through the identical machinery. The search field is fixed per sequence and
+frames are dropped when ground truth leaves it, so "harder to find" cannot mean
+"no longer in the picture". 11 sequences.
+
+| lag (frames) | target *(really changes)* | distractor *(identical)* | never-present cue | switch rate |
+|---|---|---|---|---|
+| 0 | 1.000 | 0.909 | 0.091 | 0.909 |
+| 4 | 1.000 | 1.000 | 0.273 | 1.000 |
+| 8 | 0.818 | 0.909 | 0.091 | 0.727 |
+| 16 | 0.818 | 1.000 | 0.091 | 0.818 |
+| 32 | **0.818** | 1.000 | 0.273 | 0.818 |
+
+**Selection of the real, changing target holds at 0.818 after 32 frames**, with
+a switch rate of 0.818 — the answer still moves when only the cue moves. The
+decay is 0.182, which on 11 sequences is two of them.
+
+The distractor locates the cause of what little decay there is: cued through the
+same machinery in the same frames, the pixel-identical competitor does not decay
+at all (−0.091). So the mechanism is intact and what costs it is the object
+changing — but far less than §9.28 predicted.
+
+### A control of mine that was biased toward my own conclusion
+
+The never-present control object was first tagged at the **distractor's** slot,
+so its tag carried that corner's background statistics and was pushed away from
+the target — which flatters the real tag. Re-tagged at the *target's* position,
+so the bias runs against the hypothesis instead, the numbers are unchanged
+(0.818 at lag 32, control 0.091–0.273). The result is robust to the fix, but the
+first version should not have been written that way.
+
+### Reconciling this with §9.24, which is not a contradiction
+
+§9.24 measured this same machinery on VOT and got 0.094. Here it gets 0.818. The
+tasks differ in two ways that fully account for it:
+
+* §9.24 ran **one-pass evaluation**: the search window follows the tracker's own
+  prediction across ~50 frames, so error accumulates and a single drift is
+  unrecoverable. Here the field is re-anchored every frame and nothing
+  accumulates.
+* §9.24 scored **continuous precise localisation** by IoU, on targets as thin as
+  3 px. This scores a **two-alternative choice** between well-separated slots.
+
+> The tag's signal degrades under appearance change but retains enough to answer
+> *which of these two things*, and not enough to answer *exactly where,
+> continuously, without drifting*. Both §9.24 and this are true, and together
+> they say what the representation is actually good for: **selection, not
+> precise tracking.**
+
+### What this does not establish
+
+11 sequences, so 0.818 is nine of them. 32 frames is about one second at 30 fps —
+long enough for real appearance change in these sequences, but not a long
+horizon. And a two-alternative choice is a coarse measure; §9.24 is the record
+of what happens when the same signal is asked for something finer.
 
 ---
 
