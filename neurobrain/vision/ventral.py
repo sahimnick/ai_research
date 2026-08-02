@@ -1458,3 +1458,78 @@ def code_participation(X: np.ndarray) -> float:
     ev = np.linalg.eigvalsh(M)
     ev = ev[ev > max(float(ev.max()), 0.0) * 1e-12]
     return float(ev.sum() ** 2 / (ev ** 2).sum()) if len(ev) else 0.0
+
+
+def retinal_opponent(im: np.ndarray) -> np.ndarray:
+    """``(3, H, W)`` -- luminance, red-green, blue-yellow. Values in 0..1.
+
+    The same three channels primate retina builds, and the same ones
+    `benchmarks/real_binding.opponent` already feeds the one-stage eye, where
+    they took the class-mean read-out from 0.288 to 0.365. The four-stage
+    ventral stream has always been run on luminance alone -- not by design, only
+    because nothing ever connected the two. `SpikingConvLayer` takes
+    ``in_channels`` and has since it was written.
+    """
+    a = np.asarray(im, np.float32)
+    if a.ndim == 2:
+        a = np.stack([a, a, a])
+    if a.shape[0] != 3 and a.shape[-1] == 3:
+        a = a.transpose(2, 0, 1)
+    if a.max() > 1.5:
+        a = a / 255.0
+    r, g, b = a[0], a[1], a[2]
+
+    def n(c):
+        c = c - c.min()
+        m = float(c.max())
+        return c / m if m > 1e-6 else c
+    return np.stack([n((r + g + b) / 3.0), n(r - g), n(b - (r + g) / 2.0)])
+
+
+def build_ventral_colour(images: np.ndarray, n_v1: int = 12, n_v2: int = 36,
+                         n_v4: int = 44, size: int = 96,
+                         verbose: bool = False) -> VentralStream:
+    """The four areas with a **three-channel retina** in front of V1.
+
+    Identical to :func:`build_ventral_stream_on` except that V1 receives
+    ``(luminance, red-green, blue-yellow)`` instead of luminance alone, so a
+    difference between them is the colour channels and nothing else.
+
+    ``images`` must be colour: ``(n, 3, H, W)`` or ``(n, H, W, 3)``.
+    """
+    def say(*a):
+        if verbose:
+            print(*a, flush=True)
+
+    ims = np.stack([retinal_opponent(im) for im in images])
+    say(f"retina: {len(ims)} photographs -> 3 opponent channels "
+        f"{ims.shape[1:]} ...")
+
+    rng = np.random.default_rng(0)
+    v1_patches = []
+    for im in ims:
+        C, H, W = im.shape
+        for _ in range(12):
+            y = rng.integers(0, H - 11 + 1)
+            x = rng.integers(0, W - 11 + 1)
+            p = im[:, y:y + 11, x:x + 11]
+            if float(p.max()) - float(p.min()) > 0.05:
+                v1_patches.append(p.copy())
+    V1 = SpikingConvLayer(3, n_v1, 11, stride=1, name="V1", lr=0.04, seed=1)
+    V1.train(np.stack(v1_patches), epochs=6, init="kmeans")
+    complex_ = ComplexCellLayer(V1, n_orient=8, pool=2, name="V1_complex")
+
+    say("V2 over colour-driven complex cells ...")
+    v2_patches = _sample_patches(ims, [complex_], k=5, per_image=8, seed=4)
+    V2 = SpikingConvLayer(complex_.n_orient, n_v2, 5, name="V2", lr=0.03, seed=5)
+    V2.train(v2_patches, epochs=5, init="kmeans")
+    pool = SpikingPool(2, name="pool")
+
+    say("V4 over pooled colour V2 ...")
+    v4_patches = _sample_patches(ims, [complex_, V2, pool], k=3, per_image=8,
+                                 seed=8)
+    V4 = SpikingConvLayer(n_v2, n_v4, 3, name="V4", lr=0.03, seed=9)
+    V4.train(v4_patches, epochs=5, init="kmeans")
+
+    hierarchy = VisionHierarchy().add(complex_).add(V2).add(pool).add(V4)
+    return VentralStream(V1, complex_, V2, pool, V4, hierarchy, size=size)
