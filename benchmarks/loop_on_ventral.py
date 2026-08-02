@@ -65,14 +65,7 @@ FRONTS = ("V2", "V4")
 ARMS = ("feedforward", "loop-1", "loop-20", "loop-20-noteach")
 
 
-def participation_ratio(X):
-    X = np.asarray(X, np.float32)
-    if len(X) < 2:
-        return 0.0
-    C = np.cov(X - X.mean(0), rowvar=False)
-    ev = np.linalg.eigvalsh(C)
-    ev = ev[ev > 0]
-    return float(ev.sum() ** 2 / (ev ** 2).sum()) if len(ev) else 0.0
+from neurobrain.vision.ventral import code_participation as participation_ratio
 
 
 def probe(V, y, tr, te, seed, epochs=300):

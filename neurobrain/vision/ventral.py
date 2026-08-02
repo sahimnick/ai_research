@@ -1435,3 +1435,26 @@ def stage_extents(size: int) -> List[Tuple[str, Tuple[int, ...], int]]:
     h = h - 3 + 1
     out.append(("V4", (44, h, h), h * h * 12))
     return out
+
+
+def code_participation(X: np.ndarray) -> float:
+    """Effective dimensionality of a set of codes, ``(sum l)^2 / sum l^2``.
+
+    Computed through whichever of the two Gram matrices is smaller. The direct
+    form builds a ``D x D`` covariance, and at a 96 px canvas V2 is
+    ``36 x 39 x 39 = 54,756`` units -- a **22.3 GiB** allocation that killed the
+    first run at that size.
+
+    With ``N`` samples the centred covariance has rank at most ``N``, so the
+    ``N x N`` Gram carries exactly the same non-zero eigenvalues up to a common
+    factor, and the ratio above is invariant to that factor. This is the same
+    number, not an approximation of it.
+    """
+    X = np.asarray(X, np.float64)
+    if X.ndim != 2 or len(X) < 2:
+        return 0.0
+    Z = X - X.mean(0)
+    M = Z @ Z.T if Z.shape[0] <= Z.shape[1] else Z.T @ Z
+    ev = np.linalg.eigvalsh(M)
+    ev = ev[ev > max(float(ev.max()), 0.0) * 1e-12]
+    return float(ev.sum() ** 2 / (ev ** 2).sum()) if len(ev) else 0.0
