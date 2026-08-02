@@ -5143,6 +5143,88 @@ representation is not what rescues it.
 sequences is possible; the numbers above are aggregates and a paired comparison
 is what would be needed to put an interval on that 0.004 gap.
 
+## 9.31 Distance and shadow — and the first property where depth wins
+
+The goal asks for **درک رنگ و ویژگیهای خاص مانند فاصله، عمق، سایه، ارتباط**.
+Colour was measured in §9.18 and falsified, with the cause located in
+`ComplexCellLayer`. **Distance and shadow had never been measured at all** —
+flagged as missing many times in this document and never returned to. Two of
+them can be asked with data already on disk and without inventing ground truth.
+
+### Distance, from a cue the world produced
+
+As a tracked object approaches or recedes its **annotated box grows or
+shrinks**, so VOT ground truth contains a real relative-distance signal that
+this benchmark did not manufacture. Frames are rescaled to a constant canvas, so
+what is predicted is the object's *angular* size rather than how big the source
+video was.
+
+| log angular size, R² | held-out sequences | within-sequence |
+|---|---|---|
+| V2 | 0.015 | 0.530 |
+| pool | −0.013 | 0.574 |
+| **V4** | −0.189 | **0.585** |
+| pixels | **0.213** | 0.360 |
+
+Both splits are reported because only both together separate two very different
+claims. §9.27 established that this code carries ~nothing across unseen scenes
+about *anything*, so a by-sequence null cannot by itself say that **distance**
+is missing.
+
+**And it is not missing.** Within a sequence the eye reads angular size at
+**0.585**, well above raw pixels at 0.360. The signal is in the code, it is
+stronger than a plain image compression carries, and — as with everything else
+here — it does not transfer to unseen scenes. The right conclusion is the §9.27
+one, not a property-specific failure.
+
+> **This is the first property in this document where depth helps.** V4 0.585 >
+> pool 0.574 > V2 0.530. Every localisation result has gone the other way — V2
+> beat V4 in §9.21 (0.943 vs 0.614), §9.23 (0.834 vs 0.729) and §9.30 — and the
+> two orderings are the same fact seen twice: **pooling discards position and
+> preserves scale.** A stage that throws away *where* something is, while
+> keeping *how big* it is, should be worse at localisation and better at size,
+> and it is both.
+
+That is a coherent functional account of what these stages do, arrived at from
+two measurements that were designed independently and disagree in exactly the
+way the architecture predicts.
+
+### Shadow: not separated from an object at all
+
+A shadow changes **illumination** while leaving reflectance unchanged. Each
+frame is perturbed two ways in the same region — multiplied down (a shadow) or
+replaced with a different image patch (a new object) — and each is normalised by
+how much it moved the **pixels**, so the statistic is code change *per unit
+pixel change*.
+
+| arm | shadow | object | ratio |
+|---|---|---|---|
+| V2 | 34.57 | 32.82 | 1.053 |
+| pool | 33.82 | 32.07 | 1.055 |
+| V4 | 35.22 | 31.96 | 1.102 |
+| pixels *(null: ratio 1 by construction)* | 9.22 | 8.82 | 1.045 |
+
+**Every area sits at the pixel null.** A shadow edge and an object edge are the
+same event to this eye — V4 is marginally *worse* than the null (1.102). Nothing
+in these four stages separates illumination from reflectance, and no amount of
+re-developing addresses that, because there is no mechanism in the architecture
+that could: the layers compute oriented energy, and a shadow boundary has
+oriented energy exactly as an object boundary does.
+
+One thing the table shows in passing and is worth recording: the eye's
+sensitivity is **~34 against the pixel arm's ~9**, so this code amplifies any
+pixel change by about 3.7×. That is the same fragility §9.20 measured under
+translation, appearing here under illumination.
+
+### Where the goal's property list now stands
+
+| property | status |
+|---|---|
+| رنگ colour | measured, **falsified** (§9.18, −0.135; cause located in `ComplexCellLayer`) |
+| فاصله / عمق distance | **present within scenes** (0.585, above pixels' 0.360), does not transfer |
+| سایه shadow | measured, **absent** — at the pixel null, with no mechanism that could do otherwise |
+| ارتباط relations | still unmeasured |
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
