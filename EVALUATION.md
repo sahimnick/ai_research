@@ -3823,6 +3823,75 @@ interventions varied that one stage.
 
 ---
 
+## 9.15 The four-stage eye existed all along — measured, it stops helping after V2
+
+§9.14 concluded the missing hierarchy was the eye's real gap. Looking for where
+to add stages turned up something worse: **`neurobrain/vision/ventral.py`
+already contains a complete spiking ventral stream** — retina → V1 (edges) → V1
+complex (phase-invariant) → V2 (corners, junctions) → pool → V4
+(curvature/shape) — every area convolutional and retinotopic, every filter
+learned by competitive Hebbian plasticity, plus a `TraceInvarianceLayer` that
+learns transformation invariance from objects moving in time.
+
+It appears in **no benchmark** and **zero times in EVALUATION.md**. Sixty
+kilobytes of four-stage visual cortex, built and never measured, while thirteen
+interventions were run on the one-stage `WideV1`.
+
+`benchmarks/ventral_audit.py` measures every area on the same photographs every
+other visual number used.
+
+| stage | dim | cluster AUC | probe | participation | live units | spikes |
+|---|---|---|---|---|---|---|
+| `WideV1` *(what every number used)* | 4096 | 0.565 | 0.316 | 27.2 | 0.64 | — |
+| V1 complex | 968 | 0.562 | 0.354 | 20.8 | 0.75 | 254 |
+| **V2** | 1764 | **0.576** | **0.358** | 66.8 | 0.71 | 588 |
+| pool | 324 | 0.570 | 0.288 | 35.0 | 0.89 | 214 |
+| **V4** | 44 | **0.526** | **0.246** | **7.9** | 0.66 | **12** |
+
+**No area is dead** — 0.66 to 0.89 of units fire somewhere across the set, so
+every stage does carry signal and a loop built on any of them would have
+something to work with. That was the thing worth checking before trusting any
+of it.
+
+**The four-stage eye does beat the one-stage eye, modestly.** V2's probe is
+0.358 against `WideV1`'s 0.316, **+0.042** — with 1 764 units against 4 096.
+
+**But the hierarchy is not monotone: only 1 of 3 steps improves.** It rises to
+V2 and then falls, and V4 — the stage nearest to object identity, the one the
+whole architecture is pointed at — is the worst thing in the table. Its cluster
+AUC of 0.526 is **below raw pixels' 0.532**, its participation ratio is 7.9, and
+real photographs raise an average of **12 spikes** in it.
+
+### The stream is not broken; it is out of domain
+
+Its own self-test, printed while building, is excellent:
+
+> learned view-invariance 34%, discriminability +0.34 · **shape recognition 99%**
+> (5 classes, chance 20%) · **complex-object recognition 92%** (12 classes,
+> chance 8%) · **IT cell purity 87%**
+
+So the architecture works on what it was built for. The catch is what it was
+built *on*: each area is developed on its own hand-made stimulus set —
+`oriented_edges` for V1, `corner_images` + `curve_images` for V2,
+`curve_images` + `shape_images` for V4 — line drawings, not photographs. V4's
+filters are tuned to synthetic curvature, and a CIFAR photograph does not
+contain it. Twelve spikes is what that looks like from the outside.
+
+> The eye's stages are not too few and not badly designed. **The later ones were
+> never shown the data the whole project is evaluated on.**
+
+That is a different defect from any of the thirteen, and it is the first one
+that is cheap to act on: develop the higher areas on photographs rather than on
+line drawings, and re-run this table.
+
+### What it means for the loop
+
+The closed circuit should be built on **V2**, not V4 — V2 is where this stream's
+information actually peaks on photographs. Building a predictive loop on a stage
+raising 12 spikes would be measuring the loop's ability to amplify nothing.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
