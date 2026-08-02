@@ -4421,17 +4421,46 @@ background. The tag therefore ends up nearly parallel to the background's mean
 V4 is the least damaged (0.651), consistent with it being the most
 feature-selective stage — and it is still far from usable.
 
-### What is and is not decided
+### The spatial-template arm, and H21 resolved
 
-Falsified: **the implemented mechanism** does not localise. That is a fact about
-the code, and `attend()`'s premise does not hold.
+The averaging is a fact about the *prototype*, not about retinotopy — so the
+same normalised cross-correlation the pixel arm gets was run in feature space,
+over the area's own map, keeping the tag as a spatial patch instead of averaging
+it away.
 
-**Not** decided: whether retinotopy supports localisation *in principle*. A
-mean-vector tag throws away the spatial layout that `pixels-NCC` exploits to
-score 1.000, so H21's underlying claim needs a spatial-template arm —
-cross-correlating the map patch rather than a single averaged vector — before it
-can be answered either way. That arm is not written, and the claim is left open
-rather than resolved in the favourable direction.
+| arm | t0 (tag's own frame) | **while moving** (t1–t5) |
+|---|---|---|
+| eye-V2, mean-vector tag *(as implemented)* | 0.071 | 0.114 |
+| eye-V4, mean-vector tag | 0.000 | 0.000 |
+| **eye-V2, spatial template** | **1.000** | **0.943** |
+| eye-V4, spatial template | 1.000 | 0.614 |
+| pixels-NCC | 1.000 | 1.000 |
+| shuffled tag *(chance)* | 0.214 | 0.243 |
+
+**H21 is supported, and the fault is located precisely.** The V2 map carries a
+findable signature of the object and holds it across 114 px of motion — 0.943
+against a shuffled control of 0.243. What fails is `_attention_heatmap`'s
+reduction of the tag to one mean channel vector, which throws away the layout
+that makes it findable.
+
+> Retinotopy **supports** localisation. §9.20's "the eye never leaves
+> retinotopy" is the cost side of the same fact, and this is the benefit side:
+> the map moves the object rather than destroying it, so a spatial tag still
+> finds it. The stage that recognises worst under translation is the stage that
+> localises best.
+
+Three things this does not claim. `pixels-NCC` still scores 1.000, and the
+composited object is *pixel-identical* at every position, so it is matching a
+perfect template — the easiest possible case, and beating it was never the bar.
+V4 localises **worse** than V2 (0.614 vs 0.943), as pooling discards the
+position that localisation needs. And this is localisation of an unchanged
+template: real tracking must survive appearance change, which nothing here
+tests.
+
+The measured capability is therefore available to the system but was not
+reachable through the implemented mechanism; `VentralStream.locate` exposes it
+without altering `attend()`, whose classification numbers elsewhere in this
+document would otherwise move.
 
 ---
 

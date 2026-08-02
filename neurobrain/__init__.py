@@ -202,6 +202,7 @@ from .memory.relational import RelationalMemory
 from .core.biophysical import BiophysicalCircuit, nmda_mg_block
 from .vision.ventral import (SpikingConvLayer, ComplexCellLayer, ITLayer, SpikingPool,
                      VisionHierarchy, VentralStream, build_ventral_stream,
+                     locate_template,
                      oriented_edges, corner_images, curve_images, shape_images,
                      hard_shape_images, two_object_image, SHAPE_CLASSES,
                      gabor_kernel, preferred_orientation, orientation_selectivity,

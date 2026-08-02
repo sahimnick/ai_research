@@ -1172,6 +1172,102 @@ class VentralStream:
                   for p in self.it_class_proto]
         return self.it_names[int(np.argmax(scores))]
 
+    def area_map(self, image: np.ndarray, area: str = "V2") -> np.ndarray:
+        """One area's ``(channels, H, W)`` map for ``image``."""
+        self.hierarchy.forward(image)
+        names = [getattr(l, "name", type(l).__name__)
+                 for l in self.hierarchy.layers]
+        if area not in names:
+            raise ValueError(f"no area {area!r}; have {names}")
+        return np.asarray(self.hierarchy.layers[names.index(area)].log["output"],
+                          np.float32)
+
+    def tag(self, image: np.ndarray, box: Tuple[int, int, int, int],
+            area: str = "V2") -> np.ndarray:
+        """A spatial tag for the region ``box = (y, x, h, w)`` of ``image``.
+
+        Kept as a **patch** of the area's map rather than averaged to one
+        vector, which is what makes it findable again -- see
+        :func:`locate_template`.
+        """
+        m = self.area_map(image, area)
+        _, gh, gw = m.shape
+        ih, iw = np.asarray(image).shape[-2:]
+        y, x, h, w = box
+        r0, c0 = int(y * gh / ih), int(x * gw / iw)
+        r1 = max(int((y + h) * gh / ih) + 1, r0 + 1)
+        c1 = max(int((x + w) * gw / iw) + 1, c0 + 1)
+        return m[:, r0:r1, c0:c1]
+
+    def locate(self, image: np.ndarray, tag: np.ndarray,
+               area: str = "V2") -> Tuple[int, int]:
+        """Where in ``image`` is ``tag``? Returns a pixel ``(y, x)`` centre.
+
+        Tag-driven localisation: the top-down "where" counterpart to
+        :meth:`attend`'s "what". Measured in §9.21 at a 0.943 hit rate across
+        114 px of object motion, against 0.243 for a shuffled tag. V2 localises
+        better than V4 (0.943 vs 0.614) because pooling discards the position
+        this needs, so the default area is V2 rather than the deepest stage.
+        """
+        m = self.area_map(image, area)
+        (r, c), _ = locate_template(m, tag)
+        th, tw = np.asarray(tag).shape[1:]
+        _, gh, gw = m.shape
+        ih, iw = np.asarray(image).shape[-2:]
+        return (int(round((r + (th - 1) / 2.0) * ih / gh)),
+                int(round((c + (tw - 1) / 2.0) * iw / gw)))
+
+
+def _box_sum(a: np.ndarray, th: int, tw: int) -> np.ndarray:
+    """Sums of every ``(th, tw)`` window, by integral image."""
+    c = np.cumsum(np.cumsum(a, 0), 1)
+    c = np.pad(c, ((1, 0), (1, 0)))
+    return c[th:, tw:] - c[:-th, tw:] - c[th:, :-tw] + c[:-th, :-tw]
+
+
+def locate_template(area_map: np.ndarray, template: np.ndarray) -> Tuple[
+        Tuple[int, int], np.ndarray]:
+    """Find ``template`` in ``area_map`` by normalised cross-correlation.
+
+    Both are ``(channels, height, width)`` blocks of the *same* cortical area.
+    Returns the peak's top-left cell and the full correlation map.
+
+    Why this exists beside :meth:`VentralStream._attention_heatmap`, which is
+    also a "where is it" computation: that one correlates a **single mean
+    channel vector** against each location, and measurement (§9.21) showed it
+    cannot find an object even in the frame its tag came from -- 0.000, against
+    0.188 for a deliberately *wrong* tag. Averaging over the object's footprint
+    converges on the global mean, because neighbouring locations in these maps
+    are highly distinct (mean pairwise cosine 0.125 at V2); the object's mean
+    then sits at cosine 0.943 to the background's and matches everywhere.
+
+    Keeping the tag as a **spatial patch** instead localises at 0.943 across
+    114 px of motion, against a shuffled-tag control of 0.243. The map carries a
+    findable signature of the object; only the averaged prototype does not.
+    """
+    m = np.asarray(area_map, np.float32)
+    t = np.asarray(template, np.float32)
+    if m.ndim != 3 or t.ndim != 3 or m.shape[0] != t.shape[0]:
+        raise ValueError("area_map and template must be (C, H, W) on one area")
+    c, gh, gw = m.shape
+    th, tw = t.shape[1:]
+    if gh < th or gw < tw:
+        raise ValueError(f"template {th}x{tw} larger than map {gh}x{gw}")
+    n = float(c * th * tw)
+    cross = np.zeros((gh - th + 1, gw - tw + 1), np.float32)
+    for k in range(c):                       # channel-blocked: the windowed
+        w = np.lib.stride_tricks.sliding_window_view(m[k], (th, tw))
+        cross += np.einsum("ijkl,kl->ij", w, t[k])       # view stays small
+    s1 = _box_sum(m.sum(0), th, tw)
+    s2 = _box_sum((m ** 2).sum(0), th, tw)
+    tm = float(t.sum()) / n
+    num = cross - s1 * tm
+    den = (np.sqrt(np.maximum(s2 - s1 ** 2 / n, 0.0))
+           * np.linalg.norm(t - tm) + 1e-9)
+    score = num / den
+    r, col = np.unravel_index(int(np.argmax(score)), score.shape)
+    return (int(r), int(col)), score
+
 
 def _fit_readout(X: np.ndarray, labels: np.ndarray, n_classes: int,
                  lam: float = 1.0, seed: int = 0):
