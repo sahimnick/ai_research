@@ -3591,7 +3591,11 @@ same 32-px grayscale frames, the same `cluster_auc`, the same split.
 | CNN, backprop, **12 000 images** | **0.698** | **0.585** |
 
 **On the same data, gradients buy nothing.** −0.0134 for the CNN, comfortably
-inside the noise §9.10 established. A loss function, labels and backpropagation
+inside the noise §9.10 established.
+
+> **§9.14 corrects the framing of this section.** The CNN figures here are its
+> *final* layer, three blocks deep, against a single-stage V1. At matched depth
+> the front ends are comparable; the gap is the missing hierarchy, not the rule. A loss function, labels and backpropagation
 produce no better a representation than a local Hebbian rule when both see 240
 photographs. The learning rule was never the eye's problem.
 
@@ -3757,6 +3761,65 @@ Three reasons, and none of them is "the papers are wrong":
 So: the benchmark was partly wrong, the system is not fine, and the reason the
 literature does not reproduce here is that neither the measurement nor the
 implementation was ever matched to it.
+
+---
+
+## 9.14 V1 was never the weak part — the missing stages were
+
+A reader's objection, and it is correct: the visual system is V1 → V2 → V4 →
+IT, object identity lives at the far end of that, and V1 codes oriented edges.
+Every visual number in this project is `cluster_auc` on **V1's output**, asked
+to separate *categories* — which is not the question V1 answers.
+
+Worse, §9.11 compared that V1 code against a CNN's **final** layer, three
+convolutional blocks deep, and attributed the resulting 0.11 gap to the
+learning rule. Those are not the same depth. `benchmarks/depth_matched.py`
+reads the **same trained network** at three taps — not three networks, which
+would confound depth with capacity and training budget:
+
+| stage | cluster AUC | probe accuracy |
+|---|---|---|
+| **this project's V1** | **0.565** | 0.316 |
+| CNN conv1 *(the honest V1 analogue)* | 0.549 | 0.399 |
+| CNN conv2 | 0.613 | 0.514 |
+| CNN conv3 *(what §9.11 compared against)* | **0.706** | **0.580** |
+
+**At matched depth the two front ends are comparable**, and the two metrics
+disagree about which is ahead: this project's V1 is **+0.016 on cluster AUC**
+and **−0.083 on the probe**. The disagreement is worth keeping rather than
+resolving — V1's code has the better cosine-neighbourhood structure, conv1's is
+the more linearly separable, and neither difference is large.
+
+**Depth inside the CNN is worth +0.157 cluster AUC and +0.181 probe accuracy** —
+roughly ten times the matched-depth difference on one metric and twice it on the
+other.
+
+> §9.11's conclusion that "the learning rule was never the eye's problem" stands
+> and is strengthened. What does not stand is the implication that the 0.11 gap
+> measured the rule at all. It measured **three stages of hierarchy this project
+> does not have.**
+
+### Which makes one old negative result the central open question
+
+`second_stage.py` (§7) built a V2 and it *lost* a third of the accuracy, with a
+concatenated arm — which can only fail by V2 adding nothing — landing at −0.014.
+That was read as "depth does not help here". It cannot bear that reading:
+
+* the V2 used the **same competitive rule** §9.11 later measured to be
+  insensitive to data;
+* it was tested at **one small data budget**;
+* and depth in a gradient-trained network of the same shape is now measured to
+  be worth **+0.157**, the largest single effect in any visual measurement this
+  project has made.
+
+So the question is not *does depth help* — in a comparable architecture it
+plainly does — but **why this project's V2 destroyed information where the
+CNN's second block adds it.** That has never been separated from the rule's
+data-insensitivity, and the two are the same suspect.
+
+The project's eye has been V1 → concepts throughout: one cortical stage standing
+in for four, with the association layer asked to make up the difference. Thirteen
+interventions varied that one stage.
 
 ---
 
