@@ -4636,6 +4636,79 @@ does next*, gating the read-out or the next fixation — is a separate mechanism
 and `attend()`, the one that would do it, is built on the averaged prototype
 §9.21 showed cannot localise.
 
+## 9.24 On a real tracking benchmark, the CCTV result does not transfer
+
+§9.23 scored tag-driven localisation with the *metrics* a tracking benchmark
+uses, and said plainly that this was not the same as a benchmark **dataset**.
+VOT2019 turned out to be reachable from this environment, so that gap closes
+here: 12 sequences, real 30 fps video, human-annotated ground truth, one-pass
+evaluation — initialise from ground truth on frame 1, then track on the
+tracker's own predictions and let error accumulate.
+
+Every sequence is rescaled so its target is ~40 px and the search window is a
+constant 160 px around the last prediction, so "which sequence" and "how big the
+object is" do not vary together.
+
+**What the tracker is, stated before the numbers.** A fixed template: tag the
+target once, then find it again by normalised cross-correlation over the area's
+map. No model update, no scale search, no motion model, no re-detection. That is
+about the weakest tracker there is — roughly the classical NCC baseline — so
+these absolute numbers are **not comparable to published VOT trackers**, and no
+such comparison is made. What is measured is the arms' relative standing under
+an identical protocol.
+
+| arm | prec@20px | success AUC | median err |
+|---|---|---|---|
+| eye-V2 | 0.157 | 0.094 | 129.4 px |
+| eye-V4 | 0.112 | 0.060 | 179.8 px |
+| **pixels-NCC** | **0.306** | **0.172** | 110.9 px |
+| shuffled-tag *(chance)* | 0.039 | 0.025 | 93.8 px |
+
+Two readings, and the second is the one that matters.
+
+**The eye clears chance.** 0.094 against a shuffled tag's 0.025 — the map does
+carry a localisable signature of the target on real video, and this is not
+nothing.
+
+**And raw pixels are twice as good, on both metrics.** 0.172 vs 0.094 on success
+AUC, 0.306 vs 0.157 on precision@20px. §9.23's headline — eye-V2 at 0.834
+success AUC on live CCTV — **does not transfer**. A static camera re-read after
+105 s asks whether a tag survives content change at a *fixed place*; 30 fps video
+asks it to survive an object translating, rotating, changing scale and
+deforming, and under that the eye falls to a ninth of its CCTV score while
+staying above chance.
+
+That is consistent with everything §9.20 measured rather than a surprise: the
+eye's code is fragile to transformation, real video is continuous
+transformation, and CCTV's static geometry was exactly the condition that hid
+it.
+
+### One disadvantage of the eye's that is instrumental, and does not rescue it
+
+Several VOT targets are extremely thin after rescaling — `wheel` is 40×3 px,
+`polo` 40×13. A V2 cell is ~2.25 px at this window size, so the map quantises the
+answer by more than the height of the target, and IoU on a 3-px-tall box is
+destroyed by a sub-cell error. Success AUC therefore penalises the eye for its
+grid in a way it does not penalise pixel matching at 1-px resolution.
+
+But the conclusion does not rest on that metric. **Precision@20px is
+quantisation-insensitive at this scale and the eye still loses two to one**
+(0.157 vs 0.306), and median error agrees in direction (129 vs 111 px). The
+instrument disadvantage is real, it is stated, and it is not what decides this.
+
+V4 is worse than V2 again (0.060 vs 0.094), the third independent benchmark to
+find pooling discarding the position that localisation needs.
+
+### What component (4) now stands at
+
+**ارزیابی بر اساس بنچمارکهای روز دنیا** is satisfied in the sense that a real,
+current benchmark dataset with published protocol and metrics has been run, and
+it is *not* satisfied in the sense of a competitive score: this tracker is not
+built to compete and its numbers should not be quoted against VOT leaderboards.
+The value here is that the eye's representation was finally asked a question by
+data this project did not choose, and the answer was worse than the answer it
+gave on data this project did choose.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
