@@ -4064,6 +4064,72 @@ proposed here.
 
 ---
 
+## 9.18 Colour destroys this hierarchy, and the complex layer is why
+
+Colour was worth **+0.077** to the one-stage eye (`real_binding.opponent`:
+0.288 → 0.365), the categories lean on it — sky is blue, frogs are green — and
+`SpikingConvLayer` has accepted `in_channels` since it was written. Nothing had
+ever connected the retina's three opponent channels to the four-stage stream.
+
+`build_ventral_colour` does exactly that and changes nothing else.
+**H18 is falsified, and not narrowly:**
+
+| stage | luminance probe | colour probe | Δ |
+|---|---|---|---|
+| V1 complex | **0.410** | 0.208 | **−0.2014** |
+| V2 | 0.371 | 0.260 | −0.1111 |
+| pool | 0.410 | 0.236 | −0.1736 |
+| V4 | 0.323 | 0.264 | −0.0590 |
+
+### The confound I introduced, and the control that removes it
+
+The two builders differed in **two** things, not one: the luminance V1 seeds
+from Gabors (`init="gabor"`) and the colour V1 cannot, because Gabor seeding is
+single-channel, so it seeds from k-means. That is exactly the error this project
+keeps catching in its own past work, made fresh.
+
+Matched initialisation:
+
+| stream | V1 init | best probe |
+|---|---|---|
+| luminance | gabor | 0.410 |
+| **luminance** | **kmeans** | **0.399** |
+| **colour** | **kmeans** | **0.264** |
+
+The initialisation is worth −0.011. **The colour loss is −0.135 at matched
+init** — real, and an order of magnitude larger than the confound.
+
+### Where it goes, and it is not deep in the hierarchy
+
+The damage is **largest at the first stage after the retina** (−0.201 at V1
+complex) and *shrinks* with depth (−0.059 by V4). Whatever destroys chroma does
+it immediately, and the later areas partly recover.
+
+`ComplexCellLayer` builds each cell's quadrature partner as a **single-channel
+Gabor tiled across every input channel**:
+
+```python
+quad = np.stack([gabor_kernel(simple.k, p, phase=0.0).reshape(-1) for p in prefs])
+quad = np.tile(quad, (1, simple.in_channels))
+```
+
+So the complex cell's energy computation treats red-green and blue-yellow
+exactly as it treats luminance — it cannot tell an edge in brightness from an
+edge in colour, and sums their energies as though they were the same quantity.
+Its orientation assignment is also read from channel 0 alone
+(`simple.kernels()[:, 0]`), so a cell tuned to a chromatic boundary is filed
+under whatever its luminance channel happens to look like.
+
+> Colour information is useful — it was worth +0.077 one stage up. This
+> hierarchy specifically destroys it, at the complex layer, by construction.
+
+Stated as the place to look rather than repaired here: fixing it means a
+quadrature pair per channel and an orientation estimate over all three, which
+is a change to the complex cell's definition and deserves its own hypothesis
+and its own control rather than being folded into a negative result.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
