@@ -4783,6 +4783,13 @@ generic linear image basis stays at 0.83. The map from this eye's code back to
 image content is **scene-specific**: fit on eight videos, it is actively wrong on
 four others.
 
+> **Superseded in magnitude by §9.27.** These large negatives came from a
+> 12-sequence pool with sequential splits and do **not** reproduce: on the full
+> 60-sequence set with randomised splits the held-out R² is ~0.00, across three
+> development budgets and six decoder widths. The *direction* here stands — the
+> code carries nothing about an unseen scene — but "actively wrong" overstates
+> it. It carries nothing, rather than something anti-correlated.
+
 That is the same shape of finding as §9.24, where the CCTV result did not
 transfer to VOT, and as §9.20, where the code did not survive translation. Three
 different measurements, one pattern: **this representation is reliable on the
@@ -4852,10 +4859,83 @@ generalise beyond the development distribution is robust, reproduced across
 three independent held-out splits, and is now the best-supported single fact
 about this eye.
 
+> **Superseded in magnitude by §9.27**, on the same grounds as §9.25: this
+> ran on a 12-sequence pool, and the negatives do not reproduce on 60. The
+> replicated value is ~0.00 — the code carries *nothing* transferable, rather
+> than something actively wrong. The failure to generalise stands.
+
 Its **cause remains open**. Per the loop protocol this stops at the limiting
 factor rather than proposing the fix, and it also stops short of the stronger
 claim the data cannot carry: what is established is *that* the representation
 does not leave its distribution, not *why*.
+
+## 9.27 At 60 scenes: breadth still does not help, and §9.25's magnitude was wrong
+
+§9.26 could not decide whether the eye's non-generalisation is architectural or
+a data limit, because its manipulation (2→8 scenes, 96 frames, a 12-sequence
+pool) failed to move even the control. The whole VOT2019 set was reachable, so
+the experiment was rerun properly: **60 sequences**, breadths **2 → 8 → 32** (a
+16× range), 192 development frames held constant, 8 held-out sequences, three
+splits varying *which* sequences are held out.
+
+| area | k=2 | k=8 | k=32 | slope / doubling | sd |
+|---|---|---|---|---|---|
+| V2 | +0.021 | −0.013 | +0.020 | −0.000 | 0.007 |
+| pool | +0.029 | −0.017 | +0.010 | −0.005 | 0.006 |
+| V4 | +0.034 | −0.017 | +0.007 | −0.007 | 0.006 |
+| pixels *(control)* | 0.734 | 0.785 | 0.802 | +0.017 | 0.016 |
+
+**H22 is still not supported** — no area improves, and there is no monotonic
+trend at all: k=8 is the worst point for every area, with k=2 and k=32 both
+above it. Sixteen-fold more scenes changes nothing.
+
+The control still responds only weakly (+0.017 ± 0.016), so the strong form of
+the conclusion — *breadth cannot help* — remains unlicensed. But this run says
+something the narrow one could not, because the eye's numbers stopped being
+negative.
+
+### A correction to §9.25 and §9.26
+
+Those sections reported every eye area **negative** on unseen scenes — −0.19 to
+−0.86 — and I described the representation as "actively wrong" beyond its
+distribution. Here the same areas are **positive**, at +0.007 to +0.034.
+
+My first explanation was decoder overfitting: 96 samples fitting a 64-component
+ridge is a sample-to-parameter ratio of 1.5, which produces negative held-out R²
+by construction. That explanation is also wrong. Sweeping the decoder width
+against three development budgets, with everything encoded once:
+
+| budget | n/D from | to | eye R² band, all three areas | pixels |
+|---|---|---|---|---|
+| 96 | 24.0 | 1.5 | +0.008 … +0.030 | 0.49 → 0.74 |
+| 192 | 48.0 | 1.5 | −0.010 … +0.025 | 0.51 → 0.81 |
+| 320 | 80.0 | 2.5 | −0.040 … +0.015 | 0.50 → 0.83 |
+
+The eye's R² **does not track n/D**. At a ratio of 24 it is ~0.01 and at 1.5 it
+is ~0.005: flat. So it is not overfitting either. Across 3 budgets × 6 decoder
+widths × 3 areas the value sits in a band around **zero**, |R²| < 0.04, while
+raw pixels climb to 0.83 on the identical split.
+
+> The reproducible fact is that the eye's code carries **nothing** linearly
+> decodable about an unseen scene's image — not that it carries something
+> anti-correlated. §9.25 and §9.26's large negatives came from a 12-sequence
+> pool with sequential splits and do **not** reproduce on 60 sequences with
+> randomised ones. The direction of those sections stands; the magnitude, and
+> the phrase "actively wrong", do not.
+
+### What is established, stated at the magnitude the data supports
+
+Within its own scenes the code decodes the image at R² 0.39–0.47 (§9.25). Across
+unseen scenes it decodes at **0.00**, at every breadth from 2 to 32 scenes, at
+every decoder width from 4 to 128, at every budget from 96 to 320 frames, while
+a plain linear image basis reaches 0.80 on exactly the same frames.
+
+So the representation is **scene-specific rather than general**, and this is now
+the best-replicated fact in this document — but it is a statement about the
+*absence* of transferable information, which is weaker and more precise than
+what §9.25 claimed. Its cause is still not resolved: breadth does not fix it,
+decoder capacity is not the reason, and no test here separates the architecture
+from the development rule. Per the loop protocol that is where this stops.
 
 ---
 

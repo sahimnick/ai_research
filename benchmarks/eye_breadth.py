@@ -63,11 +63,15 @@ from eye_information import (RECON, SIZE, area_codes, block_mean,  # noqa: E402
                              pca, ridge_r2)
 
 VOT_DIR = sys.argv[2] if len(sys.argv) > 2 else "vot"
-BREADTHS = (2, 4, 8)
+#: Breadths and frame budget are arguments, not constants, so both the narrow
+#: §9.26 configuration (2,4,8 at 96 frames -- which came out underpowered) and
+#: the wide §9.27 one stay reproducible from this one file.
+BREADTHS = tuple(int(x) for x in sys.argv[3].split(",")) \
+    if len(sys.argv) > 3 else (2, 4, 8)
+DEV_FRAMES = int(sys.argv[4]) if len(sys.argv) > 4 else 96
+N_TEST_SEQ = int(sys.argv[5]) if len(sys.argv) > 5 else 4
+TEST_PER_SEQ = max(4, 96 // N_TEST_SEQ)
 SEEDS = (0, 1, 2)
-N_TEST_SEQ = 4
-DEV_FRAMES = 96          # the SAME budget at every breadth
-TEST_PER_SEQ = 24
 DIM = 64
 AREAS = ("V2", "pool", "V4")
 
@@ -164,11 +168,14 @@ def main():
               f"{slopes['pixels']['sd']:.4f}), and a manipulation that fails "
               f"to move a code built to benefit\n  from it is too weak to "
               f"license a negative about the eye. What survives is the "
-              f"ABSOLUTE\n  result, which does not depend on the slope: every "
-              f"eye arm is negative on unseen scenes at\n  EVERY breadth "
-              f"tested, while pixels hold ~0.75. The failure is robust; its "
-              f"cause is not\n  resolved here, and 2-8 scenes is too narrow a "
-              f"range to resolve it.")
+              f"ABSOLUTE\n  result, which does not depend on the slope: at "
+              f"every breadth in "
+              f"{'/'.join(str(k) for k in BREADTHS)}, the eye's\n  held-out R2 "
+              f"sits near ZERO while pixels hold ~0.8 on the identical split. "
+              f"It carries no\n  transferable image information at any breadth "
+              f"tested. Note the magnitude: near zero, NOT\n  strongly "
+              f"negative -- large negatives in earlier runs came from a "
+              f"12-sequence pool and did\n  not reproduce on 60.")
     res["underpowered"] = bool(not res["control_responds"])
 
     json.dump(res, open(out_path, "w"), indent=1)

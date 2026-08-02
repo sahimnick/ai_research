@@ -65,8 +65,17 @@ import numpy as np
 from neurobrain.vision.ventral import (build_ventral_stream_on,
                                        code_participation)
 
-VOT_DIR = sys.argv[2] if len(sys.argv) > 2 else "vot"
-N_FRAME = int(sys.argv[3]) if len(sys.argv) > 3 else 360
+def _arg(i, cast, default):
+    """Read argv defensively: this module is also IMPORTED (by eye_breadth),
+    and then argv belongs to the importing benchmark, not to this one."""
+    try:
+        return cast(sys.argv[i])
+    except (IndexError, ValueError, TypeError):
+        return default
+
+
+VOT_DIR = _arg(2, str, "vot")
+N_FRAME = _arg(3, int, 360)
 SIZE = 224                 # native, per the goal's real dimensions
 RECON = 56                 # the image is decoded at 56x56 = 3136 targets
 DIMS = (16, 64, 128)
