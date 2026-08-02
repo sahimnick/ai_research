@@ -168,10 +168,60 @@ def change_maps(stream, f1, f2, colour, stage="V2"):
 
 
 def hit_rate(eye, world, q=0.10):
-    """Does the eye's peak land in the world's most-changed ``q`` of locations?"""
+    """Does the eye's peak land in the world's most-changed ``q`` of locations?
+
+    Kept because it is what the first run reported, but it is a **weak**
+    estimator: it throws away all ~10 000 locations except the single argmax,
+    leaving one Bernoulli trial per camera. At 24 cameras it cannot reach
+    p < 0.05 below 4 hits, so a null result from it means "no power", not "no
+    effect". ``rank_maps`` below is the same question asked with every location.
+    """
     thr = np.quantile(world, 1.0 - q)
     r, c = np.unravel_index(int(np.argmax(eye)), eye.shape)
     return float(world[r, c] >= thr)
+
+
+def _rank(a):
+    """Average ranks, ties shared -- the eye's map is sparse, so ties are the
+    common case and ignoring them would inflate the correlation."""
+    a = np.asarray(a, np.float64).ravel()
+    n = a.size
+    order = np.argsort(a, kind="stable")
+    s = a[order]
+    start = np.flatnonzero(np.r_[True, s[1:] != s[:-1]])
+    end = np.r_[start[1:], n]
+    avg = (start + end - 1) / 2.0
+    r = np.empty(n, np.float64)
+    r[order] = np.repeat(avg, end - start)
+    return r
+
+
+def _zrank(a):
+    r = _rank(a)
+    r -= r.mean()
+    s = np.linalg.norm(r)
+    return r / s if s > 0 else r
+
+
+def rank_maps(eyes, worlds, n_perm=10000, seed=0):
+    """Spearman correlation between the two change maps, every location used.
+
+    The full camera-by-camera correlation matrix is computed once; the real
+    score is its diagonal (each eye map against its OWN world map) and the null
+    is built by re-pairing rows to columns, which keeps every spatial bias and
+    destroys only the correspondence. Same control as the hit rate, roughly four
+    orders of magnitude more data behind it.
+    """
+    E = np.stack([_zrank(e) for e in eyes])
+    W = np.stack([_zrank(w) for w in worlds])
+    C = E @ W.T
+    n = len(eyes)
+    real = float(np.mean(np.diag(C)))
+    rng = np.random.default_rng(seed)
+    null = np.array([C[np.arange(n), rng.permutation(n)].mean()
+                     for _ in range(n_perm)])
+    p = float((np.sum(null >= real) + 1) / (n_perm + 1))
+    return real, float(null.mean()), float(null.std()), p
 
 
 def pixel_raw(frames, colour):
@@ -331,19 +381,30 @@ def main():
         np.mean([hit_rate(eyes[i], worlds[j], Q)
                  for i, j in enumerate(rng.permutation(len(eyes)))])
         for _ in range(20)]))
+    # the powered version of the same question: every location, not just argmax
+    rho, null_m, null_s, pval = rank_maps(eyes, worlds)
     res["tracking"] = {"hit_rate": round(hit, 4),
                        "shuffled_control": round(shuf, 4),
                        "nominal_chance": Q,
-                       "grid": list(eyes[0].shape)}
+                       "grid": list(eyes[0].shape),
+                       "rank_rho": round(rho, 4),
+                       "rank_null_mean": round(null_m, 4),
+                       "rank_null_sd": round(null_s, 4),
+                       "rank_p": round(pval, 5)}
 
-    print(f"\n--- tracking: does the eye's peak change land where the world "
+    print(f"\n--- tracking: does the eye's change land where the world "
           f"changed? ---")
-    print(f"  V2 grid {eyes[0].shape[0]}x{eyes[0].shape[1]}, top {Q:.0%} of "
-          f"locations counted as a hit")
-    print(f"  hit rate            {hit:.3f}")
-    print(f"  shuffled cameras    {shuf:.3f}   <- the real chance level")
-    print(f"  nominal chance      {Q:.3f}")
-    res["tracking_beats_shuffle"] = bool(hit > shuf + 0.10)
+    print(f"  V2 grid {eyes[0].shape[0]}x{eyes[0].shape[1]}, "
+          f"{len(eyes)} cameras")
+    print(f"  peak-only hit rate  {hit:.3f}   (shuffled {shuf:.3f}, nominal "
+          f"chance {Q:.3f})")
+    print(f"     -- one argmax per camera is {len(eyes)} Bernoulli trials; "
+          f"this estimator has almost no power")
+    print(f"  rank correlation    {rho:+.4f}   over all "
+          f"{eyes[0].size} locations per camera")
+    print(f"     shuffled cameras {null_m:+.4f} +/- {null_s:.4f}   "
+          f"permutation p = {pval:.4f}")
+    res["tracking_beats_shuffle"] = bool(pval < 0.05 and rho > null_m)
 
     print(f"\n--- what this says ---")
     print(f"  the world moved: {changed:.2f}/255 mean pixel change")
@@ -366,13 +427,17 @@ def main():
               f"hierarchy is carrying something the pixels are not.")
     print(f"  colour minus luminance on identity: {id_c - id_l:+.4f}")
     if res["tracking_beats_shuffle"]:
-        print(f"  the eye localises change: {hit:.3f} against a shuffled "
-              f"{shuf:.3f}. Where it responds differently is where\n  the world "
-              f"is different -- retinotopy survives to V2 on real motion.")
+        print(f"  the eye DOES localise change: rank rho {rho:+.4f} against a "
+              f"shuffled {null_m:+.4f}, p = {pval:.4f}.\n  Where it responds "
+              f"differently is where the world is different -- retinotopy "
+              f"survives to V2\n  on real motion. This is spatial "
+              f"correspondence, not object tracking: nothing here follows a\n  "
+              f"thing between frames or is driven by a tag.")
     else:
-        print(f"  the eye does NOT localise change: {hit:.3f} against a "
-              f"shuffled {shuf:.3f}. Its peak response moves, but not\n  where "
-              f"the world moved, so nothing here supports tracking.")
+        print(f"  the eye does NOT localise change: rank rho {rho:+.4f} "
+              f"against a shuffled {null_m:+.4f}, p = {pval:.4f}.\n  Its "
+              f"response changes, but not where the world changed, so nothing "
+              f"here supports tracking.")
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")

@@ -4128,6 +4128,226 @@ quadrature pair per channel and an orientation estimate over all three, which
 is a change to the complex cell's definition and deserves its own hypothesis
 and its own control rather than being folded into a negative result.
 
+## 9.19 The live-world floor was a bug, the control ties the eye, and the tracking null was a third instrument failure
+
+§9.17's live-camera run reported `encode_twice_floor: 0.000` — the eye handed
+the **same pixels twice** and returning unrelated codes. That was read as the
+eye being unstable. It was three defects in the instrument, stacked, and none of
+them in the eye.
+
+**1. `PopulationAdaptation` destroys its own first sample.**
+`neurobrain/vision/widev1.py:618`:
+
+```python
+a = max(self.tau, 1.0 / (self.n_seen + 1))
+```
+
+At `n_seen = 0` that is `a = 1.0`, so the running mean becomes the first code
+*exactly*, and `_unit(r - mu)` is the zero vector. Every benchmark in this
+project that builds `V = [_unit(ad(r)) for r in R]` has a **dead row 0** — 36
+call sites across 34 files.
+
+**2. The floor measured that dead row and nothing else.** It called the encoder
+on a *single* frame, which is therefore always row 0. The floor was structurally
+`0.000` no matter what the eye did.
+
+**3. The two rounds used independent adaptation states**, so they were compared
+across different spaces — §9.6's bug class, made fresh.
+
+Fixed: one adaptation fitted on round one and then **frozen** (`learn=False`)
+for every later encode, plus an explicit refusal if any code comes out as the
+zero vector. The floor now reads **1.000** — the encoder is deterministic, and a
+drop across the gap is now genuinely the world moving.
+
+### What the dead row cost, everywhere else
+
+`benchmarks/adaptation_row0.py`, 240 photographs, WideV1, 3 seeds, three arms on
+identical codes:
+
+| arm | cluster AUC | probe |
+|---|---|---|
+| as published | 0.5651 | 0.3160 |
+| row 0 repaired through the final baseline | 0.5648 (−0.0003) | 0.3229 (**+0.0069**) |
+| baseline fitted on all codes, then frozen | 0.5681 (+0.0030) | 0.3299 (**+0.0139**) |
+
+Exactly 1 dead row in 240, every seed. **Every arm of every benchmark carries
+the same dead row**, so *differences between arms* — which is what every
+conclusion in this document rests on — are unaffected; absolute probe figures
+are ~0.007 pessimistic. That is also an order of magnitude below the 0.104–0.141
+class-set spread §9.10 showed to dominate every visual result here. The defect
+mattered catastrophically in exactly two places: where N was small (24 cameras),
+and where the dead row *was* the measurement (the floor).
+
+### With the instrument working, the control ties the eye
+
+24 live NY511 cameras at native 224 px, colour, re-read 90 s later; the world
+moved by 6.90/255. Raw downsampled pixels go through the **identical** pairing
+and the identical fit-once-then-freeze treatment, because a control scored in a
+different space is not a control:
+
+| | colour | luminance | **raw pixels** |
+|---|---|---|---|
+| same pixels twice (floor) | **1.000** | — | — |
+| same camera 90 s later | 0.475 | 0.596 | **0.951** |
+| still recognises itself | 0.917 | 1.000 | **1.000** |
+| participation | 19.71 | 22.35 | 10.07 |
+
+Chance on identity is 0.042. **The identity test is saturated**: 24 traffic
+cameras point at 24 different streets, so both arms score perfectly and the test
+cannot separate the eye from doing nothing at all. The eye adds **+0.000** over
+raw pixels. §9.17's headline `1.000` was reporting geography, not perception,
+and is withdrawn as evidence about the eye. (Two independent live draws agree
+within 0.02 on every cell of this table, so the tie is not a sampling accident.)
+
+Raw pixels also hold their code far better across the 90 s gap — 0.951 against
+the eye's 0.596. One caveat stated rather than buried: the eye's participation
+is more than twice the pixels' (22.35 vs 10.07), and a code spread over more
+directions loses more cosine under the same perturbation, so part of that gap is
+dimensional rather than a failure. §9.20 settles the question on a metric where
+that caveat does not apply.
+
+Colour is worse than luminance again here (−0.083 on identity), consistent with
+§9.18's −0.135 at matched initialisation.
+
+### Tracking, and the third instrument failure
+
+The docstring had claimed a tracking measurement since the file was written and
+**there was none in it** — `grep` found the word only in the docstring. Written
+now, in the only form these data support: not object tracking, but *retinotopic
+correspondence* — does the eye's response change **where the scene changed**?
+Each camera's V2 change map is compared against its own frame-difference map,
+block-averaged onto the same 103×103 grid. The control pairs each camera's eye
+map with a **different** camera's world map, which preserves every spatial bias
+(traffic cameras are centre-weighted) and destroys only the correspondence.
+
+The first version scored it by asking whether the eye's single **argmax** landed
+in the world's top 10% of locations, and returned 0.083 against a shuffled
+0.062 — a null. That estimator throws away 10 608 of 10 609 locations per camera
+and leaves 24 Bernoulli trials; at n = 24 it cannot reach p < 0.05 below 4 hits.
+**A null from an instrument that blunt means "no power", not "no effect"** — the
+same mistake as the floor, in a different disguise.
+
+Rank correlation over *every* location, with the same shuffled-camera control
+and a 10 000-draw permutation null:
+
+| estimator | eye | shuffled control | p |
+|---|---|---|---|
+| peak-only hit rate | 0.083 | 0.062 | — (n.s., no power) |
+| **Spearman ρ over all 10 609 locations** | **+0.1740** | +0.0413 ± 0.0192 | **0.0001** |
+
+**The eye does localise change** — about 6.9 SD above the shuffled null. Where
+its response changes is where the world changed; retinotopy survives to V2 on
+real motion.
+
+> Stated precisely, because the goal asks for something stronger: this is
+> **spatial correspondence, not tracking**. Nothing here follows an object
+> between frames, maintains its identity, or is driven by a tag or by top-down
+> attention. The goal's تعقیب و تمرکز remains unmeasured; what is now measured is
+> the substrate it would need.
+
+---
+
+## 9.20 The eye is worse at translation than the pixels it is computed from
+
+§9.19's identity test saturated, so it could not separate the eye from doing
+nothing. This is the same question asked where the two arms **must** come apart.
+A pixel vector is not shift invariant at all — translation is the one thing it
+is worst at. A convolutional, retinotopic hierarchy with a complex-cell layer
+and two pooling stages is supposed to be exactly the machine that survives it.
+That is what those stages are *for*.
+
+> **H20.** The four-stage eye's code survives translation better than raw pixels
+> do, and the deeper stage (V4, two pools down) survives better than V2.
+
+`benchmarks/eye_shift.py`: 24 live cameras at native 240×352, a 192-px window
+cropped at six offsets, so the scene genuinely moves across the retina and new
+content enters at the edge. Zero-padding a shifted image would instead measure
+how the eye responds to a black bar. The largest shift changes the pixels by
+**28.9/255**, and the benchmark refuses to report if the crop did not actually
+move — the trap §9.8's 64-px frame fell into. One adaptation is fitted on the
+unshifted views and then frozen, per §9.19.
+
+Cosine to the unshifted code:
+
+| arm | dim | +0 | +4 | +8 | +16 | +32 | +48 |
+|---|---|---|---|---|---|---|---|
+| eye V2 | 272 484 | 1.000 | 0.371 | 0.198 | 0.111 | 0.076 | 0.059 |
+| eye V4 | 73 964 | 1.000 | 0.447 | 0.252 | 0.120 | 0.068 | 0.055 |
+| pixels 32×32 | 1 024 | 1.000 | **0.963** | **0.906** | **0.822** | **0.707** | **0.633** |
+
+**Four pixels of translation costs the eye 63% of its code and the pixels 4%.**
+H20 is falsified, and not narrowly — the eye is beaten by the raw luminance it
+is computed from, at every shift tested.
+
+### The confound, and the control that removes it
+
+The pixel arm is subsampled to 32×32 while V2's map is 87×87 and V4's is 41×41,
+and a code held on a coarser grid is *automatically* more shift tolerant,
+because the same 4 px is a smaller fraction of one cell. That would explain the
+entire result without any statement about the hierarchy. So pixels were also
+built on each stage's **own grid**, by area averaging:
+
+| arm | grid | +4 | +48 | mean gap to the eye stage on that grid |
+|---|---|---|---|---|
+| eye V2 | 87×87 | 0.371 | 0.059 | — |
+| pixels @ V2 grid | 87×87 | 0.880 | 0.568 | **+0.564** |
+| eye V4 | 41×41 | 0.447 | 0.055 | — |
+| pixels @ V4 grid | 41×41 | 0.939 | 0.605 | **+0.591** |
+
+**Resolution explains none of it.** Luminance held on the eye's own map survives
+translation about ten times better than the eye's features do on that identical
+map. The features are less stable under translation than the quantity they are
+computed from.
+
+One caveat stated rather than buried: the eye's participation ratio is 22.6
+against the pixel arms' 8.2–9.3, and a code spread over more directions loses
+more cosine under the same perturbation. That is real, and it is not enough to
+carry a tenfold gap — but the argument does not have to rest on it, because the
+**identity** score is computed *within* each arm's own space, where
+dimensionality applies equally to all 24 candidates:
+
+| identity, chance 0.042 | +8 | +16 | +32 | +48 |
+|---|---|---|---|---|
+| eye V2 | 1.000 | 0.667 | 0.542 | 0.375 |
+| eye V4 | 1.000 | 0.875 | 0.542 | 0.583 |
+| pixels 32×32 | 1.000 | 1.000 | 0.875 | **0.833** |
+
+Same ordering, on a metric the caveat does not touch.
+
+### The half of H20 that survived, and a criterion I sited wrongly
+
+The pre-registered test for the second clause was `V4 > V2 + 0.02` **at the
+largest shift** — which is where both stages have already collapsed to ~0.06 and
+cannot be told apart. That criterion was mis-sited, and it returns `False` for a
+reason that has nothing to do with the claim.
+
+Read where either arm is still alive, V4 *is* the more invariant stage: 0.447 vs
+0.371 at +4 px, 0.252 vs 0.198 at +8, 0.120 vs 0.111 at +16 — and the ordering
+reverses by +32, where both are noise. So pooling does buy invariance: a real
+effect, small, and exhausted within roughly 8 px, which is about one pooling
+window. Both readings are reported here rather than quietly keeping the
+favourable one.
+
+### What this actually is
+
+A sparse spiking code changes its *active set* under translation. Two sparse
+high-dimensional codes with different active sets are close to orthogonal no
+matter how similar the images that produced them were, and pooling over a 2×2
+window cannot repair an active set that has already changed at 4 px. Every stage
+of this stream — V1 complex 107×107, V2 103×103, pool 51×51, V4 49×49 at 224 px
+— is a *map*, and the code handed downstream is that map flattened.
+
+> The four stages never leave retinotopy. There is no point in this hierarchy
+> where the code stops being a picture and starts being a description of what is
+> in the picture. V4 is a 41×41 image, not a feature vector — which is why it
+> behaves like one.
+
+This is structural. It is not a stimulus complaint and no amount of
+re-developing on better images addresses it: the same measurement on the same
+frames shows the deficit is present at the smallest shift the test can apply.
+Per the loop protocol this stops at the limiting factor; the replacement is not
+proposed in the same breath as the negative result.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
