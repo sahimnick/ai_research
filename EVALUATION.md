@@ -4789,6 +4789,74 @@ different measurements, one pattern: **this representation is reliable on the
 distribution it was developed on and does not carry beyond it.** Stated as the
 limiting factor and not worked around here.
 
+## 9.26 Is the non-generalisation architectural or a data limit? The test could not decide, and says so
+
+Three measurements now agree. §9.20: the code does not survive translation.
+§9.24: the CCTV tracking result does not transfer to VOT2019. §9.25: a decoder
+from the code back to the image is *actively wrong* on scenes the eye did not
+develop on. That is a limiting factor with exactly two candidate causes — the
+architecture cannot form representations that generalise, or it was developed on
+too few scenes to have a chance — and they make opposite predictions.
+
+> **H22.** The eye's failure on unseen scenes is a matter of development
+> **breadth**: given more distinct scenes at the same frame budget, held-out
+> generalisation improves. **Falsified if** it does not.
+
+The frame budget is held constant at 96, so developing on 8 sequences is not
+also developing on more data — otherwise "more scenes" and "more data" would be
+one variable. Three held-out splits, each shuffling **which sequences** are held
+out rather than only the random state, per §9.10's finding that varying seeds
+while holding the split fixed is pseudo-replication.
+
+| area | k=2 | k=4 | k=8 | slope / doubling | sd |
+|---|---|---|---|---|---|
+| V2 | −0.008 | −0.105 | −0.119 | −0.055 | 0.051 |
+| pool | −0.017 | −0.086 | −0.162 | −0.073 | 0.066 |
+| V4 | +0.002 | −0.095 | −0.044 | −0.023 | 0.051 |
+| pixels *(control)* | 0.730 | 0.754 | 0.769 | **+0.020** | 0.033 |
+
+### H22 is not supported, and that is as far as this goes
+
+No area improves with breadth; every eye slope is at or below zero. But the
+slopes' spread (0.05–0.07) is as large as the slopes, so what this licenses is
+"no improvement was detected", not "breadth actively hurts".
+
+**And it does not license a negative about the architecture either**, because
+the control barely responds: raw-pixel PCA gains **+0.020 ± 0.033** per
+doubling, indistinguishable from flat. A manipulation that fails to move a code
+specifically built to benefit from a more representative basis is too weak to
+support a conclusion about a code that does not move. **2 → 8 scenes is too
+narrow a range to resolve architecture from data**, and the honest verdict is
+that this experiment did not decide the question it was built to decide.
+
+### A reinterpretation of mine that replication killed
+
+Worth recording. The single-split version of this run showed the pixel control
+gaining **+0.071** per doubling. I had pre-registered that control as a
+*stability* check — flat means the split is not varying — and on seeing +0.071 I
+reinterpreted it as a **positive** control, proof the manipulation works, which
+would have strengthened the falsification considerably.
+
+Across three splits that becomes +0.020 ± 0.033. **The +0.071 was noise, and the
+after-the-fact reading was wrong.** The original pre-registration was correct and
+the reinterpretation — which happened to favour my conclusion — did not survive.
+It is recorded because §9.20 caught the same class of move (a criterion re-sited
+after seeing where it landed) and the only defence against it is to write down
+when it is attempted.
+
+### What survives, and does not depend on any slope
+
+Every eye arm is **negative on unseen scenes at every breadth tested** — at k=2
+as much as at k=8 — while raw pixels hold ~0.75 throughout. The failure to
+generalise beyond the development distribution is robust, reproduced across
+three independent held-out splits, and is now the best-supported single fact
+about this eye.
+
+Its **cause remains open**. Per the loop protocol this stops at the limiting
+factor rather than proposing the fix, and it also stops short of the stronger
+claim the data cannot carry: what is established is *that* the representation
+does not leave its distribution, not *why*.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
