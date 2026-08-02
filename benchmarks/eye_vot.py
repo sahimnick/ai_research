@@ -48,8 +48,17 @@ import numpy as np
 
 from neurobrain.vision.ventral import build_ventral_stream_on, locate_template
 
-VOT_DIR = sys.argv[2] if len(sys.argv) > 2 else "vot"
-N_SEQ = int(sys.argv[3]) if len(sys.argv) > 3 else 12
+def _arg(i, cast, default):
+    """argv read defensively: this module is also IMPORTED (by
+    eye_track_drift), and then argv belongs to the importing benchmark."""
+    try:
+        return cast(sys.argv[i])
+    except (IndexError, ValueError, TypeError):
+        return default
+
+
+VOT_DIR = _arg(2, str, "vot")
+N_SEQ = _arg(3, int, 12)
 TARGET = 40          # every target rescaled to about this many pixels
 SEARCH = 160         # the window the eye sees, centred on the last prediction
 STRIDE = 2           # every STRIDE-th frame, to keep the run affordable
