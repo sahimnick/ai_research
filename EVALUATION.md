@@ -4671,7 +4671,15 @@ carry a localisable signature of the target on real video, and this is not
 nothing.
 
 **And raw pixels are twice as good, on both metrics.** 0.172 vs 0.094 on success
-AUC, 0.306 vs 0.157 on precision@20px. §9.23's headline — eye-V2 at 0.834
+AUC, 0.306 vs 0.157 on precision@20px.
+
+> **Withdrawn by §9.30.** This ratio does not replicate. On a different twelve
+> sequences the ordering *reverses* (eye 0.167, pixels 0.128), and on 32 the arms
+> are not separated (0.098 vs 0.113). Only 2 of these 12 sequences appear in that
+> larger set. The number that moved was the pixel arm — 0.172 here, 0.113 on 32 —
+> so this was a favourable pixel result on twelve short sequences. Twelve
+> sequences cannot separate these arms and the claim should not have been made
+> from them. §9.23's headline — eye-V2 at 0.834
 success AUC on live CCTV — **does not transfer**. A static camera re-read after
 105 s asks whether a tag survives content change at a *fixed place*; 30 fps video
 asks it to survive an object translating, rotating, changing scale and
@@ -5060,6 +5068,80 @@ tasks differ in two ways that fully account for it:
 long enough for real appearance change in these sequences, but not a long
 horizon. And a two-alternative choice is a coarse measure; §9.24 is the record
 of what happens when the same signal is asked for something finer.
+
+## 9.30 What breaks tracking is precision, not drift — and §9.24's headline does not replicate
+
+§9.29 explained the gap between VOT tracking (0.094) and two-alternative
+selection (0.818) by naming **two** causes at once: error accumulation under
+one-pass evaluation, and the coarser task. Naming two causes together identifies
+neither. They come apart cleanly by changing exactly one thing — centre the
+search window on the previous **ground truth** instead of the previous
+**prediction**, which removes accumulation and leaves the frames, template,
+search and scoring identical.
+
+This is an **instrument, not a proposed tracker**: re-anchoring consumes ground
+truth at every frame and nobody could run it.
+
+| 32 sequences | prec@20px | success AUC | median err |
+|---|---|---|---|
+| eye V2, OPE | 0.168 | 0.098 | 84.6 |
+| eye V2, re-anchored | 0.298 | **0.152** | 41.7 |
+| pixels, OPE | 0.177 | 0.113 | 93.2 |
+| pixels, re-anchored | 0.265 | **0.156** | 43.0 |
+
+**Drift is not what breaks it.** Removing accumulation entirely buys the eye
++0.054, from 0.098 to 0.152. §9.24's collapse is therefore *not* a tracker
+losing its target and never recovering — the representation cannot localise
+precisely enough frame by frame. The 12-sequence run agrees (drift +0.037).
+
+Median error tells the complementary half: it improves sharply under
+re-anchoring, 84.6 → 41.7 px. So **drift governs how far wrong the tracker ends
+up, and precision governs whether it ever overlaps at all** — consistent, since
+IoU on a 40-px target is unforgiving of a 40-px error.
+
+> §9.29's 0.818 against §9.24's 0.094 is now resolved, and it is not a paradox
+> about accumulation. A two-alternative choice between well-separated slots
+> tolerates a coarse signal; continuous IoU does not. The representation
+> supports **selection**, and the thing it lacks for tracking is **spatial
+> precision**, which no tracker wrapper can supply.
+
+### §9.24's comparison was never established
+
+§9.24 reported *"pixels beat the eye two to one"* — 0.172 against 0.094. That
+does not replicate.
+
+| success AUC, OPE | eye V2 | pixels |
+|---|---|---|
+| §9.24, its 12 sequences | 0.094 | **0.172** |
+| the current 12 sequences | **0.167** | 0.128 |
+| **32 sequences** | 0.098 | 0.113 |
+
+The ordering **reverses** between two sets of twelve. The cause is confirmed
+rather than inferred: §9.24 ran when only 12 sequences were on disk, and
+`names[:12]` of 60 selects a different set — **2 of 12 overlap**, so the two
+runs are on essentially disjoint data.
+
+At 32 sequences the arms are **not separated**: 0.098 against 0.113 on OPE, and
+0.152 against 0.156 re-anchored. On precision@20px the eye is the better arm
+when re-anchored (0.298 vs 0.265). Note which number moved — the eye scored
+0.094 then and 0.098 now, while **pixels fell from 0.172 to 0.113**. §9.24's
+ratio was carried by an unusually favourable pixel result on twelve short
+sequences, not by anything about the eye.
+
+So the correction is not "the eye is better". It is that **twelve sequences
+cannot separate these arms**, and the two-to-one claim should never have been
+made from them. This is §9.10's finding — the set dominates the arm — surfacing
+in a place I did not guard, on data I had chosen precisely because the project
+did not choose it.
+
+What stands from §9.24 is the part that did not depend on the comparison: a
+fixed template with no model update, no scale search and no re-detection scores
+~0.10–0.16 success AUC on VOT2019, far below any modern tracker, and the eye's
+representation is not what rescues it.
+
+`eye_track_drift.py` now writes **per-sequence** results, so a paired test over
+sequences is possible; the numbers above are aggregates and a paired comparison
+is what would be needed to put an interval on that 0.004 gap.
 
 ---
 

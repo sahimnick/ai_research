@@ -142,7 +142,14 @@ def main():
                                    else (0.0, 0.0, float("nan")))
         print(f"  {i + 1}/{len(seqs)} {n}", end="\r", flush=True)
 
-    res = {"n_sequences": len(seqs), "search_px": SEARCH, "arms": {}}
+    res = {"n_sequences": len(seqs), "search_px": SEARCH,
+           "sequences": list(seqs), "arms": {},
+           # per-sequence, so a PAIRED comparison is possible. The aggregates
+           # alone cannot say whether two arms differ: §9.24 reported a 2x gap
+           # on 12 sequences that reversed on a different 12, which is exactly
+           # what a paired test over sequences exists to catch.
+           "per_sequence": {k: [[round(x, 4) for x in s] for s in v]
+                            for k, v in got.items()}}
     print(f"\n\n{'arm':<18}{'prec@20px':>11}{'success AUC':>13}"
           f"{'median err':>12}")
     for k, v in got.items():
