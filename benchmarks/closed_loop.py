@@ -67,6 +67,24 @@ SEEDS = (0, 1, 2)
 N_PER_CLASS = 40
 N_HIGH = 256
 DATA_STEPS = (40, 400, 2000)          # per class: 240, 2400, 12000 images
+#: How many rate vectors the stack may learn from per epoch, sampled from the
+#: pool without replacement.
+#:
+#: This is a compute cap and it CHANGES WHAT QUESTION 3 MEANS, so it is printed
+#: rather than buried. Uncapped, the top data step is 12 000 vectors x 3 epochs
+#: x 20 settling iterations of a (256 x 4096) matmul -- about 720k equilibrium
+#: solves per arm per seed, three learning arms, three seeds. That is hours on
+#: CPU and is what left the first attempt exposed to a container restart.
+#:
+#: With the cap the stack's compute is constant while the pool grows, so
+#: question 3 becomes **does a larger, more varied pool help at equal compute**
+#: rather than *does more data plus more compute help*. That is a cleaner
+#: question than the uncapped one, but it is a different question.
+#:
+#: `develop_v1` is NOT capped -- it sees the whole pool at every step, exactly
+#: as in §9.11 -- so the V1 leg stays directly comparable to that flat curve
+#: (0.595 -> 0.582).
+STACK_BUDGET = 2000
 CID = {"airplane": 0, "automobile": 1, "bird": 2, "cat": 3, "dog": 5, "frog": 6}
 ARMS = ("v1-only", "loop-1", "loop-20", "loop-20-noteach")
 
@@ -88,14 +106,22 @@ def probe(V, y, tr, te, seed, epochs=300):
 
 
 def build(arm, v1, devel_rates, seed):
-    """Grow the higher stage on V1's own output, unsupervised."""
+    """Grow the higher stage on V1's own output, unsupervised.
+
+    The training set is capped at ``STACK_BUDGET`` vectors, drawn without
+    replacement from whatever pool this data step provides -- see the constant's
+    note for why, and for what it does to question 3.
+    """
     if arm == "v1-only":
         return None
     iters = 1 if arm == "loop-1" else 20
     st = PredictiveStack(n_v1=devel_rates.shape[1], n_high=N_HIGH,
                          iters=iters, seed=seed)
     if arm != "loop-20-noteach":
-        st.train(list(devel_rates), epochs=3)
+        rng = np.random.default_rng(seed + 991)
+        take = (np.arange(len(devel_rates)) if len(devel_rates) <= STACK_BUDGET
+                else rng.choice(len(devel_rates), STACK_BUDGET, replace=False))
+        st.train([devel_rates[i] for i in take], epochs=3)
     return st
 
 
@@ -122,7 +148,13 @@ def main():
     want = [CID[c] for c in names]
 
     print(f"{len(imgs)} photographs, {len(names)} categories, {FRAME}px frame")
-    print("metric: cluster_auc_full (the corrected estimator)\n", flush=True)
+    print("metric: cluster_auc_full (the corrected estimator) + linear probe")
+    print(f"stack training capped at {STACK_BUDGET} vectors/epoch, so its "
+          f"COMPUTE IS CONSTANT while the pool grows.")
+    print(f"  -> question 3 is 'does a larger pool help at EQUAL COMPUTE', not "
+          f"'does more data plus more compute help'.")
+    print(f"  -> develop_v1 is uncapped and sees the whole pool, as in §9.11\n",
+          flush=True)
 
     res = {"seeds": list(SEEDS), "curve": {}}
     for n_per in DATA_STEPS:
