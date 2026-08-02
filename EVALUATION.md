@@ -5383,6 +5383,74 @@ That completes the goal's property list. Colour: falsified (§9.18). Distance:
 present within scenes, does not transfer (§9.31). Shadow: absent, at the pixel
 null (§9.31). Relations: present, above a strong positional control.
 
+## 9.34 The loop, assembled and running
+
+Every section from §9.19 on is a *measurement* — a script that answers one
+question and exits. None of them is the thing the goal asks for, which is an eye
+that **operates**: **بصورت چشم واحد عمل کنند**. `neurobrain/vision/unified_eye.py`
+is that assembly, and `benchmarks/eye_loop.py` runs it on real video.
+
+```python
+eye = UnifiedEye(size=224).develop(frames)      # grow the stages on YOUR footage
+eye.add_tag("target", frame0, (y, x, h, w))     # what to look for, at runtime
+p = eye.look(frame)                             # ONE pass -> everything
+p.where, p.confidence, p.attention, p.relations, p.frame_size
+```
+
+Built only from mechanisms that measured as working, and the ones that did not
+are deliberately absent: locating uses the **spatial** correlation of §9.21
+(0.943) rather than the averaged prototype §9.21 measured at 0.000; selection is
+the §9.28/§9.29 gain; relations are §9.33's comparison of two located positions.
+
+### It composes
+
+12 sequences, 6 held out, targets travelling 52.7 px, tags added at runtime:
+
+| read-out | value | its own control |
+|---|---|---|
+| where (hit) | **0.510** | 0.078 |
+| which (select) | **0.863** | 0.500 |
+| relation | **0.902** | 0.745 |
+| how big (MAE, log) | 1.233 | 1.501 *(predict-the-mean)* |
+| latency | **117 ms/frame**, one pass, all read-outs | — |
+
+Each read-out clears the control its own section used, from a single forward
+pass, in an eye developed once rather than four times. The pieces compose — which
+was not guaranteed, since every previous number came from a benchmark that built
+its own stream for its own question.
+
+### The size read-out reproduces its own measured failure, which is the point
+
+`how big` is fitted on **other sequences** than it is tested on — exactly the
+by-sequence split §9.27 and §9.31 measured at R² ≈ 0. Its MAE of 1.233 against a
+predict-the-mean null of 1.501 is a thin margin, and that is the *expected*
+result rather than a disappointing one: **the assembled loop reproduces the
+non-transfer its components measured**, instead of hiding it behind a demo that
+works. A running system that concealed that limit would be worse than one that
+shows it.
+
+Two corrections made while assembling, both of the kind a demo tends to bury:
+
+**Angular size is frame-level, not per-object.** The first version returned
+`p.size[name]` per tag, and every tag in a frame got the same number — the probe
+reads the whole area map. It is now one `p.frame_size`, because four names
+attached to one measurement reads as four measurements.
+
+**`attend()` was not changed to use the spatial template**, despite §9.21. §9.32
+measured the swap and it made `attend()` *worse* (0.275 vs 0.350), because on its
+56-px canvas the V4 map is 7×21 with 100% of cells above 55% of peak energy —
+saturated flat, with no layout to exploit. `UnifiedEye` runs at 224 px where the
+map has structure, which is why the same mechanism works here and not there.
+
+### What the running system still cannot do
+
+Carried into the module docstring so nobody has to read this document to find
+out: it does not leave its development distribution (§9.27, R² 0.00 on unseen
+scenes), it localises coarsely rather than precisely (§9.30, drift removal buys
+only 0.098→0.152), colour hurts it (§9.18, −0.135), a shadow is indistinguishable
+from an object to it (§9.31, at the pixel null), and the stages are **not** shown
+to specialise (§9.33, one separated winner out of four read-outs).
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

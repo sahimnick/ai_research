@@ -200,6 +200,7 @@ from .cognition.discovery import ConceptDiscovery, make_clustered_data
 from .cognition.reasoning import SemanticNetwork
 from .memory.relational import RelationalMemory
 from .core.biophysical import BiophysicalCircuit, nmda_mg_block
+from .vision.unified_eye import UnifiedEye, Percept, Tag
 from .vision.ventral import (SpikingConvLayer, ComplexCellLayer, ITLayer, SpikingPool,
                      VisionHierarchy, VentralStream, build_ventral_stream,
                      locate_template,
