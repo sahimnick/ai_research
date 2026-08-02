@@ -3997,10 +3997,41 @@ its spike count from 12 to 3 452 — the whole "V4 clusters below raw pixels and
 raises twelve spikes" finding was the canvas, and the explanation §9.15 built on
 top of it was explaining an artefact.
 
-The hierarchy is also worth something at this size: **V2 reaches 0.420** where
-the single-stage `WideV1` sits at 0.316 — though that comparison is across input
-scales until `ventral_audit.py` is re-run with `WideV1` on the same 96 px
-canvas, which is now what it does.
+### The first architectural gain in this project that survives its controls
+
+With `WideV1` re-run on the **same 96 px canvas**, so the comparison stops
+crossing input scales:
+
+| stage | dim | cluster AUC | probe |
+|---|---|---|---|
+| `WideV1` @96 px, one stage | 4 096 | 0.560 | **0.267** |
+| V1 complex | 14 792 | 0.570 | 0.365 |
+| **V2** | 54 756 | **0.600** | **0.420** |
+| pool | 12 996 | 0.603 | 0.413 |
+| V4 | 12 716 | 0.584 | 0.406 |
+
+That reads as +0.153 for four stages over one — but V2 carries **13× the
+dimensions**, and §9.16 is a standing reminder that a width difference read as
+an effect is this project's most repeated error. Matched at 4 096:
+
+| 4 096-d code | cluster AUC | probe |
+|---|---|---|
+| V2 → random projection | 0.578 | **0.375** |
+| `WideV1` @96 px | 0.560 | **0.267** |
+
+**Depth is worth +0.108 at matched width.** About a third of the headline gap
+was dimensionality; the rest is real, and it is the largest architectural effect
+this project has measured that survives a control. §9.14 predicted +0.157/+0.181
+from the CNN's own depth, and this lands in the same range.
+
+Thirteen interventions were run on the one-stage eye. The four-stage eye was in
+the repository the whole time, and is worth more than all of them together.
+
+(A curiosity worth recording rather than explaining: PCA of V2 to 200
+dimensions gives the **highest cluster AUC in the table, 0.624**, with the
+*lowest* probe of the reduced codes, 0.299. Maximising variance helps the cosine
+neighbourhood and costs linear separability — the two metrics are not measuring
+the same thing, which is why both are reported.)
 
 ### H17 falsified, and in an interesting direction
 
