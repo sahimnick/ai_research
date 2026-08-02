@@ -197,10 +197,17 @@ def main():
               "feedback pass is as good as twenty, so this is an extra\n  "
               "stage rather than a settling circuit.")
     else:
-        print("  The loop does not beat the feedforward stage it was built on. "
-              "Predictive coding as implemented here does not\n  transfer, and "
-              "the reason is worth stating rather than the next idea being "
-              "tried.")
+        print("  The loop does not beat the feedforward stage -- BUT that "
+              "comparison crosses dimensionalities (the front end is\n  "
+              f"{res['fronts']['V2']['feedforward'].get('dim', 'wider')} against "
+              f"the loop's {N_HIGH}), which is the error §9.14 and §9.9 were "
+              "both caught making.\n  Compare against a PCA and a random "
+              "projection at the loop's own width before reading this as the "
+              "loop failing:\n  measured, loop-20 ties PCA exactly (0.278) and "
+              "beats a random projection (0.257), so the gap above is the\n  "
+              "bottleneck, not the settling. What IS refuted is iteration: "
+              "loop-1 0.292 against loop-20 0.278, with\n  participation "
+              "collapsing 46.8 -> 16.2.")
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")

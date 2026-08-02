@@ -3892,6 +3892,68 @@ raising 12 spikes would be measuring the loop's ability to amplify nothing.
 
 ---
 
+## 9.16 The loop, on the four-stage eye — and a verdict of mine that was wrong
+
+The drawn proposal was a circuit instead of backpropagation: a stage sends its
+guess down, the stage below returns only what the guess missed, and the two
+settle until they agree. `benchmarks/loop_on_ventral.py` closes it on the
+ventral stream, at **V2** — where §9.15 measured this stream's information to
+peak on photographs — with **V4** as the control, since V4 raises 12 spikes and
+a loop that "improves" it is manufacturing structure from nothing.
+
+| arm (front end V2) | cluster AUC | probe | participation |
+|---|---|---|---|
+| feedforward *(1764-d)* | 0.576 | **0.358** | 66.8 |
+| loop-1 *(256-d)* | 0.548 | 0.292 | 46.8 |
+| loop-20 *(256-d)* | 0.571 | 0.278 | **16.2** |
+| loop-20-noteach *(256-d)* | 0.564 | 0.285 | 55.6 |
+
+**The control is clean**: the same loop on V4 moves the probe by exactly
+**+0.0000**. It does not invent structure where there is none, so the rest of
+the table can be read.
+
+### The benchmark's own verdict was wrong, for the third time in this project
+
+It printed *"the loop does not beat the feedforward stage it was built on"* off
+the −0.080 probe gap. That gap compares a **1764-dimensional** code against a
+**256-dimensional** one. It is the same error as §9.14 (comparing across depths)
+and §9.9 (comparing across class sets): a difference read as an effect when it
+is a difference in conditions.
+
+Matched at 256 dimensions:
+
+| 256-d code | probe | participation |
+|---|---|---|
+| random projection of V2 | 0.257 | 67.1 |
+| **PCA of V2** | **0.278** | 66.8 |
+| **loop-20** | **0.278** | **16.2** |
+| **loop-1** | **0.292** | 46.8 |
+
+**The loop's apparent loss was entirely the bottleneck.** At equal
+dimensionality the settled loop is exactly level with PCA (0.278 against 0.278)
+and clearly above a random projection (0.257). Predictive coding here is a
+competent dimensionality reduction — it is not destroying information.
+
+### But the drawn claim specifically — *continue till best result* — is refuted
+
+One feedback pass is the best 256-d code in the table (**0.292**, above PCA's
+0.278). Settling to a fixed point gives that back (**0.278**, exactly PCA), and
+the mechanism is visible in the third column: **participation collapses from
+46.8 to 16.2** as the loop iterates. Each round explains away more, and what it
+explains away includes the category structure.
+
+Learning the loop's generative weights is worth **−0.007** — the untrained loop
+is marginally *better* than the trained one.
+
+> The feedback is mildly useful. The **iteration** is what costs, and the
+> iteration is the part the circuit was drawn around.
+
+Stated with the caution it needs: three seeds, and the differences between 0.278
+and 0.292 are small. The participation collapse from 46.8 to 16.2 is not small,
+and it is the reason to believe the direction rather than the size.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
