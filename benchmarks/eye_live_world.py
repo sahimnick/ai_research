@@ -18,8 +18,11 @@ What this measures
     motion       the same camera a few seconds later -- how much of the code
                  survives the world moving, against an encode-twice floor that
                  says what "the same scene" is worth when nothing changed
-    tracking     whether the strongest-responding location follows the thing
-                 that moved, against the chance of landing on it
+    tracking     whether the location whose activity changed most is the
+                 location where the *world* changed -- scored against a
+                 shuffled-camera control, not against nominal chance, because
+                 traffic cameras are centre-biased and both maps would peak
+                 centrally for unrelated reasons
 
 The encode-twice floor is not optional. `live_world.py` established it: without
 it "the code is stable" and "the code tracks the scene" cannot be told apart,
@@ -27,6 +30,34 @@ and a collapsed code scores perfectly on the first.
 
 Refuses to report if the pixels did not change between rounds -- a camera
 serving a frozen frame would otherwise look like perfect invariance.
+
+Correction, 2026-08-02
+----------------------
+The first run of this file reported an encode-twice floor of **exactly 0.000**,
+and this project's own `_nearest_prototype` docstring names that signature: *not
+an informative failure but a bug wearing a result's clothes*. Three defects, all
+in the measurement rather than in the eye:
+
+1. :class:`PopulationAdaptation` starts with ``n_seen = 0``, so its first update
+   uses ``a = max(tau, 1/(n_seen+1)) = 1.0`` and the running mean becomes the
+   first code **exactly**. Subtracting it returns zeros, so **row 0 of every
+   batch was the zero vector**.
+2. The floor called the encoder on a *single* frame, which is therefore row 0 --
+   the zero vector -- so the floor was structurally 0.000 whatever the eye did.
+   It could never have measured anything.
+3. The two rounds were encoded through **independent** adaptation states, so
+   ``Vc1`` and ``Vc2`` lived in different spaces. That is the same space
+   mismatch §9.6 was caught making.
+
+All three are fixed by fitting **one** adaptation per stream on the first round,
+then freezing it (``learn=False``) for every later encode. The floor becomes a
+real determinism check on the identical pixels.
+
+A control is added that the first run had no answer to. Twenty-odd traffic
+cameras are twenty-odd *different scenes*, so re-identifying which camera a
+frame came from may be trivial from the pixels alone. Raw downsampled pixels are
+scored through the identical pairing, and **the eye's identity score means
+nothing unless it is read against that number.**
 
 Usage:  python3 benchmarks/eye_live_world.py out_eye_live.json [n_cam] [gap_s]
 """
@@ -72,7 +103,8 @@ def grab(cam, n_want):
     return out, ids
 
 
-def code_at(stream, frames, colour, stage="V2"):
+def raw_at(stream, frames, colour, stage="V2"):
+    """Every frame's activity at one area -- **before** any adaptation."""
     h = stream.hierarchy
     names = [getattr(l, "name", type(l).__name__) for l in h.layers]
     k = names.index(stage)
@@ -82,9 +114,83 @@ def code_at(stream, frames, colour, stage="V2"):
             f, np.float32).mean(0)[None] / 255.0
         h.forward(x)
         out.append(np.asarray(h.layers[k].log["output"], np.float32).ravel())
-    M = np.stack(out)
+    return np.stack(out)
+
+
+def fit_adapt(M):
+    """One adaptation, fitted on the first round and then FROZEN.
+
+    Fitting a fresh one per batch is what put the two rounds in different
+    spaces, and its fast start (``a = 1/(n_seen+1)``) is what made the first row
+    of every batch the zero vector. Both go away if the baseline is learned once
+    and afterwards only applied.
+    """
     ad = PopulationAdaptation(M.shape[1])
-    return np.array([_unit(ad(r)) for r in M], np.float32)
+    for r in M:
+        ad.observe(r)
+    return ad
+
+
+def apply_adapt(ad, M):
+    return np.array([_unit(ad(r, learn=False)) for r in M], np.float32)
+
+
+def change_maps(stream, f1, f2, colour, stage="V2"):
+    """Where the eye's activity changed, and where the world changed.
+
+    The docstring above has claimed a tracking measurement since this file was
+    written and **there was none in it**. This is it, in the only form the data
+    supports: not object tracking, but retinotopic correspondence -- does the
+    eye's response change *where the scene changed*?
+
+    Returns two same-shaped maps over the area's spatial grid, so they can be
+    compared location by location.
+    """
+    h = stream.hierarchy
+    names = [getattr(l, "name", type(l).__name__) for l in h.layers]
+    k = names.index(stage)
+    acts = []
+    for f in (f1, f2):
+        x = retinal_opponent(f) if colour else np.asarray(
+            f, np.float32).mean(0)[None] / 255.0
+        h.forward(x)
+        acts.append(np.asarray(h.layers[k].log["output"], np.float32))
+    eye = np.abs(acts[1] - acts[0]).sum(0)             # (H, W) over features
+
+    world = np.abs(np.asarray(f2, np.float32)
+                   - np.asarray(f1, np.float32)).mean(0)
+    # block-average the frame down onto the area's grid, so a location in one
+    # map is the same patch of the world as the same location in the other
+    gh, gw = eye.shape
+    ph, pw = world.shape[0] // gh, world.shape[1] // gw
+    world = world[:gh * ph, :gw * pw].reshape(gh, ph, gw, pw).mean((1, 3))
+    return eye, world
+
+
+def hit_rate(eye, world, q=0.10):
+    """Does the eye's peak land in the world's most-changed ``q`` of locations?"""
+    thr = np.quantile(world, 1.0 - q)
+    r, c = np.unravel_index(int(np.argmax(eye)), eye.shape)
+    return float(world[r, c] >= thr)
+
+
+def pixel_raw(frames, colour):
+    """The control: the frames themselves, downsampled. No eye involved.
+
+    If this re-identifies a camera as well as the eye does, the eye's score is
+    reporting that traffic cameras point at different streets, not that a
+    spiking hierarchy perceives anything. Returned unadapted so it goes through
+    the *same* fit-once-then-freeze treatment as the eye's code -- a control
+    scored in a different space would not be a control.
+    """
+    P = []
+    for f in frames:
+        a = np.asarray(f, np.float32) / 255.0
+        if not colour:
+            a = a.mean(0)[None]
+        s = max(1, a.shape[-1] // 32)
+        P.append(a[:, ::s, ::s].ravel())
+    return np.stack(P)
 
 
 def main():
@@ -116,10 +222,25 @@ def main():
     lum = build_ventral_stream_on(np.stack([d.mean(0) for d in dev]),
                                   size=NATIVE, verbose=False)
 
-    Vc1 = code_at(col, first, colour=True)
-    Vl1 = code_at(lum, first, colour=False)
-    floor_c = float(np.mean([Vc1[i] @ code_at(col, [first[i]], True)[0]
-                             for i in range(len(first))]))
+    Rc1 = raw_at(col, first, colour=True)
+    Rl1 = raw_at(lum, first, colour=False)
+    Pc1 = pixel_raw(first, colour=True)
+    adc, adl, adp = fit_adapt(Rc1), fit_adapt(Rl1), fit_adapt(Pc1)
+    Vc1, Vl1, Vp1 = (apply_adapt(adc, Rc1), apply_adapt(adl, Rl1),
+                     apply_adapt(adp, Pc1))
+
+    # the floor: the SAME pixels through the SAME frozen baseline. Anything
+    # below 1.000 is the encoder itself being stochastic, and is the ceiling on
+    # what "the code survived the world moving" can possibly mean.
+    floor_c = float(np.mean(np.sum(
+        Vc1 * apply_adapt(adc, raw_at(col, first, colour=True)), 1)))
+    dead = int((np.linalg.norm(Vc1, axis=1) < 1e-6).sum())
+    if dead:
+        print(f"  {dead} of {len(Vc1)} codes are the zero vector -- the "
+              f"adaptation bug is back. REFUSING to report.")
+        json.dump({"error": "zero codes", "n_dead": dead},
+                  open(out_path, "w"), indent=1)
+        return
 
     print(f"\nwaiting {GAP_S:.0f}s for the world to move ...", flush=True)
     time.sleep(GAP_S)
@@ -145,49 +266,113 @@ def main():
 
     later = [second[b] for _, b in pairs]
     base = [a for a, _ in pairs]
-    Vc2 = code_at(col, later, colour=True)
-    Vl2 = code_at(lum, later, colour=False)
-    same_c = float(np.mean([Vc1[a] @ Vc2[k] for k, a in enumerate(base)]))
-    same_l = float(np.mean([Vl1[a] @ Vl2[k] for k, a in enumerate(base)]))
-    # identity: does a camera's later frame still look most like ITSELF?
-    S = Vc2 @ Vc1[base].T
-    id_c = float(np.mean(np.argmax(S, 1) == np.arange(len(base))))
-    Sl = Vl2 @ Vl1[base].T
-    id_l = float(np.mean(np.argmax(Sl, 1) == np.arange(len(base))))
+
+    # every later frame through the SAME frozen baseline as round one
+    Vc2 = apply_adapt(adc, raw_at(col, later, colour=True))
+    Vl2 = apply_adapt(adl, raw_at(lum, later, colour=False))
+    Vp2 = apply_adapt(adp, pixel_raw(later, colour=True))
+
+    def score(A, B):
+        """Mean self-similarity, and how often a later frame's nearest
+        neighbour among all first-round frames is its own camera."""
+        same = float(np.mean([A[a] @ B[k] for k, a in enumerate(base)]))
+        S = B @ A[base].T
+        return same, float(np.mean(np.argmax(S, 1) == np.arange(len(base))))
+
+    same_c, id_c = score(Vc1, Vc2)
+    same_l, id_l = score(Vl1, Vl2)
+    same_p, id_p = score(Vp1, Vp2)
+    chance = 1.0 / len(base)
 
     res = {"n_cameras": len(pairs), "gap_s": GAP_S, "native_px": NATIVE,
            "pixel_change": round(changed, 3),
            "encode_twice_floor": round(floor_c, 4),
            "same_camera_later": {"colour": round(same_c, 4),
-                                 "luminance": round(same_l, 4)},
+                                 "luminance": round(same_l, 4),
+                                 "raw_pixels": round(same_p, 4)},
            "identity": {"colour": round(id_c, 4),
                         "luminance": round(id_l, 4),
-                        "chance": round(1.0 / len(base), 4)},
+                        "raw_pixels": round(id_p, 4),
+                        "chance": round(chance, 4)},
            "participation": {"colour": round(code_participation(Vc1), 2),
-                             "luminance": round(code_participation(Vl1), 2)}}
+                             "luminance": round(code_participation(Vl1), 2),
+                             "raw_pixels": round(code_participation(Vp1), 2)}}
 
-    print(f"\n{'':<26}{'colour':>10}{'luminance':>12}")
-    print(f"{'same pixels twice (floor)':<26}{floor_c:>10.3f}{'—':>12}")
+    print(f"\n{'':<26}{'colour':>10}{'luminance':>12}{'RAW PIXELS':>13}")
+    print(f"{'same pixels twice (floor)':<26}{floor_c:>10.3f}"
+          f"{'—':>12}{'—':>13}")
     print(f"{'same camera ' + str(int(GAP_S)) + 's later':<26}"
-          f"{same_c:>10.3f}{same_l:>12.3f}")
+          f"{same_c:>10.3f}{same_l:>12.3f}{same_p:>13.3f}")
     print(f"{'still recognises itself':<26}{id_c:>10.3f}{id_l:>12.3f}"
-          f"   (chance {1.0/len(base):.3f})")
+          f"{id_p:>13.3f}   (chance {chance:.3f})")
     print(f"{'participation':<26}{res['participation']['colour']:>10.2f}"
-          f"{res['participation']['luminance']:>12.2f}")
+          f"{res['participation']['luminance']:>12.2f}"
+          f"{res['participation']['raw_pixels']:>13.2f}")
+
+    best_eye = max(id_c, id_l)
+    res["eye_minus_pixels"] = round(float(best_eye - id_p), 4)
+    res["colour_minus_luminance"] = round(float(id_c - id_l), 4)
+
+    # --- tracking: does the eye's activity change WHERE the world changed? ---
+    Q = 0.10
+    eyes, worlds = [], []
+    for a, b in pairs:
+        e, w = change_maps(lum, first[a], second[b], colour=False)
+        eyes.append(e)
+        worlds.append(w)
+    hit = float(np.mean([hit_rate(e, w, Q) for e, w in zip(eyes, worlds)]))
+    # The control that decides it. Traffic cameras are centre-biased, and both
+    # maps can peak centrally for unrelated reasons -- which is exactly the
+    # artefact §9.8's oracle arm was built on. Pairing each camera's EYE map
+    # with a DIFFERENT camera's world map keeps every spatial bias and destroys
+    # only the correspondence, so it is the real chance level.
+    rng = np.random.default_rng(0)
+    shuf = float(np.mean([
+        np.mean([hit_rate(eyes[i], worlds[j], Q)
+                 for i, j in enumerate(rng.permutation(len(eyes)))])
+        for _ in range(20)]))
+    res["tracking"] = {"hit_rate": round(hit, 4),
+                       "shuffled_control": round(shuf, 4),
+                       "nominal_chance": Q,
+                       "grid": list(eyes[0].shape)}
+
+    print(f"\n--- tracking: does the eye's peak change land where the world "
+          f"changed? ---")
+    print(f"  V2 grid {eyes[0].shape[0]}x{eyes[0].shape[1]}, top {Q:.0%} of "
+          f"locations counted as a hit")
+    print(f"  hit rate            {hit:.3f}")
+    print(f"  shuffled cameras    {shuf:.3f}   <- the real chance level")
+    print(f"  nominal chance      {Q:.3f}")
+    res["tracking_beats_shuffle"] = bool(hit > shuf + 0.10)
 
     print(f"\n--- what this says ---")
     print(f"  the world moved: {changed:.2f}/255 mean pixel change")
-    if id_c > 2.0 / len(base) or id_l > 2.0 / len(base):
-        best = "colour" if id_c >= id_l else "luminance"
-        print(f"  the eye still identifies a place after it changed, best on "
-              f"{best} ({max(id_c, id_l):.3f} against chance "
-              f"{1.0/len(base):.3f})")
-    else:
+    print(f"  the encoder is deterministic on identical pixels: "
+          f"{floor_c:.4f} (1.000 = perfectly)")
+    if best_eye <= 2.0 * chance:
         print(f"  the eye does NOT re-identify a place after it changed "
-              f"({max(id_c, id_l):.3f} against chance {1.0/len(base):.3f}). "
-              f"On native\n  resolution and real motion the code does not "
-              f"survive the world moving, which is the honest result.")
+              f"({best_eye:.3f} against chance {chance:.3f}). On native\n  "
+              f"resolution and real motion the code does not survive the world "
+              f"moving, which is the honest result.")
+    elif best_eye <= id_p + 1e-9:
+        print(f"  the eye re-identifies a place ({best_eye:.3f}) -- but SO DO "
+              f"RAW PIXELS ({id_p:.3f}). Twenty-odd traffic\n  cameras point at "
+              f"twenty-odd different streets, and this number is reporting "
+              f"that, not perception.\n  The eye adds "
+              f"{best_eye - id_p:+.3f} over doing nothing at all.")
+    else:
+        print(f"  the eye re-identifies a place ({best_eye:.3f}) and beats raw "
+              f"pixels ({id_p:.3f}) by {best_eye - id_p:+.3f} --\n  the "
+              f"hierarchy is carrying something the pixels are not.")
     print(f"  colour minus luminance on identity: {id_c - id_l:+.4f}")
+    if res["tracking_beats_shuffle"]:
+        print(f"  the eye localises change: {hit:.3f} against a shuffled "
+              f"{shuf:.3f}. Where it responds differently is where\n  the world "
+              f"is different -- retinotopy survives to V2 on real motion.")
+    else:
+        print(f"  the eye does NOT localise change: {hit:.3f} against a "
+              f"shuffled {shuf:.3f}. Its peak response moves, but not\n  where "
+              f"the world moved, so nothing here supports tracking.")
 
     json.dump(res, open(out_path, "w"), indent=1)
     print(f"\nwrote {out_path}")
