@@ -4348,6 +4348,190 @@ frames shows the deficit is present at the smallest shift the test can apply.
 Per the loop protocol this stops at the limiting factor; the replacement is not
 proposed in the same breath as the negative result.
 
+## 9.21 The top-down attention mechanism cannot find anything, and the reason is that its tag is an average
+
+§9.20 ended by naming retinotopy as the limiting factor for *recognition*. That
+has a corollary pointing the other way: a convolutional map does not destroy a
+translated object, it **moves** it, so the same retinotopy should buy
+**localisation**.
+
+> **H21.** The eye's own top-down mechanism — correlate a stored channel vector
+> ("the tag") against every location, which is exactly what
+> `VentralStream._attention_heatmap` does — localises a real object in a real
+> scene, and keeps localising it as the object moves.
+
+This is the goal's **تعقیب و تمرکز بر اساس تگ و توجه بالا به پایین** measured
+rather than asserted. `_attention_heatmap` (`ventral.py:1137`) has existed since
+the stream was written and is what `attend()` relies on; **its localisation had
+never been measured**, only its effect on classification.
+
+`benchmarks/eye_track.py` composites a real object — a crop of one live camera —
+into a different camera's frame at known positions along a trajectory, at native
+224 px. Ground truth is exact because the benchmark placed it.
+
+### It refused, and the refusal is the result
+
+| arm | t0 (the tag's **own** frame) |
+|---|---|
+| eye-V2 tag | **0.000** |
+| pixels-NCC | 1.000 |
+| shuffled tag (a *different* object's) | **0.188** |
+
+The correct tag cannot find its object in the very frame the tag was taken from,
+and it does **worse than a wrong tag**. The run refuses to report the moving
+trajectory, because that is a broken instrument rather than a localisation
+result.
+
+### Two hypotheses of mine, both wrong, and the one that survived
+
+I first blamed my own deviation: `_attention_heatmap` uses an unnormalised dot
+product and I had divided by each location's norm, which on a sparse map hands
+the peak to near-empty cells. Wrong twice over — the maps are **not sparse**
+(0.2% zero cells at V2, 0.0% at V4), and every variant fails:
+
+| heatmap variant | V2 | V4 |
+|---|---|---|
+| dot product (as implemented) | 92.9 | 86.2 |
+| cosine | 46.9 | 101.9 |
+| energy only | 92.9 | 95.2 |
+
+Median error in pixels, tolerance 20. None of them is close.
+
+What does explain it is the tag itself:
+
+| area | mean cosine between two locations | **object's mean vs background's mean** |
+|---|---|---|
+| V1 complex | 0.940 | **0.996** |
+| V2 | 0.125 | **0.943** |
+| pool | 0.309 | 0.966 |
+| V4 | 0.074 | **0.651** |
+
+Individual V2 locations are highly distinct from one another (0.125). But the
+tag is a **spatial average** over the object's footprint, and averaging ~18×18
+distinct vectors converges on the global mean — as does averaging the
+background. The tag therefore ends up nearly parallel to the background's mean
+(0.943 at V2, 0.996 at V1 complex) and matches everywhere equally.
+
+> `_attention_heatmap`'s prototype is a spatial average over a region, and
+> spatial averaging over a high-variance map destroys exactly the information
+> needed to find that region. `it_class_v4proto` averages over many *images* as
+> well, so the mechanism `attend()` uses in production is strictly worse than
+> the one measured here.
+
+V4 is the least damaged (0.651), consistent with it being the most
+feature-selective stage — and it is still far from usable.
+
+### What is and is not decided
+
+Falsified: **the implemented mechanism** does not localise. That is a fact about
+the code, and `attend()`'s premise does not hold.
+
+**Not** decided: whether retinotopy supports localisation *in principle*. A
+mean-vector tag throws away the spatial layout that `pixels-NCC` exploits to
+score 1.000, so H21's underlying claim needs a spatial-template arm —
+cross-correlating the map patch rather than a single averaged vector — before it
+can be answered either way. That arm is not written, and the claim is left open
+rather than resolved in the favourable direction.
+
+---
+
+## 9.22 Dynamic predictive coding on real imagery: it learns something, and it cannot imagine forward
+
+The proposed architecture is `sensors → DPC (dynamics) → HBPC (inference) →
+world model → planner/imagination`. Before building it, what is already here:
+
+| block | in this project | measured? |
+|---|---|---|
+| HBPC | `PredictiveStack` (`world/topdown.py`) — Rao & Ballard, single generative matrix, local updates, no backpropagation | **yes, §9.16** |
+| DPC | — | **absent for vision.** `world/continuous.py` learns per-*action* dynamics on a place-cell population in an arena; nothing learns how a *sensory* state evolves |
+| world model | `predictive.py` (transitions + successor representation), `objects.py` | partly |
+| imagination | `imagination.py`, `composition`, `factored` | yes |
+
+Two things worth stating before the measurement. §9.16 found the HBPC block is a
+competent inference stage — at matched dimensionality it equals PCA (0.278 vs
+0.278) and beats a random projection (0.257) — but that *iterating* it collapses
+participation 46.8 → 16.2. And `PredictiveStack` is **deterministic MAP
+inference**: no posterior, no precision weighting, no variance. The property
+that motivates HBPC in the proposal — holding several hypotheses at once under
+ambiguity — is precisely the part that does not exist.
+
+### The frames: measured, not assumed
+
+NY511 cameras return **byte-identical frames for 30 s** and change on a median
+period of **97 s** (changes at 117 s, 246 s, 310 s; delta 11.15/255 when one
+lands). They are periodic stills, not video. §9.19's live-world run saw motion
+only because it waited 90 s.
+
+Dense sequences therefore come from panning a 160 px window across a larger real
+frame — real imagery at real dimensions, known dynamics, and ecologically the
+dominant source of retinal motion, which is self-generated. Three motions
+(right, left, down) give the higher level something to separate. Cameras are
+split 60/40, so every number is on **held-out scenes**.
+
+### What DPC is here
+
+A latent state and a learned transition, under this project's constraints —
+NumPy, local learning, no gradients:
+
+```
+A <- A + lr * outer(err, r)          err = (r_next - r) - A @ r
+```
+
+The delta rule: a product of two quantities present at the synapse. Two
+commitments taken from what this project already measured — **predict the
+change, not the state** (`continuous.py` records the discrete loop losing to the
+trivial baseline, 1.63 against 0.96), and **K transition matrices with a
+winner-take-all gate**, the winner alone updated, which is what makes this
+*dynamic* rather than one linear map and gives the higher level something to be.
+
+Skill is `1 − err_model / err_persistence`, so **0.000 means exactly as good as
+assuming a frozen world**. Five seeds.
+
+### The result
+
+| representation | K=3 | **K=1** | shuffled-time | **rollout ×3** | gate purity |
+|---|---|---|---|---|---|
+| eye-V2 | −0.067 ± 0.017 | **+0.054 ± 0.002** | −0.195 ± 0.080 | **−0.229 ± 0.023** | 0.491 |
+| eye-V4 | −0.009 ± 0.032 | **+0.050 ± 0.002** | −0.230 ± 0.125 | **−0.140 ± 0.048** | 0.509 |
+| pixels | −0.195 ± 0.005 | −0.138 ± 0.007 | −0.998 ± 0.356 | −0.261 ± 0.011 | 0.468 |
+
+Three readings, in order of how much they matter.
+
+**1. The dynamics are real but small.** One-step skill on the eye's code is
+**+0.05**, with a seed spread of 0.002, against a shuffled-time control at −0.20
+to −1.00. Something genuinely temporal is being learned by a local rule on real
+imagery. It is worth five percent over assuming nothing moved.
+
+**2. The gate — the part that makes this *dynamic* predictive coding — buys
+nothing.** K=1 beats K=3 on every representation, decisively (+0.054 vs −0.067
+at V2). The higher level does partially discover which motion is running (gate
+purity 0.49–0.51 against a chance of 0.333), so the structure is findable; it
+just does not improve the forecast. A single linear map is the better model.
+
+**3. It cannot imagine forward, and that is the one that decides the stack.**
+Rollout — three steps driven by the model's own output with no new observation —
+is **negative on every representation**, −0.14 to −0.26. One step is +0.05 and
+three steps are worse than freezing the world, so the error compounds faster
+than the model corrects. Multi-step rollout with no input *is* imagination; it
+is the operation a world model owes a planner. This does not have it.
+
+> The limiting factor is named and not worked around: the model is fit on
+> **one-step** transitions and nothing constrains its behaviour beyond one step.
+> That is a property of how it is trained, visible in +0.05 at horizon 1 against
+> −0.14 at horizon 3. No replacement is proposed here.
+
+### A confound in my own metric, stated rather than buried
+
+Skill is relative to **each arm's own** persistence baseline, and those differ
+threefold (pixels 0.188, eye-V4 0.478). A code that barely moves between frames
+has a strong baseline and little headroom; one that moves a lot has a weak
+baseline and plenty. **Ranking representations by skill would measure how much
+each code moves, not how predictable it is** — so the fact that pixels score
+−0.138 and the eye +0.05 does *not* establish the eye as the better substrate,
+and §9.20's opposite finding is not overturned here. The columns compare arms
+within a representation. Deciding between representations needs a shared
+yardstick — predicting the next actual image — which this benchmark does not do.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
