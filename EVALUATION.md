@@ -5225,6 +5225,89 @@ translation, appearing here under illumination.
 | سایه shadow | measured, **absent** — at the pixel null, with no mechanism that could do otherwise |
 | ارتباط relations | still unmeasured |
 
+## 9.32 Two proposed repairs, measured: one fails in its own regime, one half works
+
+Two changes were proposed on the strength of earlier results in this document —
+swap `attend()`'s averaged prototype for the spatial template of §9.21, and
+train DPC on multiple horizons instead of one to fix §9.22's negative rollout.
+Both were implemented and measured rather than reasoned about.
+
+### 1. The attention swap fails, and the reason is not the tag
+
+§9.21 measured `_attention_heatmap`'s averaged prototype at **0.000** finding an
+object in the frame its own tag came from, against **0.943** for a spatial
+template. Swapping it into `attend()` should therefore be a straight win. Each
+class was given a **spatial exemplar** — the medoid image's V4 map, cropped to
+the object's support — and A/B'd on two-object images:
+
+| arm | cue-following *(chance 0.083)* | switch rate |
+|---|---|---|
+| spatial template | 0.275 | 0.850 |
+| **averaged prototype** *(as published)* | **0.350** | 0.875 |
+
+**The fix makes it worse.** The reason is measured, not guessed: on `attend()`'s
+own working canvas the V4 map is **7×21 with 100% of cells above 55% of peak
+energy**. It is uniformly active — there is no spatial layout for a template to
+exploit, so a method that depends on layout has nothing to work with. §9.21's
+0.943 was at 224 px, where V4 is 49×49 and structured.
+
+> The limiting factor is the **saturated small-canvas map**, not the choice of
+> tag. This is the long-noted "V2 and V4 sit at 100% of spike ceiling" appearing
+> as a concrete cost for the first time.
+
+`attend()` therefore keeps the averaged profile, which measures better on its
+own task, and the spatial version is available as `attend_spatial` — used by
+every benchmark from §9.21 on, where the resolution supports it. Neither path
+was degraded and no published number moved.
+
+### 2. Multi-horizon DPC: direct prediction fixed, rollout not
+
+§9.22 named its own limiting factor: *the model is fit on one-step transitions
+and nothing constrains its behaviour beyond one step.* The repair trains
+horizons 1..3, each with its **own local delta-rule update** — no
+backpropagation through the chain, which makes this an *approximation* of
+multi-step optimisation rather than the real thing.
+
+Two departures from §9.22 that must be stated. The state is the **tracked
+position** rather than a whole-frame latent — far better posed, with ground
+truth from VOT boxes — so **this is an easier task and success here does not
+repair §9.22's negative**. And the update is normalised LMS (divided by ‖s‖²),
+because the first version, on raw pixel coordinates, diverged to `nan` outright.
+
+40 sequences, 5 seeds, targets moving 2.09 px/frame:
+
+| horizon | DPC skill vs persistence | sd | constant velocity |
+|---|---|---|---|
+| 1 step, direct | **+0.085** | 0.039 | +0.047 |
+| 2 steps, direct | **+0.052** | 0.038 | −0.080 |
+| 3 steps, direct | **+0.024** | 0.043 | −0.199 |
+| 3 steps, **free rollout** | **−0.030** | 0.069 | −0.199 |
+
+**Direct multi-step prediction works.** At every horizon the model beats
+persistence *and* constant velocity, and the margin over constant velocity grows
+with horizon (+0.04, +0.13, +0.22) — so it has learned something beyond "keep
+going the way you were", which is the arithmetic baseline a world model has to
+clear to be a world model.
+
+**Free rollout still does not.** Feeding the model its own output for three steps
+gives −0.030 ± 0.069 — better than §9.22's −0.14 to −0.26 and better than
+constant velocity, but still not above zero, and short of the +0.05 that was
+set in advance as the bar.
+
+> The limiting factor moves, and is now sharp: **the failure is iteration, not
+> horizon.** The same model predicts three steps ahead *directly* at +0.024 and
+> fails to reach that by iterating its own one-step predictions. A predicted
+> displacement is regressed toward the mean, so the state fed back is not
+> distributed like any state the rule was trained on — the model is asked, from
+> step two onward, about inputs it has never seen.
+
+That is a specific, named mechanism rather than a shrug, and per the loop
+protocol this stops there rather than proposing the next repair in the same
+breath. It is worth recording that the diagnosis points at training on the
+model's *own* outputs, which is what the proposal called scheduled sampling —
+the idea was right about where the problem lives even though this
+implementation of it did not clear the bar.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

@@ -1056,6 +1056,12 @@ class VentralStream:
     it_names: Optional[List[str]] = None       # classes of the hard/object task
     it_class_proto: Optional[np.ndarray] = None  # mean IT code per object class
     it_class_v4proto: Optional[np.ndarray] = None  # mean V4 channel profile / class
+    #: per-class **spatial** V4 exemplar (medoid image, cropped to the object's
+    #: support). Keeps the layout that `it_class_v4proto` averages away, which
+    #: §9.21 measured as the difference between 0.000 and 0.943 at finding an
+    #: object. Used by :meth:`attend`; the averaged profile is kept for
+    #: :meth:`attend_legacy`.
+    it_class_v4tmpl: Optional[List[np.ndarray]] = None
     _mu: Optional[np.ndarray] = None
     _sd: Optional[np.ndarray] = None
     _W: Optional[np.ndarray] = None            # ridge readout weights
@@ -1152,25 +1158,67 @@ class VentralStream:
         xi = (np.linspace(0, mask.shape[1] - 1, shape[1])).round().astype(int)
         return mask[np.ix_(yi, xi)]
 
+    def _readout(self, it: np.ndarray) -> str:
+        scores = [float(it @ (p / (np.linalg.norm(p) + 1e-6)))
+                  for p in self.it_class_proto]
+        return self.it_names[int(np.argmax(scores))]
+
     def attend(self, image: np.ndarray, cue: str, beta: float = 10.0,
                power: float = 3.0) -> str:
         """Goal-directed attention: look at ``image`` *for* the cued object.
 
-        The cued object's V4 template sends a top-down feature-similarity gain
-        down the hierarchy, enhancing the region whose features match the cue and
-        suppressing the rest; IT then reads the attended maps and reports the
-        nearest object prototype. With two objects competing in one image, cueing
-        one vs the other gives a different answer from the *same input* -- the
-        signature of top-down (biased-competition) attention, which no
-        feed-forward pass can produce.
+        The cued object's V4 profile sends a top-down gain down the hierarchy,
+        enhancing the region whose features match the cue; IT then reads the
+        attended maps and reports the nearest prototype. Cueing one of two
+        competing objects vs the other gives a different answer from the *same
+        input* -- biased competition, which no feed-forward pass can produce.
+
+        Why this still uses the averaged profile, when §9.21 showed averaging
+        destroys a tag
+        -----------------------------------------------------------------------
+        §9.21 measured `_attention_heatmap`'s averaged prototype at **0.000**
+        finding an object in the frame its own tag came from, and a spatial
+        template at **0.943** -- at 224 px, where V4 is a 49x49 map with real
+        structure. :meth:`attend_spatial` is that fix, and it is what every
+        benchmark from §9.21 on uses.
+
+        It does **not** help here, and the reason is measured rather than
+        assumed: on this class's own working canvas the V4 map is 7x21 with
+        **100% of cells above 55% of peak energy** -- uniformly active, with no
+        layout for a template to exploit. A/B on two-object images: spatial
+        0.275 cue-following, averaged 0.350. So the default stays with what
+        measures better *on this task*, and the limiting factor is the
+        saturated small-canvas map rather than the choice of tag.
         """
         self.hierarchy.forward(image)
         v4 = self.V4.log["output"]
         g4 = (self._attention_heatmap(v4, cue) ** power)[None] * beta
-        it = self.IT.forward(v4 * g4)
-        scores = [float(it @ (p / (np.linalg.norm(p) + 1e-6)))
-                  for p in self.it_class_proto]
-        return self.it_names[int(np.argmax(scores))]
+        return self._readout(self.IT.forward(v4 * g4))
+
+    def attend_spatial(self, image: np.ndarray, cue: str, beta: float = 10.0,
+                       power: float = 3.0) -> str:
+        """:meth:`attend` driven by a **spatial** class exemplar, per §9.21.
+
+        The right choice wherever the area's map has spatial structure -- at
+        native resolution it is the difference between 0.000 and 0.943 at
+        finding an object. On this class's default 56 px canvas the V4 map is
+        saturated and it loses to the averaged profile; see :meth:`attend`.
+        Falls back automatically when no usable exemplar exists.
+        """
+        self.hierarchy.forward(image)
+        v4 = np.asarray(self.V4.log["output"], np.float32)
+        tmpl = None
+        if self.it_class_v4tmpl is not None and cue in (self.it_names or []):
+            tmpl = self.it_class_v4tmpl[self.it_names.index(cue)]
+        if tmpl is None or any(t > s for t, s in zip(tmpl.shape[1:],
+                                                     v4.shape[1:])):
+            return self.attend(image, cue, beta=beta, power=power)
+        _, score = locate_template(v4, tmpl)
+        g = np.maximum(score, 0.0)
+        peak = g.max()
+        g = g / peak if peak > 1e-9 else g
+        g4 = (self._upsample(g, v4.shape[-2:]) ** power)[None] * beta
+        return self._readout(self.IT.forward(v4 * g4))
 
     def area_map(self, image: np.ndarray, area: str = "V2") -> np.ndarray:
         """One area's ``(channels, H, W)`` map for ``image``."""
@@ -1420,6 +1468,40 @@ def build_ventral_stream(n_v1: int = 12, n_v2: int = 36, n_v4: int = 44,
     v4_prof = np.array([v.reshape(v.shape[0], -1).mean(1) for v in v4s])
     stream.it_class_v4proto = np.array(
         [v4_prof[h_lab == c].mean(0) for c in range(len(h_names))], np.float32)
+    # A per-class SPATIAL exemplar, kept beside the averaged profile above.
+    # `it_class_v4proto` averages over space *and* over images, and §9.21
+    # measured what that costs: a tag reduced to one mean channel vector cannot
+    # find its own object even in the frame it came from (0.000, against 0.188
+    # for a deliberately wrong tag). A template that keeps its layout scores
+    # 0.943. So each class also stores the V4 map of its **medoid** image --
+    # the one closest to the class mean -- cropped to the object's support,
+    # which is what `attend` uses.
+    tmpl = []
+    for c in range(len(h_names)):
+        idx = np.flatnonzero(h_lab == c)
+        if len(idx) == 0:
+            tmpl.append(None)
+            continue
+        prof = v4_prof[idx]
+        medoid = idx[int(np.argmin(np.linalg.norm(prof - prof.mean(0),
+                                                  axis=1)))]
+        m = np.asarray(v4s[medoid], np.float32)
+        e = np.linalg.norm(m, axis=0)
+        thr = e.max() * 0.35
+        rs, cs = np.nonzero(e >= thr)
+        if len(rs) == 0:
+            tmpl.append(m)
+            continue
+        r0, r1 = int(rs.min()), int(rs.max()) + 1
+        c0, c1 = int(cs.min()), int(cs.max()) + 1
+        # leave room to search: a template as large as the map has one position
+        if r1 - r0 >= m.shape[1]:
+            r0, r1 = r0 + 1, r1 - 1
+        if c1 - c0 >= m.shape[2]:
+            c0, c1 = c0 + 1, c1 - 1
+        tmpl.append(m[:, max(r0, 0):max(r1, r0 + 1),
+                      max(c0, 0):max(c1, c0 + 1)])
+    stream.it_class_v4tmpl = tmpl
     # how object-selective the IT cells became (unsupervised): mean purity of
     # each cell's preferred class among the images it fires most for
     tops = np.array([IT.forward(v).argmax() for v in v4s])
