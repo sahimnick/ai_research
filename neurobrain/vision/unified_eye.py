@@ -63,6 +63,10 @@ class Tag:
     name: str
     templates: Dict[str, np.ndarray]
     box: Tuple[float, float, float, float]      # (y, x, h, w) it came from
+    #: A stable integer that survives occlusion and re-acquisition. Two tags
+    #: never share one, which is what makes a track an *identity* rather than a
+    #: sequence of independent detections.
+    ident: int = -1
     #: Where the object's centre sits inside its own template, in cells, per
     #: area. The crop floors one edge and ceils the other, so the template's
     #: geometric middle is NOT the object's centre -- reporting the middle
@@ -95,6 +99,9 @@ class Percept:
     #: A labelling of the area map by what each cell responds to. Feature
     #: segmentation, closer to superpixels than to YOLO's instance masks.
     segments: Optional[np.ndarray] = None
+    #: Stable id per reported tag, and how long each has been unseen.
+    ident: Dict[str, int] = field(default_factory=dict)
+    unseen: Dict[str, int] = field(default_factory=dict)
     relations: Dict[Tuple[str, str], str] = field(default_factory=dict)
     attention: Dict[str, np.ndarray] = field(default_factory=dict)
     maps: Dict[str, np.ndarray] = field(default_factory=dict)
@@ -144,6 +151,17 @@ class UnifiedEye:
         self.stream = None
         self.tags: Dict[str, Tag] = {}
         self.last: Dict[str, Tuple[float, float]] = {}
+        self._next_id = 1
+        #: How close two tags may be reported before one of them is rejected,
+        #: in pixels. Without this two tags happily land on the same object --
+        #: the failure §9.36 measured on `bolt1`, where a tag for one runner
+        #: matched a different runner and both tracks collapsed onto him.
+        self.exclusion_px = 30.0
+        #: Frames a tag may stay LOST and still keep its identity. Past this it
+        #: is still tracked but its identity is no longer claimed to be the
+        #: same one -- an honest expiry rather than a silent re-attachment.
+        self.max_lost = 12
+        self.lost_for: Dict[str, int] = {}
         self._size_probe = None
 
     # ---------------------------------------------------------------- develop
@@ -209,7 +227,11 @@ class UnifiedEye:
             # the object's true centre, in this template's own cell frame
             ctr[a] = ((y + bh / 2) * gh / self.size - r0,
                       (x + bw / 2) * gw / self.size - c0)
-        t = Tag(name, tmpl, (float(y), float(x), float(bh), float(bw)), ctr)
+        ident = self.tags[name].ident if name in self.tags else self._next_id
+        if name not in self.tags:
+            self._next_id += 1
+        t = Tag(name, tmpl, (float(y), float(x), float(bh), float(bw)),
+                ident, ctr)
         self.tags[name] = t
         self.last[name] = (float(y) + float(bh) / 2, float(x) + float(bw) / 2)
         return t
@@ -250,6 +272,7 @@ class UnifiedEye:
         M = self._pass(frame)
         p = Percept(maps=M)
         want = [cue] if cue is not None else list(self.tags)
+        cand: Dict[str, Tuple[float, Tuple[float, float]]] = {}
         for n in want:
             t = self.tags.get(n)
             if t is None:
@@ -293,12 +316,38 @@ class UnifiedEye:
             full = np.zeros((gh, gw), np.float32)
             full[r0:r0 + g.shape[0], c0:c0 + g.shape[1]] = g
             p.attention[n] = full
+            cand[n] = (conf, pos)
+
+        # --- identity: resolve competing claims, strongest first ------------
+        # Two tags reporting the same place is an identity failure, not two
+        # detections. The strongest claim keeps the spot; the others are LOST
+        # for this frame and keep their id, so a track survives being blocked
+        # rather than silently jumping onto its neighbour.
+        taken: List[Tuple[float, float]] = []
+        for n, (conf, pos) in sorted(cand.items(), key=lambda kv: -kv[1][0]):
+            t = self.tags.get(n)
             if conf < self.min_confidence:
-                p.lost[n] = conf          # say nothing rather than guess
-                continue
-            p.where[n] = pos
-            p.confidence[n] = conf
-            self.last[n] = pos
+                p.lost[n] = conf
+            elif any(np.hypot(pos[0] - q[0], pos[1] - q[1])
+                     < self.exclusion_px for q in taken):
+                p.lost[n] = conf          # someone else already owns this place
+            else:
+                taken.append(pos)
+                p.where[n] = pos
+                p.confidence[n] = conf
+                self.last[n] = pos
+                self.lost_for[n] = 0
+                if t is not None:
+                    p.ident[n] = t.ident
+        for n in p.lost:
+            self.lost_for[n] = self.lost_for.get(n, 0) + 1
+            p.unseen[n] = self.lost_for[n]
+            t = self.tags.get(n)
+            if t is not None and self.lost_for[n] > self.max_lost:
+                # gone too long to still claim it is the same thing
+                t.ident = self._next_id
+                self._next_id += 1
+                self.last.pop(n, None)     # and search the whole frame again
 
         if n_proposals:
             p.proposals = propose(M[self.where_area], self.size,

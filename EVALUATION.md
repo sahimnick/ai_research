@@ -5560,6 +5560,72 @@ sub-window-sized and stretched over the whole frame, so the heat appeared where
 the eye had never looked. The box and the heatmap disagreed on screen and the
 heatmap was the one lying.
 
+## 9.36 Identity, and an honest answer about DAVIS and YOLO
+
+Two things were asked: add identity, and say whether this can reach the level of
+DAVIS-2017 video object segmentation and a YOLOv8 detector. The first is built
+and measured. The second is no, and the reasons are already in this document.
+
+### Identity: two tracks must never become one
+
+§9.35's worst failures — `bolt1` at precision 0.14 with coverage 0.90 — were not
+weak matches but **confident wrong ones**: the template for one runner matched a
+*different* runner in the crowd. The eye was following *a* human, not *the*
+human. That is an identity failure and no confidence gate can catch it, because
+the wrong answer is genuinely a good match.
+
+What identity adds: a stable id per tag, and **mutual exclusion** — the
+strongest claim to a place keeps it, and any other tag claiming the same place
+is reported LOST for that frame rather than allowed to sit on its neighbour. A
+tag unseen longer than `max_lost` gives up its id rather than silently
+re-attaching to whatever it finds next.
+
+Ten sequences, two tracks each (the ground-truth target plus the strongest
+proposal elsewhere):
+
+| exclusion | two tracks collapsed onto one object | target precision | coverage | id switches |
+|---|---|---|---|---|
+| **off** | **0.220** | 0.662 | 0.224 | 0.000 |
+| **30 px** | **0.000** | 0.672 | 0.221 | 0.000 |
+| 50 px | 0.000 | 0.667 | 0.217 | 0.000 |
+
+**Collapse goes to zero and costs nothing** — precision and coverage are
+unchanged within noise. Identities never switched in any arm.
+
+Stated precisely, because the table is easy to over-read: this fixes tracks
+*merging*, which was a real and measurable defect. It does **not** fix the
+underlying confusion — the eye still cannot tell one runner from another, it is
+merely no longer allowed to put two labels in the same place. The 0.662 target
+precision is the unchanged evidence of that.
+
+### Can this reach DAVIS-2017 or YOLOv8? No, and not for want of tuning
+
+| | measured here | what those benchmarks need |
+|---|---|---|
+| transfer to unseen scenes | **R² 0.00** (§9.27, every breadth 2–32 scenes, every width 4–128) | the entire task is unseen scenes |
+| tracking on VOT2019 | success AUC **0.10–0.16** (§9.24, §9.30) | modern trackers ≫ 0.5 |
+| objectness recall, top-10 | **0.31** against 0.11 random | a detector recalls ≳0.95 |
+| object classes | **none** | 80 for COCO; DAVIS needs instance masks |
+| training signal | **no gradients, by constraint** | backprop over millions of labelled boxes or masks |
+
+DAVIS J&F near 0.85–0.90 and YOLOv8's mAP both come from supervised deep
+networks trained on large labelled corpora. This project excludes gradient
+training as a premise, has no labelled data, and — §9.27 — produces a
+representation that carries **nothing** to scenes it did not develop on. The gap
+is not a matter of thresholds or more sequences; those benchmarks measure
+exactly the capability §9.27 measured at zero.
+
+> Where >0.90 *is* reachable, and it is worth being precise about the scope:
+> **on footage this eye developed on, on consecutive frames, when it is allowed
+> to abstain** — §9.35's held-out curve, 0.902 at 70% coverage. That is a
+> narrower claim than either benchmark makes and it should not be quoted as
+> comparable to them.
+
+The honest description of what exists is a **tag-following tracker with
+abstention and identity**, not a detector and not a segmenter. Everything in
+§9.36's overlay — proposals, feature segments, IDs — is built from one forward
+pass and none of it is trained on labels.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind

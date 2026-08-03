@@ -16,7 +16,10 @@ and see what each contributes:
                 this eye has to a segmentation. It is a similarity field over
                 the area's own grid, NOT a learned object mask.
     box         the located region, at the tag's own size
-    label       tag name + match confidence
+    label       stable identity + tag name + match confidence. The identity
+                survives occlusion and is never shared: §9.36 measured two
+                tracks collapsing onto one object 0.220 of the time without
+                mutual exclusion and 0.000 with it
     path        where the tag has been, over previous frames
     prediction  where it is expected next, by constant velocity over the path
     relation    the spatial relation between two tags, drawn between them
@@ -111,8 +114,11 @@ def draw_percept(frame: np.ndarray, percept, history=None,
     H, W = img.shape[:2]
     names = sorted(percept.where)
     colours = dict(colours or {})
+    ids = getattr(percept, "ident", {})
     for i, n in enumerate(names):
-        colours.setdefault(n, _PALETTE[i % len(_PALETTE)])
+        # keyed on the IDENTITY, not the slot, so a track keeps its colour and
+        # an identity switch shows up as the colour changing
+        colours.setdefault(n, _PALETTE[(ids.get(n, i)) % len(_PALETTE)])
 
     # --- attention: the correlation field that decided where ----------------
     if "attention" in show and percept.attention:
@@ -236,8 +242,10 @@ def draw_percept(frame: np.ndarray, percept, history=None,
                         width=max(1, S))
         if "label" in show:
             conf = percept.confidence.get(n, 0.0)
-            _text((x0, y0 - fs - 6), f"{n} {conf:.2f}", (10, 12, 16, 255),
-                  col + (225,))
+            i = getattr(percept, "ident", {}).get(n)
+            tag = f"ID {i}: {n} {conf:.2f}" if i is not None else \
+                f"{n} {conf:.2f}"
+            _text((x0, y0 - fs - 6), tag, (10, 12, 16, 255), col + (225,))
 
     # --- proposals: distinctive regions, tagged or not ----------------------
     if "proposals" in show and getattr(percept, "proposals", None):
@@ -282,7 +290,8 @@ def draw_percept(frame: np.ndarray, percept, history=None,
     if "lost" in show and getattr(percept, "lost", None):
         y = 4
         for n, c in sorted(percept.lost.items()):
-            y += _text((4, y), f"{n}: LOST ({c:.2f} < threshold)",
+            un = getattr(percept, "unseen", {}).get(n, 0)
+            y += _text((4, y), f"{n}: LOST ({c:.2f}), unseen {un}f",
                        (255, 235, 235, 255), (150, 40, 40, 210)) + 2
 
     if getattr(percept, "frame_size", None) is not None:
