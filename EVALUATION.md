@@ -5628,6 +5628,133 @@ pass and none of it is trained on labels.
 
 ---
 
+## 9.37 H23 — the brain in the loop, and hearing put to work
+
+`minds/mind.py` has been an integrated brain since it was written: perception
+grounded into concepts, a world model over those concepts, imagination,
+surprise, planning, top-down search. It was never dormant for want of design.
+It was dormant because `build_mind()` feeds it `shape_images` and
+`sound_dataset` — drawn circles and 400 ms chirps — while every number from
+§9.18 on came from real video. The two subsystems had never met.
+
+`neurobrain/minds/eyebrain.py` is the adapter that makes them meet, and it is
+the only new code: it supplies the seven members `Mind` asks of its `brain`,
+backed by a 224 px `UnifiedEye` and a real cochleagram. **`mind.py` is not
+modified — not one line.**
+
+> **H23.** A real `UnifiedEye` region code and a real ESC-50 sound code can be
+> bound into shared concept cells, and either sense alone can then name the
+> concept above chance.
+
+Five visual categories, each appearing in **two or three different VOT2019
+sequences**, each paired with one real ESC-50 class — drone/helicopter,
+vehicle/engine, fish/water_drops, bird/chirping_birds, sport/clapping. Two
+scenes per category is the point: with one scene per label, "generalises to a
+new scene" is not a question that can be asked. 13 sequences, 24 crops each,
+24 recordings per class with half held out. Chance is 0.200.
+
+| arm | within-scene | cross-scene | sound alone → concept |
+|---|---|---|---|
+| **eye** | **0.615** | 0.205 | 0.668 |
+| eye, sound uninformative | 0.333 | 0.115 | 0.299 |
+| raw pixels | 0.500 | 0.269 | 0.631 |
+| shuffled labels (×5) | 0.169 | 0.066 | — |
+
+Paired bootstrap over the 13 sequences, which is the only way to read that
+table — the per-sequence spread is enormous (`road`: eye 0.500, pixels 0.042;
+`fish1`: eye 0.583, pixels 0.958):
+
+| comparison | within-scene | cross-scene |
+|---|---|---|
+| eye − chance | **+0.415** [+0.223, +0.595] | +0.005 [−0.104, +0.130] |
+| eye − shuffled | **+0.446** [+0.247, +0.632] | — |
+| **eye − sound uninformative** | **+0.282** [+0.103, +0.474] | +0.090 [−0.029, +0.218] |
+| eye − raw pixels | +0.115 [−0.070, +0.308] | −0.064 [−0.195, +0.074] |
+
+### The result is two-sided, and the second side falsifies H23
+
+**Within a scene, percepts do ground into concepts.** 0.615 against 0.200, and
+against a shuffled-label control at 0.169. Both intervals clear zero by a wide
+margin. The machinery works.
+
+**Across scenes, it is exactly chance.** +0.005, with an interval straddling
+zero. H23 is falsified on the half that matters, and the limiting factor is not
+new: this is §9.27 reproducing itself one level up. The eye's representation
+does not carry to a scene it did not develop on, and a brain built on top of
+that representation inherits precisely that.
+
+This was **predicted in writing before the run**. `docs/PLAN_BRAIN_IN_THE_LOOP.fa.md`
+§1 split the measured failures into four the brain could fix and four it could
+not, and said of the second group: *if a world model is mounted on a
+representation that does not transfer, it inherits the non-transfer.* That is
+what the number says. The prediction being correct is the finding.
+
+### Hearing earns its place, and this is the one clean positive
+
+The arm to look at is `eye` against `eye, sound uninformative` — same pipeline,
+same real recordings, same binding, but each crop is paired with a clip drawn
+from a *random* concept. Sound is present and says nothing.
+
+**+0.282 [+0.103, +0.474], the eye winning 10 of 13 sequences.** Binding a
+consistent sound to a visual category nearly doubles visual naming within a
+scene (0.615 against 0.333). The association area's competition is driven by
+both senses, so a consistent auditory partner sharpens which cell wins, and the
+visual weights are learned better as a result. Hearing is not decoration on
+this task; it is load-bearing.
+
+Cross-scene, that advantage also collapses to nothing (+0.090, interval
+straddling zero) — sound does not rescue a representation that does not
+transfer.
+
+### Three things this does not show, stated because the table invites them
+
+**Raw pixels are not beaten, and are not the winner either.** 16×16 downsampled
+greyscale scores 0.500 within-scene and 0.269 cross-scene. Neither paired
+interval separates it from the eye in either split. So "the ventral stream is
+what is doing the naming" is **not** established here. §9.24 once claimed pixels
+beat the eye two to one and §9.30 could not replicate it; the same restraint
+applies in the other direction.
+
+**The shuffled arm is not an estimate of chance, and its sub-chance value has a
+cause.** Leave-one-sequence-out removes one instance of the held-out category
+from the training pool, so a randomly assigned label is *less* likely than 1/5
+to be the held-out one. It measures that destroying correspondence destroys
+performance — 0.615 → 0.169 — and nothing more. The reference for "above
+chance" is the analytic 0.200.
+
+**The sound → concept column has no clean control.** Permuting the labels
+permutes each crop's paired clip with them, so sound-to-label correspondence
+survives the shuffle. 0.385 there is not a null and 0.668 should be read mostly
+as a statement about the auditory code separating five ESC-50 classes — the raw
+pixel arm reaches 0.631 on the same column, which confirms it is the ear, not
+the eye, carrying that number.
+
+### One caveat on the cross-scene figure, in the direction of generosity
+
+The eye is developed **once**, unsupervised, on frames drawn from all thirteen
+sequences, and that one eye serves every fold. No label is involved and the
+association area's training is strictly split — but the representation has seen
+the held-out scene's pixels. The cross-scene 0.205 is therefore an **upper
+bound**. Developing per fold would cost thirteen developments; running it as-is
+and saying so is more honest than quietly reporting it as fully held out. It
+does not change the verdict: an upper bound at chance is still chance.
+
+### What follows
+
+The plan's gate was written before the run: *if H23 or H24 is rejected, the
+later phases are not executed.* H23 is confirmed within-scene and rejected
+cross-scene, so H25–H28 — concept discovery, identity memory, world-model
+rollout, the closed loop — are **not started**. Each of them is a structure
+mounted on cross-scene concept identity, and that is the thing measured at
+chance here. Running them would produce within-scene numbers that look like
+progress and would not be.
+
+No replacement architecture is proposed in the same breath. The limiting factor
+is named, it is the same one §9.27 named, and it is upstream of everything this
+phase built.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.

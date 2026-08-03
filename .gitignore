@@ -9,3 +9,6 @@ out_*.json
 # dataset cache
 *.gz
 *.nbz
+
+# VOT2019 sequences, fetched by the benchmarks (539 MB)
+vot/
