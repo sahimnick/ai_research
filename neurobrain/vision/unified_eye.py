@@ -53,6 +53,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from .objectness import feature_report, propose, segment
 from .ventral import build_ventral_stream_on, locate_template
 
 
@@ -87,6 +88,13 @@ class Percept:
     #: Reported as one value rather than duplicated per name, which the first
     #: version did and which read as four independent measurements of one thing.
     frame_size: Optional[float] = None
+    #: Distinctive regions the eye found **whether or not they were tagged** --
+    #: objectness, not detection. No labels: naming one needs a classifier
+    #: trained on labelled objects and this project has none.
+    proposals: List[dict] = field(default_factory=list)
+    #: A labelling of the area map by what each cell responds to. Feature
+    #: segmentation, closer to superpixels than to YOLO's instance masks.
+    segments: Optional[np.ndarray] = None
     relations: Dict[Tuple[str, str], str] = field(default_factory=dict)
     attention: Dict[str, np.ndarray] = field(default_factory=dict)
     maps: Dict[str, np.ndarray] = field(default_factory=dict)
@@ -207,8 +215,21 @@ class UnifiedEye:
         return t
 
     # ------------------------------------------------------------------ look
+    def features(self, frame: Optional[np.ndarray] = None) -> Dict[str, dict]:
+        """What each area is tuned to, **probed** with gratings, as a list.
+
+        See :func:`~neurobrain.vision.objectness.feature_report`. Pass a frame
+        to also get which channels that picture drives hardest.
+        """
+        if self.stream is None:
+            raise RuntimeError("develop() the eye first")
+        return feature_report(self.stream, self.areas, img_size=self.size,
+                              frame=self._prep(frame)
+                              if frame is not None else None)
+
     def look(self, frame: np.ndarray, cue: Optional[str] = None,
-             relations: bool = True) -> Percept:
+             relations: bool = True, n_proposals: int = 0,
+             n_segments: int = 0) -> Percept:
         """One pass; every read-out below comes out of it.
 
         ``cue`` restricts the attention map to one tag -- the top-down half of
@@ -279,6 +300,11 @@ class UnifiedEye:
             p.confidence[n] = conf
             self.last[n] = pos
 
+        if n_proposals:
+            p.proposals = propose(M[self.where_area], self.size,
+                                  k=int(n_proposals))
+        if n_segments:
+            p.segments = segment(M[self.where_area], k=int(n_segments))
         if self._size_probe is not None:
             mu, V, W = self._size_probe
             z = (M[self.size_area].ravel() - mu) @ V

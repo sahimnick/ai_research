@@ -20,6 +20,12 @@ and see what each contributes:
     path        where the tag has been, over previous frames
     prediction  where it is expected next, by constant velocity over the path
     relation    the spatial relation between two tags, drawn between them
+    proposals   regions the eye found distinctive, tagged or not -- objectness
+                with NO labels. It never says what they are, because nothing
+                here has object classes
+    segments    map cells grouped by what they respond to. Feature
+                segmentation, not YOLO's instance masks: one object is often
+                split across labels
     grid        the area map's cell boundaries -- what resolution the eye
                 actually sees at, which is coarser than the frame
     lost        tags the eye looked for and was not confident enough to
@@ -49,7 +55,7 @@ import numpy as np
 #: Every layer this module can draw. Passing a subset to :func:`draw_percept`
 #: switches the rest off.
 LAYERS = ("attention", "box", "label", "path", "prediction", "relation",
-          "grid", "lost")
+          "grid", "lost", "proposals", "segments")
 
 _PALETTE = ((255, 92, 92), (92, 200, 255), (140, 240, 140), (255, 205, 80),
             (220, 140, 255), (255, 160, 90))
@@ -127,6 +133,20 @@ def draw_percept(frame: np.ndarray, percept, history=None,
             acc = acc / np.maximum(wt[..., None], 1e-6)
             img = (img * (1 - alpha * wt[..., None])
                    + acc * 255 * alpha * wt[..., None]).astype(np.uint8)
+
+    # --- segments: cells grouped by what they respond to --------------------
+    if "segments" in show and getattr(percept, "segments", None) is not None:
+        lab = np.asarray(percept.segments)
+        u = _upsample(lab.astype(np.float32), (H, W)).astype(np.int32)
+        pal = np.array([_PALETTE[i % len(_PALETTE)]
+                        for i in range(int(lab.max()) + 1)], np.float32)
+        tint = pal[np.clip(u, 0, len(pal) - 1)]
+        img = (img * 0.62 + tint * 0.38).astype(np.uint8)
+        # outline the boundaries so the regions read as regions
+        b = np.zeros((H, W), bool)
+        b[1:, :] |= u[1:, :] != u[:-1, :]
+        b[:, 1:] |= u[:, 1:] != u[:, :-1]
+        img[b] = (235, 240, 250)
 
     # --- grid: the resolution the eye actually sees at -----------------------
     if "grid" in show and getattr(percept, "maps", None):
@@ -218,6 +238,17 @@ def draw_percept(frame: np.ndarray, percept, history=None,
             conf = percept.confidence.get(n, 0.0)
             _text((x0, y0 - fs - 6), f"{n} {conf:.2f}", (10, 12, 16, 255),
                   col + (225,))
+
+    # --- proposals: distinctive regions, tagged or not ----------------------
+    if "proposals" in show and getattr(percept, "proposals", None):
+        for i, b in enumerate(percept.proposals):
+            x0, y0 = (b["x"] - b["w"] / 2) * S, (b["y"] - b["h"] / 2) * S
+            x1, y1 = (b["x"] + b["w"] / 2) * S, (b["y"] + b["h"] / 2) * S
+            a = int(90 + 150 * b.get("score", 1.0))
+            d.rectangle([x0, y0, x1, y1], outline=(120, 255, 200, a),
+                        width=max(1, S))
+            _text((x0, y1 + 1), f"#{i+1} {b.get('score', 0):.2f}",
+                  (10, 20, 16, 255), (120, 255, 200, 200))
 
     # --- ground truth, for judging the fit by eye ---------------------------
     if truth:

@@ -1,0 +1,209 @@
+{
+ "V2": {
+  "channels": 36,
+  "mean_selectivity": 1.0,
+  "oriented_fraction": 1.0,
+  "top": [
+   {
+    "channel": 3,
+    "prefers_deg": 0.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 5,
+    "prefers_deg": 67.5,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 24,
+    "prefers_deg": 90.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 26,
+    "prefers_deg": 45.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 8,
+    "prefers_deg": 45.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 4,
+    "prefers_deg": 0.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   }
+  ],
+  "driven_by_this_frame": [
+   {
+    "channel": 0,
+    "response": 0.9358
+   },
+   {
+    "channel": 23,
+    "response": 0.8869
+   },
+   {
+    "channel": 5,
+    "response": 0.4397
+   },
+   {
+    "channel": 31,
+    "response": 0.4238
+   },
+   {
+    "channel": 24,
+    "response": 0.3732
+   },
+   {
+    "channel": 35,
+    "response": 0.3522
+   }
+  ]
+ },
+ "pool": {
+  "channels": 36,
+  "mean_selectivity": 1.0,
+  "oriented_fraction": 1.0,
+  "top": [
+   {
+    "channel": 3,
+    "prefers_deg": 0.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 5,
+    "prefers_deg": 67.5,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 24,
+    "prefers_deg": 90.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 26,
+    "prefers_deg": 45.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 8,
+    "prefers_deg": 45.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 4,
+    "prefers_deg": 0.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   }
+  ],
+  "driven_by_this_frame": [
+   {
+    "channel": 0,
+    "response": 1.7578
+   },
+   {
+    "channel": 23,
+    "response": 1.7013
+   },
+   {
+    "channel": 31,
+    "response": 1.0707
+   },
+   {
+    "channel": 5,
+    "response": 1.0577
+   },
+   {
+    "channel": 24,
+    "response": 0.9108
+   },
+   {
+    "channel": 35,
+    "response": 0.8166
+   }
+  ]
+ },
+ "V4": {
+  "channels": 44,
+  "mean_selectivity": 1.0,
+  "oriented_fraction": 1.0,
+  "top": [
+   {
+    "channel": 0,
+    "prefers_deg": 67.5,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 12,
+    "prefers_deg": 0.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 42,
+    "prefers_deg": 90.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 16,
+    "prefers_deg": 45.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 6,
+    "prefers_deg": 45.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   },
+   {
+    "channel": 32,
+    "prefers_deg": 45.0,
+    "selectivity": 1.0,
+    "kind": "oriented"
+   }
+  ],
+  "driven_by_this_frame": [
+   {
+    "channel": 0,
+    "response": 1.6718
+   },
+   {
+    "channel": 1,
+    "response": 0.8771
+   },
+   {
+    "channel": 8,
+    "response": 0.6256
+   },
+   {
+    "channel": 43,
+    "response": 0.5356
+   },
+   {
+    "channel": 3,
+    "response": 0.4498
+   },
+   {
+    "channel": 11,
+    "response": 0.429
+   }
+  ]
+ }
+}

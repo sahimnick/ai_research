@@ -104,7 +104,10 @@ class EyeService:
         self.src = _Source(source)
         self.size = size
         self.eye = UnifiedEye(size=size)
-        self.layers = set(LAYERS) - {"grid"}
+        self.layers = set(LAYERS) - {"grid", "segments"}
+        self.cue = None            # None = report every tag
+        self.n_proposals = 6
+        self.n_segments = 5
         self.history: List = []
         self.frame = None
         self.percept = None
@@ -126,7 +129,10 @@ class EyeService:
 
     def step(self):
         f = self.src.read()
-        p = self.eye.look(f)
+        p = self.eye.look(
+            f, cue=self.cue,
+            n_proposals=self.n_proposals if "proposals" in self.layers else 0,
+            n_segments=self.n_segments if "segments" in self.layers else 0)
         annotate_boxes(p, self.eye.tags)
         with self.lock:
             self.frame, self.percept = f, p
@@ -163,6 +169,9 @@ class EyeService:
             return {"status": self.status, "tags": sorted(self.eye.tags)}
         return {"status": self.status,
                 "min_confidence": self.eye.min_confidence,
+                "cue": self.cue,
+                "proposals": [{k: round(v, 1) if isinstance(v, float) else v
+                               for k, v in b.items()} for b in p.proposals],
                 "lost": {k: round(v, 3) for k, v in p.lost.items()},
                 "tags": sorted(self.eye.tags),
                 "layers": sorted(self.layers),
@@ -203,6 +212,13 @@ def _handler(svc: EyeService):
                     return self._send(503, json.dumps({"error": str(e)}))
             if p == "/state":
                 return self._send(200, json.dumps(svc.state()))
+            if p == "/features":
+                try:
+                    with svc.lock:
+                        fr = svc.frame
+                    return self._send(200, json.dumps(svc.eye.features(fr)))
+                except Exception as e:
+                    return self._send(503, json.dumps({"error": str(e)}))
             self._send(404, json.dumps({"error": "not found"}))
 
         def do_POST(self):
@@ -226,6 +242,10 @@ def _handler(svc: EyeService):
                 svc.eye.min_confidence = float(body.get("value", 0.35))
                 return self._send(200, json.dumps(
                     {"min_confidence": svc.eye.min_confidence}))
+            if p == "/cue":
+                v = body.get("value") or None
+                svc.cue = v if (v in svc.eye.tags) else None
+                return self._send(200, json.dumps({"cue": svc.cue}))
             if p == "/clear":
                 svc.eye.tags.clear()
                 svc.history.clear()
@@ -306,6 +326,19 @@ out of it</span></header>
                  fetch('/threshold',{method:'POST',
                  body:JSON.stringify({value:parseFloat(this.value)})})">
       <div class="hint">threshold = <span id="tv">0.35</span></div></div>
+    <div class="card"><h2>target</h2>
+      <div class="hint">Which tag to follow. <b>all</b> reports every tag at
+      once.</div>
+      <select id="cue" onchange="fetch('/cue',{method:'POST',
+        body:JSON.stringify({value:this.value})})"
+        style="width:100%;margin-top:8px;background:#1d2430;color:var(--fg);
+        border:1px solid var(--line);border-radius:6px;padding:6px">
+        <option value="">all</option></select></div>
+    <div class="card"><h2>features extracted</h2>
+      <div class="hint">What each area is tuned to, <b>probed</b> with oriented
+      gratings rather than assumed.</div>
+      <button style="margin-top:8px" onclick="feats()">measure now</button>
+      <pre id="ft" style="margin-top:8px"></pre></div>
     <div class="card"><h2>tags</h2>
       <div class="hint">Click the picture to tag what is under the cursor.
       The eye looks for it in every later frame.</div>

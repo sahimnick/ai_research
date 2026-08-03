@@ -1,0 +1,106 @@
+{
+ "targets": [
+  {
+   "sequence": "bolt1",
+   "target": "human -- sprinter",
+   "frames": 40,
+   "travel_px": 0.6,
+   "px_per_frame": 1.7,
+   "coverage": 0.9,
+   "precision": 0.139,
+   "median_iou": 0.0
+  },
+  {
+   "sequence": "pedestrian1",
+   "target": "human -- walking",
+   "frames": 40,
+   "travel_px": 64.2,
+   "px_per_frame": 6.6,
+   "coverage": 0.45,
+   "precision": 1.0,
+   "median_iou": 0.782
+  },
+  {
+   "sequence": "ball2",
+   "target": "ball -- football",
+   "frames": 40,
+   "travel_px": 73.6,
+   "px_per_frame": 2.2,
+   "coverage": 0.05,
+   "precision": 1.0,
+   "median_iou": 0.831
+  },
+  {
+   "sequence": "soccer1",
+   "target": "ball -- in a crowd",
+   "frames": 40,
+   "travel_px": 29.1,
+   "px_per_frame": 3.5,
+   "coverage": 0.175,
+   "precision": 1.0,
+   "median_iou": 0.904
+  },
+  {
+   "sequence": "car1",
+   "target": "car",
+   "frames": 40,
+   "travel_px": 14.9,
+   "px_per_frame": 8.3,
+   "coverage": 0.475,
+   "precision": 1.0,
+   "median_iou": 0.808
+  },
+  {
+   "sequence": "birds1",
+   "target": "bird",
+   "frames": 40,
+   "travel_px": 39.5,
+   "px_per_frame": 1.8,
+   "coverage": 0.075,
+   "precision": 0.667,
+   "median_iou": 0.49
+  },
+  {
+   "sequence": "rabbit",
+   "target": "animal -- rabbit",
+   "frames": 40,
+   "travel_px": 131.4,
+   "px_per_frame": 3.6,
+   "coverage": 0.925,
+   "precision": 0.081,
+   "median_iou": 0.0
+  },
+  {
+   "sequence": "tiger",
+   "target": "animal -- tiger",
+   "frames": 40,
+   "travel_px": 49.1,
+   "px_per_frame": 3.8,
+   "coverage": 0.125,
+   "precision": 1.0,
+   "median_iou": 0.903
+  },
+  {
+   "sequence": "book",
+   "target": "object -- book",
+   "frames": 40,
+   "travel_px": 38.0,
+   "px_per_frame": 7.7,
+   "coverage": 0.05,
+   "precision": 1.0,
+   "median_iou": 0.912
+  },
+  {
+   "sequence": "frisbee",
+   "target": "object -- frisbee",
+   "frames": 40,
+   "travel_px": 142.8,
+   "px_per_frame": 4.4,
+   "coverage": 0.6,
+   "precision": 0.083,
+   "median_iou": 0.0
+  }
+ ],
+ "mean_precision": 0.697,
+ "mean_coverage": 0.3825
+}
