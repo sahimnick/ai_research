@@ -42,7 +42,31 @@ def test_flat_map_does_not_crash():
     assert 0 <= r < 9 and 0 <= c < 9
 
 
+
+
+def test_webcam_is_cross_platform():
+    """The camera must not be Linux-only.
+
+    The first version hardcoded /dev/video0 and `-f v4l2`, so on a Mac with a
+    working camera it reported "no camera on this host" -- a wrong answer, not
+    a missing feature.
+    """
+    from neurobrain.sensing.live import Webcam
+    want = {"linux": ("v4l2", "/dev/video0"),
+            "darwin": ("avfoundation", "0"),
+            "win32": ("dshow", "video=")}
+    for plat, (fmt, dev) in want.items():
+        w = Webcam(platform=plat)
+        assert w._input_format() == fmt, (plat, w._input_format())
+        assert w.device.startswith(dev), (plat, w.device)
+        ok, why = w.available()
+        assert isinstance(ok, bool) and why, (plat, ok, why)
+    # an explicit device must survive
+    assert Webcam(device="/dev/video2", platform="linux").device == "/dev/video2"
+
+
 if __name__ == "__main__":
+    test_webcam_is_cross_platform()
     test_finds_its_own_patch()
     test_rejects_wrong_shape()
     test_flat_map_does_not_crash()

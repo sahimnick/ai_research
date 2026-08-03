@@ -53,12 +53,22 @@ class _Source:
 
     def __init__(self, spec: str = "webcam"):
         self.spec, self.kind, self._i, self._files = spec, None, 0, []
-        if spec == "webcam":
+        if spec == "webcam" or spec.startswith("webcam:"):
             from ..sensing.live import Webcam
-            self.cam = Webcam()
+            dev = spec.split(":", 1)[1] if ":" in spec else None
+            self.cam = Webcam(device=dev or None)
             ok, why = self.cam.available()
             if not ok:
-                raise RuntimeError(f"webcam unavailable: {why}")
+                raise RuntimeError(
+                    f"webcam unavailable: {why}\n"
+                    f"  Linux:   ensure /dev/video0 exists and "
+                    f"'sudo apt install ffmpeg'\n"
+                    f"  macOS:   'brew install ffmpeg', then allow camera "
+                    f"access for your terminal\n"
+                    f"  Windows: install ffmpeg, then "
+                    f"--source 'webcam:video=<your camera name>'\n"
+                    f"  or point it at a folder of images instead: "
+                    f"eye_dashboard /path/to/frames")
             self.kind = "webcam"
         elif spec == "cctv":
             from ..sensing.live import CctvCamera, NY511_LIVE_IDS
@@ -388,7 +398,8 @@ if __name__ == "__main__":                                   # pragma: no cover
     ap = argparse.ArgumentParser(
         description="Watch the eye work, live, with switchable overlays.")
     ap.add_argument("source", nargs="?", default="webcam",
-                    help="'webcam', 'cctv', or a directory of images")
+                    help="'webcam', 'webcam:<device>', 'cctv', or a "
+                         "directory of images")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--size", type=int, default=224)
     ap.add_argument("--develop", type=int, default=12,

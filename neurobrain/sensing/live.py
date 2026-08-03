@@ -49,6 +49,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import sys
 import subprocess
 import tempfile
 import time
@@ -189,22 +190,53 @@ class Webcam:
     """The host's own camera, through whatever tool the host already has.
 
     No ``cv2``: the project is NumPy-only and a camera is not a reason to
-    change that. ``ffmpeg`` and ``fswebcam`` are both common and both write a
-    still to a file, which is all this needs.
+    change that. ``ffmpeg`` and ``fswebcam`` both write a still to a file,
+    which is all this needs.
+
+    Works on all three desktop platforms, because the first version did not:
+    it hardcoded ``/dev/video0`` and ``-f v4l2``, so it could only ever have
+    run on Linux, and reported "no camera on this host" on a Mac that had one.
+
+        Linux    v4l2       /dev/video0
+        macOS    avfoundation   device index "0"
+        Windows  dshow      "video=<name>"  (or the default device)
+
+    ``available()`` says *why* when it cannot run, since the two failure modes
+    -- no camera and no capture tool -- need different fixes and the user is
+    the only one who can apply either.
     """
 
     TOOLS = ("ffmpeg", "fswebcam")
 
-    def __init__(self, device: str = "/dev/video0"):
-        self.device = device
+    def __init__(self, device: Optional[str] = None,
+                 platform: Optional[str] = None):
+        self.platform = platform or sys.platform
+        self.device = device if device is not None else self._default_device()
         self.tool = next((t for t in self.TOOLS if shutil.which(t)), None)
 
+    def _default_device(self) -> str:
+        if self.platform == "darwin":
+            return "0"                       # avfoundation device index
+        if self.platform.startswith("win"):
+            return "video=Integrated Camera"
+        return "/dev/video0"
+
+    def _input_format(self) -> str:
+        if self.platform == "darwin":
+            return "avfoundation"
+        if self.platform.startswith("win"):
+            return "dshow"
+        return "v4l2"
+
     def available(self) -> Tuple[bool, str]:
-        if not os.path.exists(self.device):
-            return False, f"no {self.device} (no camera on this host)"
         if self.tool is None:
-            return False, f"none of {self.TOOLS} installed"
-        return True, f"{self.tool} -> {self.device}"
+            return False, (f"none of {self.TOOLS} installed -- "
+                           f"install ffmpeg to use the camera")
+        # only Linux exposes the camera as a path that can be checked cheaply;
+        # elsewhere the capture tool is the only thing that knows
+        if self._input_format() == "v4l2" and not os.path.exists(self.device):
+            return False, f"no {self.device} (no camera on this host)"
+        return True, f"{self.tool} ({self._input_format()}) -> {self.device}"
 
     def read(self) -> Reading:
         ok, why = self.available()
@@ -212,14 +244,16 @@ class Webcam:
             raise SensorUnavailable(why)
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "frame.jpg")
-            cmd = ([self.tool, "-y", "-f", "v4l2", "-i", self.device,
-                    "-frames:v", "1", p] if self.tool == "ffmpeg"
-                   else [self.tool, "-d", self.device, "--no-banner", p])
+            if self.tool == "ffmpeg":
+                cmd = [self.tool, "-y", "-f", self._input_format(),
+                       "-i", self.device, "-frames:v", "1", p]
+            else:
+                cmd = [self.tool, "-d", self.device, "--no-banner", p]
             r = subprocess.run(cmd, capture_output=True, timeout=30)
             if not os.path.exists(p) or os.path.getsize(p) == 0:
                 raise SensorUnavailable(
                     f"{self.tool} produced nothing: "
-                    f"{r.stderr.decode(errors='replace')[-200:]}")
+                    f"{r.stderr.decode(errors='replace')[-300:]}")
             return Reading("image", _decode_image(open(p, "rb").read()), True,
                            f"webcam {self.device}")
 
