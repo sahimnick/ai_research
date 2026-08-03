@@ -22,6 +22,12 @@ and see what each contributes:
     relation    the spatial relation between two tags, drawn between them
     grid        the area map's cell boundaries -- what resolution the eye
                 actually sees at, which is coarser than the frame
+    lost        tags the eye looked for and was not confident enough to
+                report. Drawn as a banner, NOT as a box: §9.35 measured that
+                answering on every frame scores 0.848 on held-out sequences
+                and abstaining below 0.35 scores 0.910, so a weak frame is an
+                absence of evidence and drawing a box on it would be
+                inventing a detection
 
 Honest about what is drawn
 --------------------------
@@ -43,7 +49,7 @@ import numpy as np
 #: Every layer this module can draw. Passing a subset to :func:`draw_percept`
 #: switches the rest off.
 LAYERS = ("attention", "box", "label", "path", "prediction", "relation",
-          "grid")
+          "grid", "lost")
 
 _PALETTE = ((255, 92, 92), (92, 200, 255), (140, 240, 140), (255, 205, 80),
             (220, 140, 255), (255, 160, 90))
@@ -80,12 +86,19 @@ def _heat(v: np.ndarray) -> np.ndarray:
 def draw_percept(frame: np.ndarray, percept, history=None,
                  show: Optional[Iterable[str]] = None,
                  colours: Optional[Dict[str, Tuple[int, int, int]]] = None,
-                 alpha: float = 0.45, scale: int = 1) -> np.ndarray:
+                 alpha: float = 0.45, scale: int = 1,
+                 truth: Optional[Dict[str, Tuple[float, float, float, float]]]
+                 = None) -> np.ndarray:
     """Render ``percept`` over ``frame``. Returns an RGB uint8 image.
 
     ``history`` is an optional list of earlier percepts, oldest first, used by
     the ``path`` and ``prediction`` layers.
     ``show`` selects layers; omit it for everything.
+
+    ``truth`` draws ground-truth boxes ``{name: (y, x, h, w)}`` in white beside
+    the eye's own, so the fit can be judged from the picture rather than taken
+    on trust. Whether the box lands on the object is the whole question, and a
+    render with only the prediction in it cannot answer it.
     """
     show = set(LAYERS if show is None else show)
     img = _to_rgb(frame)
@@ -206,6 +219,23 @@ def draw_percept(frame: np.ndarray, percept, history=None,
             _text((x0, y0 - fs - 6), f"{n} {conf:.2f}", (10, 12, 16, 255),
                   col + (225,))
 
+    # --- ground truth, for judging the fit by eye ---------------------------
+    if truth:
+        for n, (ty, tx, th_, tw_) in truth.items():
+            x0, y0 = (tx - tw_ / 2) * S, (ty - th_ / 2) * S
+            x1, y1 = (tx + tw_ / 2) * S, (ty + th_ / 2) * S
+            for k in range(0, int(max(x1 - x0, y1 - y0)), 8 * S):
+                d.line([(x0 + k, y0), (min(x0 + k + 4 * S, x1), y0)],
+                       fill=(255, 255, 255, 230), width=max(1, S))
+                d.line([(x0 + k, y1), (min(x0 + k + 4 * S, x1), y1)],
+                       fill=(255, 255, 255, 230), width=max(1, S))
+                d.line([(x0, y0 + k), (x0, min(y0 + k + 4 * S, y1))],
+                       fill=(255, 255, 255, 230), width=max(1, S))
+                d.line([(x1, y0 + k), (x1, min(y0 + k + 4 * S, y1))],
+                       fill=(255, 255, 255, 230), width=max(1, S))
+            _text((x1 + 2, y0), f"truth:{n}", (20, 22, 28, 255),
+                  (255, 255, 255, 220))
+
     # --- relations -----------------------------------------------------------
     if "relation" in show:
         for (a, b), r in sorted(getattr(percept, "relations", {}).items()):
@@ -217,8 +247,15 @@ def draw_percept(frame: np.ndarray, percept, history=None,
             _text((mx, my - fs), f"{a} {r} {b}", (225, 230, 240, 255),
                   (18, 20, 26, 205))
 
+    # --- lost: say so, do not draw a box ------------------------------------
+    if "lost" in show and getattr(percept, "lost", None):
+        y = 4
+        for n, c in sorted(percept.lost.items()):
+            y += _text((4, y), f"{n}: LOST ({c:.2f} < threshold)",
+                       (255, 235, 235, 255), (150, 40, 40, 210)) + 2
+
     if getattr(percept, "frame_size", None) is not None:
-        _text((4, 4), f"frame log-size {percept.frame_size:.2f}",
+        _text((4, pil.size[1] - 22), f"frame log-size {percept.frame_size:.2f}",
               (230, 235, 245, 235), (18, 20, 26, 190))
     return np.asarray(pil)
 

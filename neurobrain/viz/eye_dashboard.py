@@ -162,6 +162,8 @@ class EyeService:
         if p is None:
             return {"status": self.status, "tags": sorted(self.eye.tags)}
         return {"status": self.status,
+                "min_confidence": self.eye.min_confidence,
+                "lost": {k: round(v, 3) for k, v in p.lost.items()},
                 "tags": sorted(self.eye.tags),
                 "layers": sorted(self.layers),
                 "where": {k: [round(v[0], 1), round(v[1], 1)]
@@ -220,6 +222,10 @@ def _handler(svc: EyeService):
                     str(body.get("name", f"tag{len(svc.eye.tags)+1}")),
                     float(body.get("y", 0)), float(body.get("x", 0)),
                     float(body.get("side", 44)))))
+            if p == "/threshold":
+                svc.eye.min_confidence = float(body.get("value", 0.35))
+                return self._send(200, json.dumps(
+                    {"min_confidence": svc.eye.min_confidence}))
             if p == "/clear":
                 svc.eye.tags.clear()
                 svc.history.clear()
@@ -290,6 +296,16 @@ out of it</span></header>
       <b>attention</b> is a template-correlation field, not a segmentation
       mask. <b>prediction</b> is constant velocity over the drawn path.</div>
     </div>
+    <div class="card"><h2>confidence gate</h2>
+      <div class="hint">Below this the eye reports <b>LOST</b> instead of
+      drawing a box. Measured (&sect;9.35): always answering = 0.779 correct;
+      gate at 0.35 = <b>0.910</b> correct on the half it answers.</div>
+      <input id="thr" type="range" min="0" max="0.9" step="0.05" value="0.35"
+        style="width:100%;accent-color:var(--acc);margin-top:8px"
+        oninput="document.getElementById('tv').textContent=this.value;
+                 fetch('/threshold',{method:'POST',
+                 body:JSON.stringify({value:parseFloat(this.value)})})">
+      <div class="hint">threshold = <span id="tv">0.35</span></div></div>
     <div class="card"><h2>tags</h2>
       <div class="hint">Click the picture to tag what is under the cursor.
       The eye looks for it in every later frame.</div>

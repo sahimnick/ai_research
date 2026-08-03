@@ -31,14 +31,13 @@ SIZE = 224
 OBJ = 44
 
 
-def load_seq(d, name, n=14):
+def load_seq(d, name, n=14, stride=1):
     from PIL import Image
     p = os.path.join(d, name)
     jpgs = sorted(f for f in os.listdir(p) if f.endswith(".jpg"))
     gt = load_gt(os.path.join(p, "groundtruth.txt"))
-    step = max(1, len(jpgs) // n)
     out = []
-    for i in range(0, min(len(jpgs), len(gt)), step):
+    for i in range(0, min(len(jpgs), len(gt)), stride):
         if gt[i] is None:
             continue
         y, x, h, w = gt[i]
@@ -96,8 +95,6 @@ def main():
     eye.fit_size([f for f, _, _ in frames], [a for _, _, a in frames])
     f0, (ty0, tx0), _ = frames[0]
     eye.add_tag("target", f0, (ty0 - OBJ / 2, tx0 - OBJ / 2, OBJ, OBJ))
-    # a second tag somewhere else, so relations have something to relate
-    eye.add_tag("corner", f0, (12, 12, OBJ, OBJ))
 
     percepts, hist = [], []
     for f, _, _ in frames:
@@ -127,11 +124,13 @@ def main():
     run = []
     for i in range(min(6, len(frames))):
         j = i + max(0, len(frames) - 6)
+        gt = frames[j][1]
         run.append(draw_percept(frames[j][0], percepts[j],
-                                history=percepts[max(0, j - 5):j], scale=2))
+                                history=percepts[max(0, j - 5):j], scale=2,
+                                truth={"target": (gt[0], gt[1], OBJ, OBJ)}))
     save(strip(run), os.path.join(OUT, "03_sequence.jpg"),
-         "THE LOOP RUNNING  --  every overlay, consecutive frames, "
-         "one forward pass each")
+         "THE LOOP RUNNING  --  consecutive frames, one forward pass each. "
+         "WHITE DASHED = ground truth, COLOUR = what the eye reported")
 
     # 04 -- what each area sees
     P = percepts[mid]
@@ -155,7 +154,12 @@ def main():
     got = np.array([p.where.get("target", (np.nan, np.nan))
                     for p in percepts])
     err = np.hypot(got[:, 0] - truth[:, 0], got[:, 1] - truth[:, 1])
-    conf = np.array([p.confidence.get("target", np.nan) for p in percepts])
+    conf = np.array([p.confidence.get("target",
+                                      p.lost.get("target", np.nan))
+                     for p in percepts])
+    answered = np.array([("target" in p.where) for p in percepts])
+    ans = answered & np.isfinite(err)
+    prec = float(np.mean(err[ans] <= OBJ / 2)) if ans.any() else float("nan")
     fsize = np.array([p.frame_size if p.frame_size is not None else np.nan
                       for p in percepts])
     true_a = np.array([a for _, _, a in frames])
@@ -172,11 +176,17 @@ def main():
     ax[0].invert_yaxis()
     ax[0].set_title("path: truth vs eye", color="#e4e9f2")
     ax[0].legend(facecolor="#171a21", labelcolor="#cfd6e4", edgecolor="#2a2f3a")
-    ax[1].plot(err, color="#ffcd50")
+    ax[1].plot(np.where(ans, err, np.nan), color="#ffcd50")
+    ax[1].plot(np.where(~answered, 0, np.nan), "x", color="#ff5c5c",
+               label="abstained")
     ax[1].axhline(OBJ / 2, color="#8cf08c", ls="--", label=f"hit ≤{OBJ//2}px")
     ax[1].set_title("centre error (px)", color="#e4e9f2")
     ax[1].legend(facecolor="#171a21", labelcolor="#cfd6e4", edgecolor="#2a2f3a")
     ax[2].plot(conf, color="#dc8cff")
+    ax[2].axhline(eye.min_confidence, color="#8cf08c", ls="--",
+                  label="gate")
+    ax[2].legend(facecolor="#171a21", labelcolor="#cfd6e4",
+                 edgecolor="#2a2f3a")
     ax[2].set_title("match confidence", color="#e4e9f2")
     ax[2].set_ylim(0, 1)
     ax[3].plot(true_a, color="#5cc8ff", label="true log-size")
@@ -185,18 +195,24 @@ def main():
     ax[3].legend(facecolor="#171a21", labelcolor="#cfd6e4", edgecolor="#2a2f3a")
     for a in ax:
         a.set_xlabel("frame", color="#9aa4b5")
-    fig.suptitle(f"MEASUREMENTS  --  {picked}: hit rate "
-                 f"{np.mean(err <= OBJ/2):.2f}, median error "
-                 f"{np.nanmedian(err):.0f}px, mean confidence "
-                 f"{np.nanmean(conf):.2f}", color="#e4e9f2")
+    fig.suptitle(
+        f"MEASUREMENTS  --  {picked}: answered {answered.mean():.0%} of frames, "
+        f"and was right {prec:.0%} of those (gate {eye.min_confidence:.2f}); "
+        f"median error {np.nanmedian(err[ans]):.0f}px", color="#e4e9f2")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "05_measurements.jpg"), dpi=110,
                 facecolor="#12141a")
     print(f"  wrote {os.path.join(OUT, '05_measurements.jpg')}")
     plt.close(fig)
 
-    print(f"\nhit rate {np.mean(err <= OBJ/2):.3f}   median error "
-          f"{np.nanmedian(err):.1f}px   mean confidence {np.nanmean(conf):.3f}")
+    inter = np.maximum(0, OBJ - np.abs(got[:, 0] - truth[:, 0])) * \
+        np.maximum(0, OBJ - np.abs(got[:, 1] - truth[:, 1]))
+    iou = inter / (2 * OBJ * OBJ - inter + 1e-9)
+    print(f"\nanswered {answered.mean():.3f} of frames, precision on those "
+          f"{prec:.3f}, median error {np.nanmedian(err[ans]):.1f}px")
+    print(f"box-vs-truth overlap in the rendered frames: median IoU "
+          f"{np.nanmedian(iou[ans]):.3f}, "
+          f"{np.mean(iou[ans] >= 0.5):.0%} of answered boxes at IoU>=0.5")
     print(f"report in {OUT}/")
 
 

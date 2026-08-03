@@ -62,6 +62,13 @@ class Tag:
     name: str
     templates: Dict[str, np.ndarray]
     box: Tuple[float, float, float, float]      # (y, x, h, w) it came from
+    #: Where the object's centre sits inside its own template, in cells, per
+    #: area. The crop floors one edge and ceils the other, so the template's
+    #: geometric middle is NOT the object's centre -- reporting the middle
+    #: biases every position by up to half a cell in a fixed direction, which
+    #: is a systematic error rather than noise and shows up in a render as a
+    #: box that is consistently off to one side.
+    centre: Dict[str, Tuple[float, float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -69,6 +76,12 @@ class Percept:
     """Everything one look yields. All of it from a single forward pass."""
     where: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     confidence: Dict[str, float] = field(default_factory=dict)
+    #: Tags the eye looked for and was **not confident enough** to report. A
+    #: tracker that always answers turns every weak frame into a false
+    #: detection; §9.35 measured the alternative -- on held-out sequences,
+    #: abstaining below 0.35 lifts precision from 0.848 to 0.910 at half the
+    #: frames answered.
+    lost: Dict[str, float] = field(default_factory=dict)
     #: Angular size is a **frame-level** estimate, not per-tag: the probe reads
     #: the whole area map, so every tag in a frame would get the same number.
     #: Reported as one value rather than duplicated per name, which the first
@@ -83,6 +96,8 @@ class Percept:
         for n, (y, x) in sorted(self.where.items()):
             bits.append(f"{n} at ({y:.0f},{x:.0f}) "
                         f"conf {self.confidence[n]:.2f}")
+        for n, c in sorted(self.lost.items()):
+            bits.append(f"{n} LOST ({c:.2f})")
         if self.frame_size is not None:
             bits.append(f"frame log-size {self.frame_size:.2f}")
         for (a, b), r in sorted(self.relations.items()):
@@ -101,13 +116,26 @@ class UnifiedEye:
 
     def __init__(self, size: int = 224,
                  areas: Sequence[str] = ("V2", "pool", "V4"),
-                 where_area: str = "pool", size_area: str = "V4"):
+                 where_area: str = "pool", size_area: str = "V4",
+                 min_confidence: float = 0.35, search_radius: float = 40.0):
         self.size = int(size)
         self.areas = tuple(areas)
         self.where_area = where_area
         self.size_area = size_area
+        #: Below this correlation peak the eye reports the tag as **lost**
+        #: rather than guessing. §9.35's held-out curve, with no threshold
+        #: chosen from the data it is reported on: 0.25 -> 0.902 at 70%
+        #: coverage, 0.30 -> 0.900 at 61%, **0.35 -> 0.910 at 51%**. Answering
+        #: every frame instead scores 0.848. Above 0.40 precision falls again
+        #: (0.812 at 0.50) as the surviving frames get few and noisy.
+        self.min_confidence = float(min_confidence)
+        #: Search this many pixels around where the tag was last seen. §9.35:
+        #: 0.814 with a local window against 0.773 searching the whole frame,
+        #: on consecutive frames. Set to None to always search everything.
+        self.search_radius = search_radius
         self.stream = None
         self.tags: Dict[str, Tag] = {}
+        self.last: Dict[str, Tuple[float, float]] = {}
         self._size_probe = None
 
     # ---------------------------------------------------------------- develop
@@ -164,9 +192,18 @@ class UnifiedEye:
         """
         M = self._pass(frame)
         y, x, bh, bw = box
-        t = Tag(name, {a: self._crop(M[a], y, x, bh, bw) for a in self.areas},
-                (float(y), float(x), float(bh), float(bw)))
+        tmpl, ctr = {}, {}
+        for a in self.areas:
+            tmpl[a] = self._crop(M[a], y, x, bh, bw)
+            _, gh, gw = M[a].shape
+            r0 = int(np.clip(y * gh / self.size, 0, gh - 2))
+            c0 = int(np.clip(x * gw / self.size, 0, gw - 2))
+            # the object's true centre, in this template's own cell frame
+            ctr[a] = ((y + bh / 2) * gh / self.size - r0,
+                      (x + bw / 2) * gw / self.size - c0)
+        t = Tag(name, tmpl, (float(y), float(x), float(bh), float(bw)), ctr)
         self.tags[name] = t
+        self.last[name] = (float(y) + float(bh) / 2, float(x) + float(bw) / 2)
         return t
 
     # ------------------------------------------------------------------ look
@@ -176,6 +213,18 @@ class UnifiedEye:
 
         ``cue`` restricts the attention map to one tag -- the top-down half of
         §9.28. Without it, an attention map is returned per tag.
+
+        Two behaviours set in the constructor and measured in §9.35, both of
+        which matter far more than anything else about how this performs:
+
+        * the search is restricted to ``search_radius`` px around where the tag
+          was last seen, since a thing does not usually teleport;
+        * a tag whose best match falls below ``min_confidence`` is reported in
+          ``percept.lost`` rather than ``percept.where``, because a box drawn on
+          a 0.19 match is a false detection, not a weak one.
+
+        The dominant variable is how far the target moves between calls: 0.814
+        at ~16 px/step and 0.194 at ~63 px/step. Call this often.
         """
         M = self._pass(frame)
         p = Percept(maps=M)
@@ -188,15 +237,47 @@ class UnifiedEye:
             tm = t.templates[self.where_area]
             if any(a > b for a, b in zip(tm.shape[1:], m.shape[1:])):
                 continue
-            (r, c), sc = locate_template(m, tm)
             th, tw = tm.shape[1:]
             _, gh, gw = m.shape
-            p.where[n] = ((r + (th - 1) / 2.0) * self.size / gh,
-                          (c + (tw - 1) / 2.0) * self.size / gw)
-            p.confidence[n] = float(sc.max())
+            r0 = c0 = 0
+            sub = m
+            prev = self.last.get(n)
+            if self.search_radius is not None and prev is not None:
+                rad = self.search_radius
+                r0 = int(np.clip((prev[0] - rad) * gh / self.size, 0,
+                                 max(0, gh - th)))
+                c0 = int(np.clip((prev[1] - rad) * gw / self.size, 0,
+                                 max(0, gw - tw)))
+                r1 = int(np.clip((prev[0] + rad) * gh / self.size, r0 + th, gh))
+                c1 = int(np.clip((prev[1] + rad) * gw / self.size, c0 + tw, gw))
+                sub = m[:, r0:r1, c0:c1]
+                if sub.shape[1] < th or sub.shape[2] < tw:
+                    r0 = c0 = 0
+                    sub = m
+            (r, c), sc = locate_template(sub, tm)
+            conf = float(sc.max())
+            # the object's centre, not the template's middle -- see Tag.centre
+            oy, ox = t.centre.get(self.where_area,
+                                  ((th - 1) / 2.0, (tw - 1) / 2.0))
+            pos = ((r0 + r + oy) * self.size / gh,
+                   (c0 + c + ox) * self.size / gw)
             g = np.maximum(sc, 0.0)
             pk = g.max()
-            p.attention[n] = g / pk if pk > 1e-9 else g
+            g = g / pk if pk > 1e-9 else g
+            # Put the correlation back where in the FULL map it was computed.
+            # Without this a restricted search returns a sub-window-sized map
+            # that any viewer stretches across the whole frame, so the heat
+            # lands somewhere the eye never looked -- the box and the heatmap
+            # disagreed on screen, and the heatmap was the one lying.
+            full = np.zeros((gh, gw), np.float32)
+            full[r0:r0 + g.shape[0], c0:c0 + g.shape[1]] = g
+            p.attention[n] = full
+            if conf < self.min_confidence:
+                p.lost[n] = conf          # say nothing rather than guess
+                continue
+            p.where[n] = pos
+            p.confidence[n] = conf
+            self.last[n] = pos
 
         if self._size_probe is not None:
             mu, V, W = self._size_probe

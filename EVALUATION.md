@@ -5451,6 +5451,115 @@ only 0.098→0.152), colour hurts it (§9.18, −0.135), a shadow is indistingui
 from an object to it (§9.31, at the pixel null), and the stages are **not** shown
 to specialise (§9.33, one separated winner out of four read-outs).
 
+## 9.35 The picture was unreadable, and fixing it found three real defects
+
+The visual report of §9.34 was shown to a reader who could not tell what it
+meant: boxes on things that were not the target, nothing marked on the obvious
+objects in the frame, overlays that disagreed with each other. That reading was
+correct, and chasing it down found three defects — two in the system, one in my
+own evaluation.
+
+### First, what the system does not do, since the picture implied otherwise
+
+**There is no object detector anywhere in this project.** It cannot find a
+person, a car, or any category. It looks for a patch it is *handed*. The boxes
+in §9.34's report came from a tag placed at a known position, so they read as
+detections and were not. Nothing in §9.19–§9.34 measured detection because
+nothing does it, and a render showing boxes cannot help implying otherwise.
+
+### Defect 1: it never said "I don't know"
+
+The eye drew a box on every frame, including frames whose match score was 0.19
+and whose box was nowhere near the object. That is not poor accuracy — it is the
+absence of abstention, and it converts every weak frame into a false detection.
+
+`locate_template`'s correlation peak is a confidence. Withholding the answer
+below a threshold, on **held-out sequences with no threshold chosen from them**:
+
+| gate | answers | precision |
+|---|---|---|
+| none (0.00) | 100% | 0.848 |
+| 0.20 | 81% | 0.878 |
+| **0.25** | **70%** | **0.902** |
+| **0.30** | **61%** | **0.900** |
+| **0.35** | **51%** | **0.910** |
+| 0.50 | 24% | 0.812 |
+
+**Above 0.90 across three adjacent thresholds**, which is worth more than any
+single point would be. Precision falls again above 0.40 as the surviving frames
+become few. `UnifiedEye` now abstains below 0.35 by default and reports the tag
+in `percept.lost`; the overlay draws a banner rather than a box.
+
+A control that came out cleanly: a tag for an object **not in the footage**
+passes the gate **0.000** of the time at every threshold from 0.30 up. Real and
+absent tags separate by +0.284 in mean confidence. The eye does not hallucinate
+things that are absent.
+
+### Defect 2: my own threshold was fitted to the data it was reported on
+
+The first version picked "the lowest threshold whose precision ≥ 0.90" and then
+quoted that precision — on the same frames. Choosing on one half of the
+sequences and reporting on the other:
+
+| | precision |
+|---|---|
+| on the half the threshold was chosen from | 0.909 |
+| on the half it was not | **0.788** |
+| **optimism from choosing** | **+0.121** |
+
+That is the whole gap between a claim and a result, and it is why the table
+above reports a **curve** on held-out sequences and selects nothing. The
+selection arm is kept in the benchmark so the cost stays visible.
+
+### Defect 3: a systematic half-cell bias, visible only in the render
+
+With ground-truth boxes drawn beside the eye's, the error was obviously
+*systematic* — the box sat consistently above and left of the target, in every
+frame. A random error does not do that.
+
+The tag crop floors one edge and ceils the other, so the template's geometric
+middle is **not** the object's centre, and reporting the middle biases every
+position in a fixed direction. `Tag.centre` now stores the object's true centre
+inside its own template. Measured on the rendered frames:
+
+| | before | after |
+|---|---|---|
+| median centre error | 24.4 px | **19.7 px** |
+| median box-vs-truth IoU | 0.235 | **0.324** |
+| boxes at IoU ≥ 0.5 | 21% | **36%** |
+
+A real fix from a defect that the numbers alone had hidden and the picture made
+obvious — which is an argument for rendering results, not only tabulating them.
+
+### And the variable that dominates everything: how far it moves between looks
+
+| regime | search | hit rate | object motion |
+|---|---|---|---|
+| consecutive frames | local window | **0.814** | 16 px/step |
+| consecutive frames | whole frame | 0.773 | 16 px/step |
+| every 10th frame | local window | 0.194 | 61 px/step |
+| every 10th frame | whole frame | 0.214 | 63 px/step |
+
+**A four-fold difference**, and §9.34's report had sampled every ~10th frame to
+fit a strip — the hard regime — which is most of why it looked broken. The eye
+now searches within `search_radius` of where the tag was last seen, and the
+report runs on consecutive frames.
+
+> Read together with §9.30, which found precision rather than drift to be the
+> limit: this eye is usable on **closely spaced frames** of footage it developed
+> on, when it is allowed to abstain. It is not usable on jumps, and it does not
+> detect anything it was not given.
+
+### What was added to keep the drawing honest
+
+`tests/test_overlay.py` asserts the picture matches the percept: the box lands
+where `where` says (±3 px), scaling moves it proportionally, an abstention draws
+**no** box, and the attention peak agrees with the box. That last one exists
+because it was false: with a restricted search the correlation map was returned
+sub-window-sized and stretched over the whole frame, so the heat appeared where
+the eye had never looked. The box and the heatmap disagreed on screen and the
+heatmap was the one lying.
+
 ---
 
 ## 8. Next steps toward a unified, constantly imaginative mind
