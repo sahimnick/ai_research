@@ -1363,17 +1363,27 @@ def _fit_readout(X: np.ndarray, labels: np.ndarray, n_classes: int,
 
 
 def build_ventral_stream(n_v1: int = 12, n_v2: int = 36, n_v4: int = 44,
-                         n_it: int = 72, verbose: bool = False) -> VentralStream:
+                         n_it: int = 72, verbose: bool = False,
+                         size: int = 56) -> VentralStream:
     """Train the four areas in order, each on the previous area's output.
 
     Returns a :class:`VentralStream`. Also fits a nearest-centroid readout on
     shape images so the whole thing can be checked end-to-end.
+
+    ``size`` is the working canvas every training set is drawn at, and the one
+    the stream reports. It defaults to the 56 px this was always built at, so
+    no existing caller changes. It is a parameter because §9.32 named the
+    **saturated small-canvas V4 map** as the limiting factor on attention --
+    7x21 with 100% of cells above 55% of peak -- and a claim about canvas size
+    cannot be tested while the canvas is a constant. The kernels themselves are
+    size-independent (they train on patches); what ``size`` moves is the extent
+    of the maps they produce. See ``benchmarks/attend_canvas.py`` (H24).
     """
     def say(*a):
         if verbose:
             print(*a)
 
-    SZ = 56                                    # working canvas; keeps maps large
+    SZ = int(size)                             # working canvas; keeps maps large
 
     # V1: oriented simple cells, Gabor-seeded, refined on edges
     say("V1: learning oriented edge detectors ...")

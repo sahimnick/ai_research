@@ -5755,6 +5755,139 @@ phase built.
 
 ---
 
+## 9.38 H24 — the canvas was not the limiting factor, and the mechanism proves it
+
+§9.32 found that swapping `attend()`'s averaged prototype for §9.21's spatial
+template made attention **worse** (0.275 against 0.350), and blamed the map
+rather than the tag: on the 56 px canvas V4 is 7×21 with essentially every cell
+near peak, so a method that needs spatial layout has none to use. §9.21's 0.943
+was at 224 px, where V4 is 49×49.
+
+> **H24.** Attention follows a cue better on a 224 px canvas than on a 56 px
+> one, because the V4 map is no longer saturated.
+
+Two methods × two canvases, 40 image pairs of two competing shapes from the
+12-class set, the image identical across a pair and only the cue changing.
+Chance is 1/12 = 0.083.
+
+| arm | cue-following | wrong-cue following | switch rate |
+|---|---|---|---|
+| `attend` @ 56 px | **0.450** | 0.200 | 0.800 |
+| `attend_spatial` @ 56 px | 0.250 | 0.025 | 0.850 |
+| `attend` @ 224 px | **0.188** | **0.250** | 0.625 |
+| `attend_spatial` @ 224 px | 0.100 | 0.100 | 0.725 |
+
+| canvas | V4 map | cells above 55% of peak | shape readout | object readout |
+|---|---|---|---|---|
+| 56 px | 44×7×21 | **97.3%** | 99% | 92% |
+| 224 px | 44×49×105 | **23.1%** | 100% | 100% |
+
+### The manipulation worked and the prediction failed
+
+This is the useful shape of a negative result: **the named mechanism moved
+exactly as predicted, and the outcome moved the opposite way.** Saturation fell
+from 97.3% to 23.1% — the map went from uniformly active to structured, which
+is precisely the change §9.32 said was needed. Cue-following then fell from
+0.450 to 0.188.
+
+At 224 px `attend` names the cued class *less* often than it names an absent
+class it was cued with (0.188 against 0.250). Whatever the cue is doing there,
+it is not selecting the cued object.
+
+So H24 is falsified, and so is the fallback explanation that was offered with
+it — that saturation would persist at 224 px and remain the limiting factor. It
+did not persist. **§9.32's account was a correct description of the map and a
+wrong explanation of the failure.** A bigger, better-differentiated map does not
+buy top-down selection; it costs it.
+
+### Where the gain actually lands — and this is the finding
+
+Cue-following alone cannot say *which* half broke: the gain map is built from
+the cue, IT then reads the gated map, so a wrong answer is either "the gain
+pointed at the wrong object" or "it pointed correctly and IT could not read
+what was left". `two_object_image` puts the cued object in one half of the
+canvas, so the fraction of gain mass landing there has a known chance of 0.500.
+
+| canvas | gain mass on the cued half | V4 energy reaching IT |
+|---|---|---|
+| 56 px | 0.532 *(+0.032)* | 0.262 |
+| 224 px | 0.509 *(+0.009)* | 0.271 |
+
+**The gain map is spatially uninformative at both canvases.** Not weaker at 224
+px — negligible at both, and if anything closer to chance on the larger map.
+Yet at 56 px this same mechanism follows a cue at 0.450 against 0.200 for a
+wrong cue, and switches its answer 80% of the time when only the cue changes.
+
+Those two facts together say something the earlier sections did not:
+**`attend()` is not spatial selection, and never was.** What the cue does is
+bias the IT read-out by feature similarity; the answer changes because the
+classifier is tilted, not because the system looked somewhere else. §9.28's
+switch rate is real and is evidence of biased competition — but it is
+competition between *features*, not between *places*.
+
+That reframes both failures at once. A hypothesis that improves the map's
+spatial structure cannot help a mechanism that does not use spatial structure,
+which is why §9.32's spatial-template swap failed and why H24 failed: both
+manipulated layout, and layout is not the variable in play.
+
+The second column disposes of the other candidate. `attend` multiplies V4 *by*
+the gain rather than by `1 + gain`, so a peaked gain deletes evidence rather
+than emphasising it — but it deletes ~73% of V4 energy at **both** canvases
+equally (0.262 and 0.271). Whatever separates 0.450 from 0.188, it is not that.
+
+### A dissociation worth stating on its own
+
+The 224 px stream is the *better* stream by every feed-forward measure here —
+shape readout 99% → 100%, object readout 92% → 100%. Representation quality
+went up while attentional selection went down. These are not the same axis, and
+this project has repeatedly assumed they were.
+
+### Why the archived numbers were re-measured rather than quoted
+
+The 0.275 / 0.350 pair is **not reproducible from this tree**: nothing in the
+repository calls `attend_spatial`, so the script that produced §9.32's table is
+gone — and `attend`'s own docstring claim that "every benchmark from §9.21 on
+uses it" is false. Quoting 0.350 as this run's control would have compared a
+fresh number against an unreproducible one.
+
+Both canvases were therefore measured here, in one run. The re-measured 56 px
+values are 0.450 for `attend` and 0.250 for `attend_spatial` against the
+archived 0.350 and 0.275. **The ordering replicates — averaged beats spatial on
+the small canvas — and the magnitudes do not.** That is the reason for the
+re-measurement rather than an argument against it, and it is the second time in
+this document (after §9.24 / §9.30) that an ordering has survived replication
+while the values did not.
+
+### One change to shared code, and what it does not do
+
+`build_ventral_stream` had its canvas hardcoded at 56, so a claim about canvas
+size could not be tested while the canvas was a constant. It now takes
+`size=56` as a parameter. All five existing callers pass keyword arguments and
+none passes `size`, so no published number moves. The kernels are
+size-independent — they train on patches — and what the parameter changes is
+the extent of the maps they produce.
+
+### What follows
+
+The plan's gate: *if H23 or H24 is rejected, the later phases are not
+executed.* Both are now rejected on their decisive halves, so H25–H28 remain
+unstarted. No replacement mechanism for attention is proposed here.
+
+The limiting factor is named and it is not the one anyone in this document
+guessed. It is not canvas size, and it is not V4 saturation — both were
+manipulated by a factor of four in the predicted direction and the outcome went
+the other way. It is that **`attend()`'s cue enters as a feature-similarity
+bias on the read-out and not as a spatial selection**, so every repair aimed at
+the map's spatial layout is aimed at a part of the system the cue does not use.
+
+Two smaller corrections fall out of the run and are recorded rather than fixed
+in passing: `attend`'s docstring claims `attend_spatial` "is what every
+benchmark from §9.21 on uses", and nothing in the repository calls it; and
+`attend` gates multiplicatively, discarding roughly three quarters of V4's
+evidence before IT reads it, at every canvas tested.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
