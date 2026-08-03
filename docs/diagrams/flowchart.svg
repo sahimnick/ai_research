@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="980" viewBox="0 0 1500 980" font-family="DejaVu Sans, sans-serif">
+<rect width="1500" height="980" fill="#0e1117"/>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a3140"/></marker><marker id="al" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5cc8ff"/></marker></defs>
+<text x="28" y="34" fill="#e4e9f2" font-size="19" font-weight="bold">NeuroBrain — how a frame becomes a percept</text>
+<text x="28" y="53" fill="#93a0b4" font-size="12">solid = measured and in use   ·   dashed = built but not exercised by any benchmark</text>
+<rect x="28" y="78" width="250" height="96" rx="8" fill="#161a22" stroke="#5cc8ff" stroke-width="1.6"/>
+<text x="40" y="100" fill="#5cc8ff" font-size="14" font-weight="bold">SENSORS  sensing/live.py</text>
+<text x="40" y="120" fill="#93a0b4" font-size="11.5">CctvCamera   NY511, 97s period</text>
+<text x="40" y="136" fill="#93a0b4" font-size="11.5">Webcam   v4l2 / avfoundation / dshow</text>
+<text x="40" y="152" fill="#93a0b4" font-size="11.5">Microphone, TextSense</text>
+<rect x="28" y="196" width="250" height="76" rx="8" fill="#161a22" stroke="#5cc8ff" stroke-width="1.6"/>
+<text x="40" y="218" fill="#5cc8ff" font-size="14" font-weight="bold">DATASETS  sensing/natural.py</text>
+<text x="40" y="238" fill="#93a0b4" font-size="11.5">CIFAR-10, ESC-50, MNIST</text>
+<text x="40" y="254" fill="#93a0b4" font-size="11.5">VOT2019 (60 sequences, benchmarks/)</text>
+<rect x="320" y="78" width="300" height="194" rx="8" fill="#161a22" stroke="#5cc8ff" stroke-width="1.6"/>
+<text x="332" y="100" fill="#5cc8ff" font-size="14" font-weight="bold">THE EYE  vision/ventral.py</text>
+<text x="332" y="120" fill="#93a0b4" font-size="11.5">build_ventral_stream_on(frames)</text>
+<text x="332" y="136" fill="#93a0b4" font-size="11.5"></text>
+<text x="332" y="152" fill="#93a0b4" font-size="11.5">V1  SpikingConvLayer   107x107</text>
+<text x="332" y="168" fill="#93a0b4" font-size="11.5">V1_complex  ComplexCellLayer</text>
+<text x="332" y="184" fill="#93a0b4" font-size="11.5">V2  corners/junctions  103x103</text>
+<text x="332" y="200" fill="#93a0b4" font-size="11.5">pool  SpikingPool      51x51</text>
+<text x="332" y="216" fill="#93a0b4" font-size="11.5">V4  curvature/shape    49x49</text>
+<text x="332" y="232" fill="#93a0b4" font-size="11.5">IT  ITLayer  (whole-object)</text>
+<line x1="278" y1="126" x2="320" y2="126" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<text x="299.0" y="120.0" fill="#93a0b4" font-size="10.5" text-anchor="middle">frames</text>
+<path d="M278,232 Q298.0,202.0 318,200" fill="none" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<text x="298.0" y="203.0" fill="#93a0b4" font-size="10.5" text-anchor="middle">frames</text>
+<rect x="660" y="78" width="330" height="194" rx="8" fill="#161a22" stroke="#5cc8ff" stroke-width="1.6"/>
+<text x="672" y="100" fill="#5cc8ff" font-size="14" font-weight="bold">UnifiedEye  vision/unified_eye.py</text>
+<text x="672" y="120" fill="#93a0b4" font-size="11.5">develop(frames)   grow on YOUR footage</text>
+<text x="672" y="136" fill="#93a0b4" font-size="11.5">add_tag(name, frame, box)</text>
+<text x="672" y="152" fill="#93a0b4" font-size="11.5">look(frame) -&gt; Percept    ONE pass</text>
+<text x="672" y="168" fill="#93a0b4" font-size="11.5"></text>
+<text x="672" y="184" fill="#93a0b4" font-size="11.5">min_confidence 0.35  -&gt; LOST if below</text>
+<text x="672" y="200" fill="#93a0b4" font-size="11.5">search_radius 40px   near last seen</text>
+<text x="672" y="216" fill="#93a0b4" font-size="11.5">exclusion_px 30      ids never share</text>
+<text x="672" y="232" fill="#93a0b4" font-size="11.5">max_lost 12          id expires</text>
+<line x1="620" y1="176" x2="660" y2="176" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<text x="640.0" y="170.0" fill="#93a0b4" font-size="10.5" text-anchor="middle">area maps</text>
+<rect x="1030" y="78" width="300" height="194" rx="8" fill="#161a22" stroke="#8cf08c" stroke-width="1.6"/>
+<text x="1042" y="100" fill="#8cf08c" font-size="14" font-weight="bold">Percept  (one forward pass)</text>
+<text x="1042" y="120" fill="#93a0b4" font-size="11.5">where / confidence / ident</text>
+<text x="1042" y="136" fill="#93a0b4" font-size="11.5">lost / unseen</text>
+<text x="1042" y="152" fill="#93a0b4" font-size="11.5">attention   correlation field</text>
+<text x="1042" y="168" fill="#93a0b4" font-size="11.5">proposals   objectness, no labels</text>
+<text x="1042" y="184" fill="#93a0b4" font-size="11.5">segments    feature grouping</text>
+<text x="1042" y="200" fill="#93a0b4" font-size="11.5">relations   left/right/above</text>
+<text x="1042" y="216" fill="#93a0b4" font-size="11.5">frame_size  angular size</text>
+<text x="1042" y="232" fill="#93a0b4" font-size="11.5">maps        raw area maps</text>
+<line x1="990" y1="176" x2="1030" y2="176" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<text x="1010.0" y="170.0" fill="#93a0b4" font-size="10.5" text-anchor="middle">read-outs</text>
+<rect x="320" y="300" width="300" height="118" rx="8" fill="#161a22" stroke="#5cc8ff" stroke-width="1.6"/>
+<text x="332" y="322" fill="#5cc8ff" font-size="14" font-weight="bold">objectness.py</text>
+<text x="332" y="342" fill="#93a0b4" font-size="11.5">propose()   0.31 recall @10 (0.11 rand)</text>
+<text x="332" y="358" fill="#93a0b4" font-size="11.5">segment()   k-means on cell vectors</text>
+<text x="332" y="374" fill="#93a0b4" font-size="11.5">feature_report()  probed w/ gratings</text>
+<text x="332" y="390" fill="#93a0b4" font-size="11.5">distinctiveness()</text>
+<rect x="660" y="300" width="330" height="118" rx="8" fill="#161a22" stroke="#5cc8ff" stroke-width="1.6"/>
+<text x="672" y="322" fill="#5cc8ff" font-size="14" font-weight="bold">locate_template()  ventral.py</text>
+<text x="672" y="342" fill="#93a0b4" font-size="11.5">normalised cross-correlation</text>
+<text x="672" y="358" fill="#93a0b4" font-size="11.5">0.943 static · 0.910 gated held-out</text>
+<text x="672" y="374" fill="#93a0b4" font-size="11.5">the averaged prototype scored 0.000</text>
+<text x="672" y="390" fill="#93a0b4" font-size="11.5">(§9.21) — layout is what matters</text>
+<line x1="470" y1="300" x2="470" y2="274" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<line x1="825" y1="300" x2="825" y2="274" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<rect x="1030" y="300" width="300" height="118" rx="8" fill="#161a22" stroke="#8cf08c" stroke-width="1.6"/>
+<text x="1042" y="322" fill="#8cf08c" font-size="14" font-weight="bold">viz/overlay.py</text>
+<text x="1042" y="342" fill="#93a0b4" font-size="11.5">draw_percept(frame, percept, show=…)</text>
+<text x="1042" y="358" fill="#93a0b4" font-size="11.5">11 switchable layers</text>
+<text x="1042" y="374" fill="#93a0b4" font-size="11.5">tests/test_overlay.py asserts the box</text>
+<text x="1042" y="390" fill="#93a0b4" font-size="11.5">lands where the percept says</text>
+<line x1="1180" y1="274" x2="1180" y2="300" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<rect x="1030" y="442" width="300" height="96" rx="8" fill="#161a22" stroke="#8cf08c" stroke-width="1.6"/>
+<text x="1042" y="464" fill="#8cf08c" font-size="14" font-weight="bold">viz/eye_dashboard.py</text>
+<text x="1042" y="484" fill="#93a0b4" font-size="11.5">serve_eye(&#x27;webcam&#x27;|&#x27;cctv&#x27;|dir)</text>
+<text x="1042" y="500" fill="#93a0b4" font-size="11.5">per-layer toggles, target switch</text>
+<text x="1042" y="516" fill="#93a0b4" font-size="11.5">click to tag  ·  127.0.0.1:8137</text>
+<line x1="1180" y1="418" x2="1180" y2="442" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<rect x="660" y="442" width="330" height="96" rx="8" fill="#161a22" stroke="#8cf08c" stroke-width="1.6"/>
+<text x="672" y="464" fill="#8cf08c" font-size="14" font-weight="bold">benchmarks/  (88 scripts)</text>
+<text x="672" y="484" fill="#93a0b4" font-size="11.5">eye_vot · eye_confidence · eye_targets</text>
+<text x="672" y="500" fill="#93a0b4" font-size="11.5">eye_information · eye_breadth · dpc_*</text>
+<text x="672" y="516" fill="#93a0b4" font-size="11.5">every claim in EVALUATION.md §9</text>
+<line x1="1030" y1="490" x2="990" y2="490" stroke="#5cc8ff" stroke-width="1.5" marker-end="url(#al)" opacity=".85"/>
+<text x="28" y="330" fill="#e4e9f2" font-size="19" font-weight="bold">Built, not exercised</text>
+<text x="28" y="349" fill="#93a0b4" font-size="12">no benchmark constructs these</text>
+<rect x="28" y="352" width="250" height="100" rx="8" fill="#161a22" stroke="#8a6a3a" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="40" y="374" fill="#8a6a3a" font-size="14" font-weight="bold">world/</text>
+<text x="40" y="394" fill="#93a0b4" font-size="11.5">PredictiveStack  (§9.16 measured)</text>
+<text x="40" y="410" fill="#93a0b4" font-size="11.5">ObjectConcept, Relation, LoopTrace</text>
+<text x="40" y="426" fill="#93a0b4" font-size="11.5">continuous.py, objects.py, loop.py</text>
+<rect x="28" y="468" width="250" height="88" rx="8" fill="#161a22" stroke="#8a6a3a" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="40" y="490" fill="#8a6a3a" font-size="14" font-weight="bold">cognition/  13 of 21 unused</text>
+<text x="40" y="510" fill="#93a0b4" font-size="11.5">dopamine.py  629 lines, 6 classes</text>
+<text x="40" y="526" fill="#93a0b4" font-size="11.5">pallium, selfmodel, analogy,</text>
+<text x="40" y="542" fill="#93a0b4" font-size="11.5">reasoning, discovery</text>
+<rect x="28" y="572" width="250" height="74" rx="8" fill="#161a22" stroke="#8a6a3a" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="40" y="594" fill="#8a6a3a" font-size="14" font-weight="bold">memory/  9 of 15 unused</text>
+<text x="40" y="614" fill="#93a0b4" font-size="11.5">rhythm, relational, psyche,</text>
+<text x="40" y="630" fill="#93a0b4" font-size="11.5">development (SemanticCortex)</text>
+<rect x="28" y="662" width="250" height="74" rx="8" fill="#161a22" stroke="#8a6a3a" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="40" y="684" fill="#8a6a3a" font-size="14" font-weight="bold">minds/  8 of 10 unused</text>
+<text x="40" y="704" fill="#93a0b4" font-size="11.5">perceptloop (400 lines)</text>
+<text x="40" y="720" fill="#93a0b4" font-size="11.5">integrated, ObjectFile</text>
+<rect x="28" y="752" width="250" height="74" rx="8" fill="#161a22" stroke="#8a6a3a" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="40" y="774" fill="#8a6a3a" font-size="14" font-weight="bold">audition/  7 of 12 unused</text>
+<text x="40" y="794" fill="#93a0b4" font-size="11.5">auditorycortex: 4 A1/A2 variants</text>
+<text x="40" y="810" fill="#93a0b4" font-size="11.5">TemporalPool</text>
+<rect x="28" y="842" width="250" height="62" rx="8" fill="#161a22" stroke="#8a6a3a" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="40" y="864" fill="#8a6a3a" font-size="14" font-weight="bold">core/neuron.py</text>
+<text x="40" y="884" fill="#93a0b4" font-size="11.5">Neuron, NeuronType — exported,</text>
+<text x="40" y="900" fill="#93a0b4" font-size="11.5">used nowhere in the package</text>
+<text x="320" y="470" fill="#e4e9f2" font-size="19" font-weight="bold">The loop, measured</text>
+<rect x="320" y="492" width="300" height="200" rx="8" fill="#161a22" stroke="#8cf08c" stroke-width="1.6"/>
+<text x="332" y="514" fill="#8cf08c" font-size="14" font-weight="bold">what it does and does not</text>
+<text x="332" y="534" fill="#93a0b4" font-size="11.5">+ locate a tagged thing          0.910*</text>
+<text x="332" y="550" fill="#93a0b4" font-size="11.5">+ select under competition       0.863</text>
+<text x="332" y="566" fill="#93a0b4" font-size="11.5">+ spatial relation               0.902</text>
+<text x="332" y="582" fill="#93a0b4" font-size="11.5">+ angular size (within scene)    0.585</text>
+<text x="332" y="598" fill="#93a0b4" font-size="11.5">+ identity: track collapse       0.000</text>
+<text x="332" y="614" fill="#93a0b4" font-size="11.5">- detect anything untagged       none</text>
+<text x="332" y="630" fill="#93a0b4" font-size="11.5">- transfer to unseen scenes      R2 0.00</text>
+<text x="332" y="646" fill="#93a0b4" font-size="11.5">- imagine forward (rollout)     -0.030</text>
+<text x="332" y="662" fill="#93a0b4" font-size="11.5">- shadow vs object              at null</text>
+<text x="332" y="678" fill="#93a0b4" font-size="11.5">- colour                        -0.135</text>
+<text x="332" y="694" fill="#93a0b4" font-size="11.5">* held-out, gated, consecutive frames</text>
+<text x="28" y="962" fill="#93a0b4" font-size="11">Generated by docs/diagrams/make_diagrams.py — regenerate after structural changes. Numbers are from EVALUATION.md §9.18–§9.36.</text>
+</svg>
