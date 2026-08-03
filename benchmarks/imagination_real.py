@@ -297,8 +297,18 @@ def test_sequences(D, mind, cells, rng):
         m = f > 0
         return float(-(f[m] * np.log(f[m])).sum())
 
+    # The full-matrix KL is dominated by the diagonal -- "it stayed" is most of
+    # what this world does and the easiest thing to learn. Restricting to
+    # off-diagonal transitions asks whether the mind learned anything about
+    # what follows what, which is the only part a world model is for.
+    off = ~np.eye(n, dtype=bool)
     return {"kl_imagined_to_real": round(kl(T_imag, T_real), 4),
             "kl_shuffled_control_to_real": round(kl(T_ctl, T_real), 4),
+            "kl_offdiag_imagined": round(kl(T_imag * off, T_real * off), 4),
+            "kl_offdiag_control": round(kl(T_ctl * off, T_real * off), 4),
+            "diag_mass_real": round(float(np.trace(T_real) / T_real.sum()), 4),
+            "diag_mass_imagined": round(float(np.trace(T_imag)
+                                              / T_imag.sum()), 4),
             "self_loop_real": round(selfloop(real), 4),
             "self_loop_imagined": round(selfloop(imag), 4),
             "self_loop_control": round(selfloop(imag_c), 4),
@@ -403,27 +413,74 @@ def figures(R, D):
     os.makedirs(FIGDIR, exist_ok=True)
     paths = []
 
-    # 1 -- the novelty x coherence plane
+    # 1 -- the novelty x coherence plane.  The interesting arms pile up on the
+    # target, so labels get leader lines and staggered offsets: the one region
+    # that decides the test is the one a default layout makes unreadable.
     im = {k: v for k, v in R["imagery"].items() if not k.startswith("_")}
-    fig, ax = plt.subplots(figsize=(8.5, 6.2))
-    for k, v in im.items():
-        star = k == "a real unseen crop"
-        ax.scatter(v["novelty"], v["coherence"], s=290 if star else 110,
-                   marker="*" if star else "o",
-                   c="#c0392b" if star else "#2c3e50", zorder=3)
-        ax.annotate(f"{k}\nverbatim {v['verbatim']:.2f}",
-                    (v["novelty"], v["coherence"]),
-                    textcoords="offset points", xytext=(8, 6), fontsize=7.5)
     t = im["a real unseen crop"]
-    ax.axhline(t["coherence"], ls=":", c="#c0392b", lw=1)
-    ax.axvline(t["novelty"], ls=":", c="#c0392b", lw=1)
-    ax.set_xlabel("novelty  (1 − cos to the nearest stored crop)")
-    ax.set_ylabel("coherence  (does it still read as its own category)")
-    ax.set_title("Test 1 — mental imagery on real video\n"
-                 "the target is the red star, not the top-right corner",
-                 fontsize=11)
-    ax.grid(alpha=.25)
-    fig.tight_layout()
+
+    def style(k):
+        if k == "a real unseen crop":
+            return "#c0392b", "*", 330
+        if k.endswith("stored crops, averaged"):
+            return "#8e44ad", "D", 120
+        return "#2c3e50", "o", 105
+
+    fig, (ax, zx) = plt.subplots(1, 2, figsize=(13.4, 6.0),
+                                 gridspec_kw={"width_ratios": [1.25, 1]})
+    for a in (ax, zx):
+        a.axhspan(t["coherence"], 1.02, color="#27ae60", alpha=.07)
+        a.axhline(t["coherence"], ls=":", c="#c0392b", lw=1.1)
+        a.axvline(t["novelty"], ls=":", c="#c0392b", lw=1.1)
+        a.grid(alpha=.22)
+
+    order = sorted(im, key=lambda k: (-im[k]["coherence"], im[k]["novelty"]))
+    off = [(11, 10), (11, -18), (11, 12), (11, -16), (11, 8),
+           (11, -14), (11, 14), (11, -20), (11, 6), (11, -12), (11, 16)]
+    for i, k in enumerate(order):
+        v = im[k]
+        c, mk, sz = style(k)
+        ax.scatter(v["novelty"], v["coherence"], s=sz, marker=mk, c=c,
+                   zorder=4, edgecolors="w", linewidths=.7)
+        ax.annotate(k, (v["novelty"], v["coherence"]),
+                    textcoords="offset points", xytext=off[i % len(off)],
+                    fontsize=8, color=c, zorder=5,
+                    arrowprops=dict(arrowstyle="-", lw=.6, color=c,
+                                    shrinkA=0, shrinkB=3, alpha=.6))
+    ax.text(.86, t["coherence"] + .008,
+            "only above this line does novelty count",
+            fontsize=8, c="#1e8449", ha="right")
+    ax.set_xlim(-.06, .90)
+    ax.set_ylim(.13, .66)
+    ax.set_xlabel("novelty   (1 − cos to the nearest stored crop)")
+    ax.set_ylabel("coherence   (does it still read as its own category)")
+    ax.set_title("the whole plane", fontsize=10)
+
+    # The arms that decide the test sit on top of one another, so the region
+    # carrying the conclusion gets a panel of its own rather than a tangle.
+    near = sorted((k for k in im
+                   if abs(im[k]["novelty"] - t["novelty"]) < .08
+                   and abs(im[k]["coherence"] - t["coherence"]) < .05),
+                  key=lambda k: im[k]["novelty"])
+    for j, k in enumerate(near):
+        v = im[k]
+        c, mk, sz = style(k)
+        zx.scatter(v["novelty"], v["coherence"], s=sz * 1.5, marker=mk, c=c,
+                   zorder=4, edgecolors="w", linewidths=.8)
+        zx.annotate(f"{k}\n({v['novelty']:.3f}, {v['coherence']:.3f})",
+                    (v["novelty"], v["coherence"]),
+                    textcoords="offset points",
+                    xytext=(0, 20 if j % 2 == 0 else -34),
+                    ha="center", fontsize=8.4, color=c, zorder=5)
+    zx.set_xlim(t["novelty"] - .055, t["novelty"] + .055)
+    zx.set_ylim(t["coherence"] - .022, t["coherence"] + .022)
+    zx.set_xlabel("novelty")
+    zx.set_title("the region that decides it", fontsize=10)
+    fig.suptitle("Test 1 — mental imagery on real video.  The target is the "
+                 "red star, not the top-right corner.\nNo generative arm is as "
+                 "coherent as real data; averaging three stored crops with no "
+                 "concept layer sits exactly on it.", fontsize=10.5)
+    fig.tight_layout(rect=(0, 0, 1, .93))
     p = f"{FIGDIR}/01_imagery_plane.png"
     fig.savefig(p, dpi=125)
     plt.close(fig)

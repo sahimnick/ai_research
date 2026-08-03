@@ -5888,6 +5888,147 @@ evidence before IT reads it, at every canvas tested.
 
 ---
 
+## 9.39 The imagination system, on the real brain: five tests, and they disagree
+
+Everything this document knew about its own imagination — §5's imagine→perceive
+round trip, §9.19's *"it does not imagine, it recalls an average"*, and
+composition's finding that 36.8% of imagined sights were a stored photograph
+byte for byte — was measured on drawn shapes, CIFAR and ESC-50. None of it on
+this eye, on real video. H23's adapter makes that askable, and
+`benchmarks/imagination_real.py` asks it five ways, 5 seeds, 416 crops from 13
+VOT sequences bound to real ESC-50 recordings.
+
+**Imagination is not one capability, and the five tests separate.** Reporting a
+single "imagination score" would have hidden the most useful thing here.
+
+### Test 1 — mental imagery: the concept layer does not earn its place
+
+§9.19's plane, unchanged so the two are comparable: **novelty** (1 − cos to the
+nearest stored crop) against **coherence** (does it still read as its own
+category). The target is where real held-out data sits, not the top-right
+corner — novelty alone is bought cheaply by collapsing coherence.
+
+| arm | novelty | coherence |
+|---|---|---|
+| a stored crop | 0.000 | 0.547 |
+| **a real unseen crop** ← target | **0.154** ± 0.004 | **0.573** |
+| **3 stored crops averaged, no concept layer** ← control | **0.146** ± 0.005 | **0.573** |
+| composed T=1.0 | 0.175 ± 0.007 | 0.567 |
+| composed T=4.0 | 0.308 ± 0.015 | 0.477 |
+| sampled T=0.0 *(the mean — behaviour before any of this)* | 0.101 ± 0.016 | 0.420 |
+| sampled T=2.0 | 0.194 ± 0.013 | 0.410 |
+| sampled T=8.0 | 0.352 ± 0.022 | 0.360 |
+| gaussian noise | 0.785 ± 0.003 | 0.163 |
+
+**No generative arm reaches real data's coherence.** Every `sampled` arm sits at
+0.36–0.42 against 0.573, so its novelty does not count; the sampling trades
+coherence for novelty along a line, which is what a model does when it has no
+category structure to sample within. `composed T=1.0` comes closest and misses
+by 0.006.
+
+**And the control lands exactly on the target.** Averaging three stored crops
+with **no concept cells involved at all** reproduces real data's coherence to
+three decimals and its novelty to within 0.008. This is §9.19's decisive
+negative, reproduced on real video: whatever the concept layer contributes to
+imagery, arithmetic on stored exemplars already contributes.
+
+> One difference from §9.19 that must not be read as progress: **verbatim recall
+> is 0.000 for every arm here**, against §9.19's 0.368. The cause is
+> configuration, not repair — 24 cells over 416 crops leaves **no cell that won
+> exactly once**, and a singleton is what returns its training exemplar
+> unchanged. §9.19 had 112 cells over 216 pairs. Give this the same ratio and
+> the same failure returns.
+
+### Test 2 — sequential imagination: the walk is real, and it over-persists
+
+`Mind.imagine` walks the learned transitions, and nothing had ever measured that
+walk. Its two failure modes are opposite — **collapse** (every sequence one
+state repeated) and **uniformity** (the walk is the prior) — and both look like
+"it produced a sequence". Scored by bigram KL against a control that experienced
+the *same states in shuffled order*, so the marginal is identical and only
+temporal structure is destroyed.
+
+| | imagined | shuffled-time control |
+|---|---|---|
+| KL to real experience, full matrix | **0.458** | 3.535 |
+| KL to real experience, **off-diagonal only** | **0.494** | 7.185 |
+| collapsed sequences | 0.000 | — |
+
+The off-diagonal row is the one that matters. A full-matrix KL is dominated by
+the diagonal, and "it stayed the same" is most of what this world does and the
+easiest thing to learn; restricting to genuine transitions asks whether anything
+was learned about *what follows what*. The win survives — 0.494 against 7.185 —
+so this is not a diagonal artefact.
+
+**But the mind is systematically over-persistent.** Diagonal mass is 0.462 in
+the world and **0.650** in what it imagines; self-loop rate 0.483 against 0.700.
+It imagines a world more static than the one it saw. That is a directional bias,
+not noise, and it is visible in the third figure as a diagonal that is brighter
+than the world's beside off-diagonal structure that is dimmer.
+
+### Test 3 — imagining forward: a small positive, and it contradicts §9.22
+
+Rollout against **persistence**, the baseline §9.22 lost to. Skill is paired per
+sequence and bootstrapped over the 13 videos — frames inside one video are
+near-copies, so pooling ~400 of them would treat a correlated sample as
+independent.
+
+| horizon | model | persistence | skill |
+|---|---|---|---|
+| 1 | 0.506 | 0.483 | **+0.022** [+0.016, +0.029] |
+| 2 | 0.423 | 0.409 | **+0.014** [+0.007, +0.021] |
+| 4 | 0.344 | 0.331 | **+0.013** [+0.004, +0.022] |
+| 8 | 0.305 | 0.288 | **+0.017** [+0.006, +0.030] |
+
+**All four intervals clear zero**, and the effect does not decay with horizon.
+This is the first positive rollout in this document: §9.22 measured −0.030 and
+§9.32 could not repair it. The difference is the state space — those rolled
+continuous latents forward, this rolls **discrete concepts**, where an error
+cannot accumulate smoothly because there is nowhere between two states to drift
+to. That was the plan's H27 hypothesis and it is supported.
+
+The size deserves equal emphasis: **+0.022 on a base of 0.483.** The world model
+is better than assuming nothing moves, by about two frames in a hundred. It is a
+real effect and a small one, and both halves of that sentence are the result.
+
+### Tests 4 and 5 — surprise and cross-modal imagery both work
+
+**Surprise** must rise on a transition the world did not produce, or it is a
+constant rather than a prediction error. Within-sequence 0.654, spliced from a
+different video 0.945, **d = +1.55**. It is a real prediction error.
+
+**Cross-modal imagery**: hear a held-out ESC-50 recording, imagine the sight,
+and ask which visual category the imagined code matches. **0.427 against chance
+0.200.** The query is entirely auditory and the answer entirely visual, which is
+what makes it imagery rather than a lookup. Its limit, stated because the figure
+does not show it: the visual prototypes are built on all crops, so only the
+recordings are held out — this measures hearing→sight, not generalisation of the
+sight.
+
+### What the five tests say together
+
+| capability | verdict |
+|---|---|
+| mental imagery | **fails** — no arm as coherent as real data, and a no-concept control matches the target exactly |
+| sequential imagination | **works**, off-diagonal too, but imagines a world too static |
+| imagining forward | **works**, small, first positive rollout here, contradicts §9.22 |
+| surprise | **works**, d = +1.55 |
+| cross-modal imagery | **works**, 0.427 against 0.200 |
+
+The one that fails is the one about *content* — what a single imagined thing
+looks like. The four that work are all about *structure* — what follows what,
+what is unexpected, what a sound implies. This brain has a working model of how
+its world behaves and no working generator of what its world contains.
+
+And the bound on all five, from H23: cross-scene concept naming was measured at
+chance, so every number here rests on concepts that are reliable **within** a
+scene and not across one. None of this has been shown to survive a new scene.
+
+Figures: `reports/imagination_real/`. Reproduce with
+`python3 benchmarks/imagination_real.py out_imagination_real.json vot`.
+
+---
+
 ## 8. Next steps toward a unified, constantly imaginative mind
 
 Ordered by what unblocks the goal, not by difficulty.
