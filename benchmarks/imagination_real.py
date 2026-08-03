@@ -604,13 +604,18 @@ def main():
     R["cross_modal"]["_scores"] = per_seed[0]["cross_modal"]["_scores"]
     R["cross_modal"]["_labels"] = per_seed[0]["cross_modal"]["_labels"]
 
-    # rollout: paired over SEQUENCES, pooled across seeds
+    # Rollout: paired over SEQUENCES. The seeds are averaged into each
+    # sequence first and are NOT extra units -- five seeds re-measure the same
+    # thirteen videos, so concatenating them would bootstrap 65 correlated
+    # values as if independent and buy a ~2.2x too narrow interval for free.
+    # The independent unit is the video.
     R["rollout"] = {}
     for h in HORIZONS:
-        d = np.concatenate([np.array(p["rollout"][f"h={h}"]["per_seq_model"])
-                            - np.array(p["rollout"][f"h={h}"]
-                                       ["per_seq_persistence"])
-                            for p in per_seed])
+        per = np.stack([np.array(p["rollout"][f"h={h}"]["per_seq_model"])
+                        - np.array(p["rollout"][f"h={h}"]
+                                   ["per_seq_persistence"])
+                        for p in per_seed])              # (seeds, sequences)
+        d = per.mean(0)                                  # -> one per sequence
         m, ci = boot(d)
         R["rollout"][f"h={h}"] = {
             "model": avg("rollout", f"h={h}") if False else round(float(
@@ -628,17 +633,28 @@ def main():
 
     im = R["imagery"]
     real = im["a real unseen crop"]
-    best = max((k for k in im if k.startswith(("sampled", "composed"))),
-               key=lambda k: (im[k]["coherence"] >= real["coherence"],
-                              im[k]["novelty"]))
+    ctl = im[f"{N_COMPOSE} stored crops, averaged"]
+    gen = [k for k in im if k.startswith(("sampled", "composed"))]
+    # Closest arm on the plane, by distance to where real data sits. Ranking by
+    # novelty alone picks whichever arm collapsed coherence hardest -- the exact
+    # degeneracy §9.19 built the pair to prevent, and the first version of this
+    # verdict walked straight into it and named T=8 (coherence 0.36) "best".
+    best = min(gen, key=lambda k: (im[k]["novelty"] - real["novelty"]) ** 2
+               + (im[k]["coherence"] - real["coherence"]) ** 2)
+    clears = [k for k in gen if im[k]["coherence"] >= real["coherence"]]
     R["verdict"] = {
-        "imagery_best_arm": best,
-        "imagery_reaches_real_novelty": bool(
-            im[best]["novelty"] >= real["novelty"]
-            and im[best]["coherence"] >= real["coherence"]),
+        "imagery_closest_arm": best,
+        "imagery_arms_at_least_as_coherent_as_real": clears,
+        "imagery_reaches_real_data": bool(
+            any(im[k]["novelty"] >= real["novelty"] for k in clears)),
+        # a comparison against the control is only meaningful between arms that
+        # are BOTH at least as coherent as real data
         "imagery_beats_the_no_concept_control": bool(
-            im[best]["novelty"]
-            > im[f"{N_COMPOSE} stored crops, averaged"]["novelty"]),
+            ctl["coherence"] >= real["coherence"]
+            and any(im[k]["novelty"] > ctl["novelty"] for k in clears)),
+        "no_concept_control_reaches_real_data": bool(
+            ctl["coherence"] >= real["coherence"]
+            and ctl["novelty"] >= real["novelty"]),
         "sequences_beat_shuffled_control": bool(
             R["sequences"]["kl_imagined_to_real"]
             < R["sequences"]["kl_shuffled_control_to_real"]),
